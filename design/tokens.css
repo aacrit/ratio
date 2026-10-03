@@ -1,0 +1,301 @@
+/*
+ * Ink & Momentum tokens - the ONLY file in this repo allowed to define a
+ * color literal (hex, rgb(), hsl(), oklch()). Every other file must reference
+ * these custom properties. scripts/lint-design.mjs enforces this.
+ *
+ * Ratio: "Cloth and Chalk". Six source hexes, nothing else. Every other colour,
+ * including the whole Paper theme, is derived from those six with OKLch
+ * relative colour. The world is a tailor's atelier crossed with a geometer's
+ * notebook: charcoal worsted on the cutting table, chalk for everything the
+ * app writes, and three earned accents that are instruments, not decoration.
+ *
+ * Token names are ROLES, named in the Cloth palette. In Paper they hold paper
+ * values: --color-cream is the text colour (worsted ink by day), --color-bg is
+ * the page (chalk paper by day). Never read a name as a literal colour.
+ *
+ * The three accents (founder, 2026-10-03: exactly three, everything else is
+ * neutral, the person's photo carries the colour):
+ *   --color-tape        a measurement: a line or number read from the photo
+ *   --color-section     near the golden section, or on the mark of a rule
+ *   --color-borderline  a reading within half a bin of a threshold: both
+ *                       readings are shown, and this marks the pair
+ * Errors, buttons, links, focus rings and loading are chalk. No fourth hue.
+ *
+ * Contrast pairs checked (WCAG 2.2, sRGB, alpha composited onto the ground;
+ * computed 2026-10-03 with the OKLch maths the browser uses, see
+ * reports/briefs/ratio-brand.html for the method):
+ *
+ *   CLOTH                                   ratio  need
+ *   chalk (--color-cream) on bg             14.16  4.5
+ *   chalk on surface                        12.99  4.5
+ *   chalk on surface-raised                 11.87  4.5
+ *   chalk-muted on bg                        6.44  4.5
+ *   chalk-muted on surface                   6.11  4.5
+ *   tape on bg / surface / raised           10.69 / 9.80 / 8.96  4.5
+ *   tape on tape-glow (a lit measurement)    6.77  4.5
+ *   section (verdigris) on bg / surface      8.37 / 7.68  4.5
+ *   borderline (red chalk) on bg / surface   5.88 / 5.39  4.5
+ *   bg on chalk (button label)              14.16  4.5
+ *   bg on tape (tick marks, graphic only)   10.69  3.0
+ *
+ *   PAPER
+ *   ink (--color-cream) on bg               15.73  4.5
+ *   ink on surface / raised                 16.92 / 15.49  4.5
+ *   ink-muted on bg / surface                5.40 / 5.57  4.5
+ *   tape on bg / surface / raised            6.17 / 6.64 / 6.08  4.5
+ *   tape on tape-glow                        5.57  4.5
+ *   section on bg / surface                  6.21 / 6.68  4.5
+ *   borderline on bg / surface               5.39 / 5.80  4.5
+ *   bg on ink (button label)                15.73  4.5
+ *
+ *   OVERLAY (drawn over a photo, both themes): every overlay stroke and
+ *   numeral sits on --color-halo (worsted at 85%), a stroke under the line
+ *   and a rounded box under the numeral, never a tint over the photo. Worst
+ *   case is a white photo:
+ *   tape on halo over white (numerals)       6.77  4.5
+ *   chalk on halo over white (labels)        8.97  4.5
+ *   section on halo over white (stroke)      5.30  3.0
+ *   borderline on halo over white (stroke)   3.72  3.0
+ *   So over the photo only tape and chalk may be text; section and
+ *   borderline are strokes there, and their words live in the reading panel.
+ */
+
+/* Faces are self-hosted (design/fonts.css); never a font CDN (V3). */
+@import "./fonts.css";
+
+:root {
+  color-scheme: dark;
+
+  /* ---- The six source hexes (the only hexes in the product) ------------- */
+  --hex-worsted: #141922; /* charcoal worsted, the cutting table */
+  --hex-lining: #1b212b; /* the jacket lining: panels */
+  --hex-chalk: #ece6d8; /* tailor's chalk: text and construction lines */
+  --hex-tape: #e3c77e; /* the cloth tape measure */
+  --hex-verdigris: #7fc0a4; /* the aged brass of the section compass */
+  --hex-redchalk: #dc7a62; /* red chalk: a mark to check before cutting */
+
+  /* ---- Cloth (default): roles ------------------------------------------- */
+  --color-bg: var(--hex-worsted); /* the page */
+  --color-surface: var(--hex-lining); /* panels, the photo well */
+  --color-cream: var(--hex-chalk); /* text, actions, focus, errors: everything the app writes */
+  --color-tape: var(--hex-tape); /* a measurement, nothing else */
+  --color-section: var(--hex-verdigris); /* near the golden section or a rule's mark */
+  --color-borderline: var(--hex-redchalk); /* within half a bin of a threshold */
+
+  /* Derived states, never new hexes */
+  --color-cream-hover: oklch(from var(--color-cream) calc(l - 0.06) c h); /* a chalk button under the pointer */
+  --color-surface-raised: oklch(from var(--color-surface) calc(l + 0.03) c h);
+  --color-cream-muted: oklch(from var(--color-cream) l c h / 0.64);
+  --color-cream-faint: oklch(from var(--color-cream) l c h / 0.12); /* ghost lines, the what-if hem; never text */
+  --color-border: oklch(from var(--color-cream) l c h / 0.14);
+  --color-tape-glow: oklch(from var(--color-tape) l c h / 0.16); /* behind a numeral the moment it lands */
+  --color-section-glow: oklch(from var(--color-section) l c h / 0.18);
+  --color-borderline-glow: oklch(from var(--color-borderline) l c h / 0.16);
+  --color-scrim: oklch(from var(--color-bg) l c h / 0.72); /* behind sheets and dialogs */
+  --color-halo: oklch(from var(--hex-worsted) l c h / 0.85); /* under every overlay stroke and numeral; fixed in both themes */
+  /* Over the photo the overlay keeps the Cloth colours in both themes. */
+  --overlay-muted: oklch(from var(--hex-chalk) l c h / 0.64);
+  --overlay-tape-glow: oklch(from var(--hex-tape) l c h / 0.16);
+
+  /* Template aliases: the Spark scaffold reads these names. All neutral by
+     rule (no fourth hue). Builders move to the Ratio names at Forge. */
+  --color-terracotta: var(--color-cream);
+  --color-terracotta-hover: var(--color-cream-hover);
+  --color-forest: var(--color-cream);
+  --color-burgundy: var(--color-cream);
+  --color-ochre: var(--color-cream-muted);
+
+  /* ---- Texture: one layer, the worsted weave ------------------------------
+     A 2:1 twill drawn as a diagonal hatch, on the page ground only (never on
+     panels, never on the photo). Chalk lines by night, ink lines by day. */
+  --texture-weave-cloth: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M-1 1 L1 -1 M0 8 L8 0 M7 9 L9 7' stroke='%23ece6d8' stroke-width='1'/%3E%3C/svg%3E");
+  --texture-weave-paper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M-1 1 L1 -1 M0 8 L8 0 M7 9 L9 7' stroke='%23141922' stroke-width='1'/%3E%3C/svg%3E");
+  --texture-weave: var(--texture-weave-cloth);
+  --texture-weave-opacity: 0.05;
+
+  /* Radii and shadows. Cards are squarer than Hearth's 14px: a drafting
+     sheet, not a lamplit card. */
+  --radius-card: 10px;
+  --radius-control: 6px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(6 8 12 / 0.4);
+  --shadow-hover: 0 2px 4px rgb(0 0 0 / 0.4), 0 16px 40px rgb(6 8 12 / 0.5);
+
+  /* Type */
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-structure: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --measure-reading: 64ch; /* advice and rule prose never exceed this */
+  --display-settings: "opsz" 144, "SOFT" 0, "WONK" 0; /* crisp Fraunces: a geometer's cut, not Dial's soft lamp */
+
+  /* The constants the rulebook draws with; layout uses them too */
+  --phi: 0.618;
+  --phi-minor: 0.382;
+  --third: 0.333;
+  --split-photo: 38.2%; /* the read screen's photo column at 1280: the layout itself sits on the section */
+
+  /* Motion: family duration tiers */
+  --dur-instant: 80ms;
+  --dur-fast: 160ms;
+  --dur-normal: 240ms;
+  --dur-morph: 360ms;
+  --dur-cinema: 520ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-rack: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-whip: cubic-bezier(0.25, 0, 0, 1);
+
+  /* ---- Ratio's named motion presets ----------------------------------------
+     JS springs read the three numbers (stiffness damping mass); CSS uses the
+     linear() step response simulated from the same numbers, over the settle
+     time (0.1% of target). Each names the state it carries:
+       plumb      signature: the weighted line falls through the photo and
+                  settles as a damped pendulum (zeta 0.32, one swing past
+                  vertical). Once per read, from the crown of the figure.
+       chalk      a measurement line draws at the speed of a hand: duration is
+                  length / --speed-chalk, clamped to the min and max below.
+       lands      a numeral arrives: it counts up to its value, heavy and
+                  without overshoot (a measurement never shows a value it did
+                  not read), and flashes --color-tape-glow behind it.
+       glide      the break mark slides to the what-if position (0.49 to 0.38
+                  when the advice shows the tuck): critically damped, no
+                  overshoot, because a chalk mark never bounces.
+       settle     press feedback on buttons and the category chips.
+       argument   the stagger between the three parts of a reading: measure,
+                  then the rule, then the advice. Slower than a list stagger
+                  because it is an argument read in order.
+       breathe    indeterminate waiting (model warm-up): the plumb line's
+                  bob breathes. Downloads are never indeterminate: they show
+                  MB loaded on a tape that extends at the real rate. */
+  --spring-plumb: 120 8 1.3;
+  --dur-plumb: 2200ms;
+  --ease-plumb: linear(0, 0.344 4.2%, 0.905 8.3%, 1.275 12.5%, 1.326 16.7%, 1.167 20.8%, 0.983 25%, 0.889 29.2%, 0.9 33.3%, 0.963 37.5%, 1.02 41.7%, 1.04 45.8%, 1.029 50%, 1.006 54.2%, 0.99 58.3%, 0.986 62.5%, 0.993 66.7%, 1 70.8%, 1.004 75%, 1.004 79.2%, 1.002 83.3%, 0.999 87.5%, 0.998 91.7%, 0.999 95.8%, 1);
+  --plumb-swing: 14deg; /* the angle the line is released from */
+  --speed-chalk: 600; /* px per second along the line */
+  --dur-chalk-min: 180ms;
+  --dur-chalk-max: 900ms;
+  --ease-chalk: cubic-bezier(0.3, 0, 0.2, 1);
+  --spring-lands: 180 32 1.4; /* critically damped: a measured numeral never shows a value it did not read */
+  --dur-lands: 870ms;
+  --ease-lands: linear(0, 0.077 4.2%, 0.223 8.3%, 0.378 12.5%, 0.503 16.7%, 0.622 20.8%, 0.717 25%, 0.783 29.2%, 0.841 33.3%, 0.884 37.5%, 0.915 41.7%, 0.937 45.8%, 0.954 50%, 0.967 54.2%, 0.975 58.3%, 0.982 62.5%, 0.987 66.7%, 0.991 70.8%, 0.993 75%, 0.995 79.2%, 0.997 83.3%, 0.997 87.5%, 0.998 91.7%, 0.999 95.8%, 1);
+  --spring-glide: 90 19 1;
+  --dur-glide: 1000ms;
+  --ease-glide: linear(0, 0.079 4.2%, 0.214 8.3%, 0.359 12.5%, 0.492 16.7%, 0.607 20.8%, 0.7 25%, 0.78 29.2%, 0.835 33.3%, 0.878 37.5%, 0.91 41.7%, 0.934 45.8%, 0.951 50%, 0.965 54.2%, 0.975 58.3%, 0.982 62.5%, 0.987 66.7%, 0.99 70.8%, 0.993 75%, 0.995 79.2%, 0.996 83.3%, 0.997 87.5%, 0.998 91.7%, 0.999 95.8%, 1);
+  --spring-settle: 600 35 1;
+  --dur-settle: 430ms;
+  --ease-settle: linear(0, 0.126 4.2%, 0.302 8.3%, 0.488 12.5%, 0.692 16.7%, 0.817 20.8%, 0.908 25%, 0.979 29.2%, 1.011 33.3%, 1.026 37.5%, 1.031 41.7%, 1.028 45.8%, 1.023 50%, 1.017 54.2%, 1.011 58.3%, 1.007 62.5%, 1.004 66.7%, 1.001 70.8%, 1 75%, 1);
+  --dur-argument: 200ms;
+  --dur-breathe: 3000ms;
+  --dur-hard-cut: 0ms;
+}
+
+/* ---- Paper: the geometer's notebook by day ---------------------------------
+   Follows the device setting; data-theme pins either theme (cloth or paper;
+   the template's dark and light values still work). Chalk paper, worsted ink,
+   and every accent darkened in OKLch lightness only (hue and meaning kept).
+   The weave stays, drawn in ink at a lower opacity. The Style Card prints
+   from this theme. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="cloth"]):not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-bg: oklch(from var(--hex-chalk) calc(l + 0.035) calc(c * 0.6) h); /* chalk paper */
+    --color-surface: oklch(from var(--hex-chalk) calc(l + 0.06) calc(c * 0.3) h); /* a fresh sheet */
+    --color-cream: var(--hex-worsted); /* ink */
+    --color-tape: oklch(from var(--hex-tape) calc(l - 0.37) calc(c * 1.1) h);
+    --color-section: oklch(from var(--hex-verdigris) calc(l - 0.3) c h);
+    --color-borderline: oklch(from var(--hex-redchalk) calc(l - 0.17) calc(c * 1.05) h);
+    --color-cream-hover: oklch(from var(--color-cream) calc(l + 0.08) c h);
+    --color-surface-raised: oklch(from var(--color-surface) calc(l - 0.03) c h);
+    --color-cream-muted: oklch(from var(--color-cream) l c h / 0.66);
+    --color-tape-glow: oklch(from var(--color-tape) l c h / 0.12);
+    --color-section-glow: oklch(from var(--color-section) l c h / 0.14);
+    --color-borderline-glow: oklch(from var(--color-borderline) l c h / 0.12);
+    --texture-weave: var(--texture-weave-paper);
+    --texture-weave-opacity: 0.035;
+    --shadow-card: 0 1px 2px rgb(20 25 34 / 0.08), 0 8px 24px rgb(20 25 34 / 0.08);
+    --shadow-hover: 0 2px 4px rgb(20 25 34 / 0.1), 0 16px 40px rgb(20 25 34 / 0.12);
+  }
+}
+
+:root[data-theme="paper"],
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: oklch(from var(--hex-chalk) calc(l + 0.035) calc(c * 0.6) h);
+  --color-surface: oklch(from var(--hex-chalk) calc(l + 0.06) calc(c * 0.3) h);
+  --color-cream: var(--hex-worsted);
+  --color-tape: oklch(from var(--hex-tape) calc(l - 0.37) calc(c * 1.1) h);
+  --color-section: oklch(from var(--hex-verdigris) calc(l - 0.3) c h);
+  --color-borderline: oklch(from var(--hex-redchalk) calc(l - 0.17) calc(c * 1.05) h);
+  --color-cream-hover: oklch(from var(--color-cream) calc(l + 0.08) c h);
+  --color-surface-raised: oklch(from var(--color-surface) calc(l - 0.03) c h);
+  --color-cream-muted: oklch(from var(--color-cream) l c h / 0.66);
+  --color-tape-glow: oklch(from var(--color-tape) l c h / 0.12);
+  --color-section-glow: oklch(from var(--color-section) l c h / 0.14);
+  --color-borderline-glow: oklch(from var(--color-borderline) l c h / 0.12);
+  --texture-weave: var(--texture-weave-paper);
+  --texture-weave-opacity: 0.035;
+  --shadow-card: 0 1px 2px rgb(20 25 34 / 0.08), 0 8px 24px rgb(20 25 34 / 0.08);
+  --shadow-hover: 0 2px 4px rgb(20 25 34 / 0.1), 0 16px 40px rgb(20 25 34 / 0.12);
+}
+
+/* The Style Card prints on paper whatever the screen theme. */
+@media print {
+  :root {
+    color-scheme: light;
+    --color-bg: oklch(from var(--hex-chalk) calc(l + 0.06) calc(c * 0.3) h);
+    --color-surface: var(--color-bg);
+    --color-cream: var(--hex-worsted);
+    --color-tape: oklch(from var(--hex-tape) calc(l - 0.37) calc(c * 1.1) h);
+    --color-section: oklch(from var(--hex-verdigris) calc(l - 0.3) c h);
+    --color-borderline: oklch(from var(--hex-redchalk) calc(l - 0.17) calc(c * 1.05) h);
+    --color-cream-muted: oklch(from var(--color-cream) l c h / 0.66);
+    --texture-weave: none;
+    --shadow-card: none;
+    --shadow-hover: none;
+  }
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-cream);
+  font-family: var(--font-structure);
+}
+
+/* The weave: the page ground only. Panels and the photo well stay plain. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--texture-weave);
+  opacity: var(--texture-weave-opacity);
+}
+
+/* Every numeral rides the data face with tabular figures, no exceptions.
+   A ratio pair is one element: "0.38 : 0.62" with thin spaces (U+2009) round
+   the colon, so the two numbers never wrap apart. */
+.tabular-nums,
+[data-numeral],
+[data-ratio] {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-ratio] {
+  white-space: nowrap;
+}
+
+/* Reduced motion is law: every transition and animation collapses to none.
+   The plumb line is drawn hanging straight, the tape fully drawn, the break
+   mark at its final position, and numerals at their final value. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

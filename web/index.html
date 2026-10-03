@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="build" content="__BUILD__" />
+    <meta name="description" content="Ratio reads a photo of an outfit with the mathematics of design and gives the same advice every time. The photo never leaves your browser." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='20' rx='2' fill='none' stroke='%23888' stroke-width='2'/%3E%3Ccircle cx='12' cy='14.4' r='2.6' fill='%23888'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../design/tokens.css" />
+    <link rel="stylesheet" href="./src/style.css" />
+    <title>Ratio</title>
+  </head>
+  <body data-state="idle">
+    <main class="page">
+      <header class="masthead">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="2" />
+          <g class="mark-plumb">
+            <line x1="12" y1="2" x2="12" y2="14.36" />
+            <circle cx="12" cy="14.36" r="1.7" />
+          </g>
+        </svg>
+        <div class="wordmark">
+          <h1>Ratio</h1>
+          <p class="eyebrow">reason and proportion</p>
+        </div>
+      </header>
+      <p class="lede">A design consultant that measures the photo and shows the rule. Never the person, only the choice.</p>
+
+      <section class="read" aria-labelledby="read-title">
+        <h2 id="read-title" class="visually-hidden">Read an outfit</h2>
+        <label class="drop" id="drop" for="photo">
+          <span class="drop-title">Drop a full-length photo. It stays in this tab.</span>
+          <span class="drop-note">One person, standing, head to feet, facing the camera. Adults only. Ratio reads the outfit: proportion and colour.</span>
+          <span class="btn drop-btn">Read this photo</span>
+          <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" />
+        </label>
+        <div id="loading" class="loadtape" hidden>
+          <p id="load-label" class="load-label" data-numeral>Loading the measuring models.</p>
+          <div class="bar"><div id="load-fill" class="fill"></div></div>
+        </div>
+        <p id="read-status" class="read-status" role="status" aria-live="polite"></p>
+
+        <div id="result" class="result" hidden>
+          <div class="photo-col">
+            <canvas id="figure" class="figure" role="img" aria-label="Your photo with the tape, the break line and the golden-section mark drawn over it"></canvas>
+          </div>
+          <div class="read-col">
+            <p id="verdict" class="verdict"></p>
+            <div id="palette-slot"></div>
+            <ol id="advice" class="rows"></ol>
+            <div class="hashline">
+              <p id="reading-hash" class="reading-hash" data-numeral></p>
+              <button id="read-another" class="btn ghost" type="button">Read another</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="feedback-card">
+        <h2>Tell us what is missing</h2>
+        <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
+        <form id="feedback-form" novalidate>
+          <label for="feedback-text">Feedback</label>
+          <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
+          <button class="btn" type="submit">Send</button>
+          <p id="feedback-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <footer class="page-footer">
+        <span>A voidvision production</span>
+        <a href="./privacy.html">Privacy</a>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

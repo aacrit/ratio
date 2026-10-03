@@ -1,0 +1,96 @@
+# Ratio: design language
+
+Law for builders. Ink & Momentum is the grammar (type voices, earned accents, spring motion, copy voice). This file is Ratio's own say: hues and their meanings, one texture, named motion presets, a hero per surface, the logomark. `design/tokens.css` is the only file that may hold a colour literal; `scripts/lint-design.mjs` enforces it.
+
+## The world: Cloth and Chalk
+
+A master tailor's cutting table crossed with a geometer's notebook. Charcoal worsted on the table, chalk for everything the app writes, a cloth tape for what it measures, the aged brass of a section compass for what lands on the mark, red chalk for what to check before cutting. Sources: the tailor's chalk and tape, the drafting table, Polykleitos' canon, Dürer's measured figures, Le Corbusier's Modulor, the golden-section compass. Not a fashion app: no pink, no beige, no photos of models, no scores.
+
+Posture: dense and still. One hero per surface, detail on demand. The app waits with its instruments, never with a spinner. The person's photo is the only colour on the screen; the interface is cloth, chalk and three instruments.
+
+## Colour
+
+Six source hexes, everything else derived in OKLch. Token names are roles (Cloth names); in Paper they hold paper values.
+
+| Role | Cloth | Meaning, the only reason it may appear |
+|---|---|---|
+| `--color-bg` worsted | `#141922` | the page, the cutting table |
+| `--color-surface` lining | `#1b212b` | panels and the photo well |
+| `--color-cream` chalk | `#ece6d8` | text, construction lines, buttons, links, focus, errors, loading: everything the app writes |
+| `--color-tape` | `#e3c77e` | **a measurement**: a line or numeral read from the photo (0.49 : 0.51, 30°, 1.3×) |
+| `--color-section` verdigris | `#7fc0a4` | **near the golden section**, or on the mark of a rule: the tick lights, a "near the section" note appears |
+| `--color-borderline` red chalk | `#dc7a62` | **borderline**: within half a bin of a threshold; both readings are shown and this marks the pair |
+
+Exactly three accents (founder, 2026-10-03). There is no error hue, no success hue, no brand hue: errors are chalk prose that say what happened and what to do; buttons are chalk on worsted; the mark is chalk with a tape bob. Over a photo, every stroke and numeral sits on `--color-halo` (worsted at 85%); only tape and chalk may be text there, section and borderline are strokes, and their words live in the reading panel.
+
+**Paper** (light theme, `data-theme="paper"`, follows the device by default, and the theme the Style Card prints from): chalk paper, worsted ink, accents darkened in lightness only. Contrast pairs for both themes are listed in `tokens.css`; every text pair is above 4.5:1.
+
+## Texture: one layer
+
+The worsted weave: a 2:1 twill drawn as an 8px diagonal hatch (`--texture-weave`) on the page ground only, at 5% by night and 3.5% by day. Never on panels, never on the photo, never in print.
+
+## Type
+
+- **Fraunces** (display): headings, the wordmark, the one-line verdict of a reading. `font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0`: a crisp cut, the opposite of Dial's soft lamp. Emphasis is italic, never bold.
+- **Inter** (structure): labels, advice prose, buttons. Advice never exceeds `--measure-reading` (64ch).
+- **JetBrains Mono** (data): every numeral, with `tabular-nums`. A ratio pair is one element, `<span data-ratio>0.38 : 0.62</span>`, thin spaces (U+2009) round the colon, never wrapped apart. The rule's target follows in parentheses, muted: `0.38 : 0.62 (0.382)`. Angles carry the degree sign (`30°`), multipliers the multiplication sign (`1.3×`, never `x`). A reading hash is mono, muted, 4 hex characters shown, the full hash on hover.
+
+## Motion presets
+
+Springs are stiffness / damping / mass. JS integrates them (`v += (-k·x − c·v) / m · dt`); CSS uses the `linear()` step response in `tokens.css`, simulated from the same numbers. Reduced motion renders every final state at once.
+
+| Preset | Tier | Numbers | Settle | What it says |
+|---|---|---|---|---|
+| `plumb` | signature | 120 / 8 / 1.3, released from 14° | 2200 ms (visibly still at 1300) | the read has begun: a weighted line falls from the crown of the figure and swings once past vertical |
+| `chalk` | standard | 600 px/s, `cubic-bezier(0.3, 0, 0.2, 1)`, 180 to 900 ms | by length | a measurement line is being drawn by a hand |
+| `lands` | standard | 180 / 32 / 1.4 (critically damped) | 870 ms | a numeral has arrived: it counts up, heavy and without overshoot (a measurement never shows a value it did not read), and flashes `--color-tape-glow` behind it |
+| `glide` | standard | 90 / 19 / 1 (critically damped) | 1000 ms | the break mark slides to the what-if position (0.49 to 0.38 when the advice shows the tuck); a chalk mark never bounces |
+| `settle` | micro | 600 / 35 / 1 | 430 ms | a button or chip was pressed (scale 0.97 and back) |
+| `argument` | standard | 200 ms stagger, `--dur-normal` rise of 8px | per reading | the three parts of a reading arrive in order: the measurement, then the rule, then the advice |
+| `breathe` | standard | opacity 0.4 to 0.85 over 3000 ms | until done | indeterminate waiting (model warm-up); the bob of the plumb line breathes |
+| `hard-cut` | | 0 ms | | reduced motion, and every state change that is not one of the above |
+
+The read sequence: `plumb` (0 ms) → `chalk` for each line from 700 ms, in measurement order → `lands` for each numeral as its line finishes → `argument` for the reading panel. Downloads are never indeterminate: the model files show MB loaded on a tape that extends at the real rate, in tape numerals.
+
+## Body language
+
+- **Measure first, then the rule, then the advice.** Every reading is three lines in that order and never collapses the first two.
+- **Borderline is said, not hidden.** "Borderline: 0.35 reads as a third (0.333) or the section (0.382). Both are shown." Red chalk marks the pair; the advice gives both.
+- **Never the person.** The subject of every sentence is a garment, a cut, a hem, a hue, a part, a palette. No scores, no "flaws", no "slimming", no body talk, no mood verdicts. A copy lint holds the forbidden list.
+- **Waiting shows its work.** "Loading the measuring models, 12.4 of 25.1 MB." Then "Measuring." Then the plumb line.
+- **Privacy is stated where it matters.** On the drop cloth, once: "It stays in this tab." Not repeated as a badge.
+
+## Copy voice
+
+Precise, warm, unhurried; a tailor explaining a chalk mark. No exclamation marks, no em dashes, no cheerleading, no "AI". Buttons are verbs. Errors say what happened and how to fix it. Sample lines:
+
+- Drop a full-length photo. It stays in this tab.
+- Loading the measuring models, 12.4 of 25.1 MB.
+- The hem sits at the hip. The figure splits 0.49 : 0.51.
+- A front tuck moves the break to 0.38 : 0.62, near the golden section (0.382), and shows the high rise you chose.
+- Loose over straight. Keep one fitted: tuck, or a boxy cropped tee that ends at the waistband.
+- Tee hue 30°, denim 215°: near-complementary (185°). Value contrast high; it works.
+- Borderline: 0.35 reads as a third (0.333) or the section (0.382). Both are shown.
+- No full figure found. Use a photo that shows head to feet, facing the camera.
+- This browser can't run the models. Open the photo in Chrome, Firefox or Safari 16 or later.
+- Same photo, same reading. a3f2 · rulebook 1.0.
+- Buttons: Read this photo · Show the tuck · Open the rule · Read another · Make a Style Card
+
+## Heroes, one per surface
+
+| Surface | Hero | Everything else |
+|---|---|---|
+| Read `/` | the photo with the overlay: tape, break mark, section tick; before a photo, the drop cloth with a chalk figure and the plumb line hanging | the three readings as drill rows (measurement, rule, advice), the hash, category chips |
+| Face `/face` | the face oval with its three horizontal divisions and the length : width ratio | hair, makeup and expression readings as drill rows; palette as a stacked bar |
+| Rulebook `/rules` | the open rule's diagram, live: drag the break along a line and watch the ratio and which band it lands in | the list of rules, each a drill row with its constants, sources and version |
+| Style Card `/card` | the card itself, at 1 : 1.618, in Paper | the photo tray (3 to 5 slots), the export button |
+
+At 1280 the read screen's photo column is 38.2% (`--split-photo`): the layout sits on the section it teaches.
+
+## Logomark
+
+A square frame (Vitruvius' square) with a plumb line dropping from the top edge to a small filled bob at 0.618 of the height. Chalk strokes, 1.6px at 24px, round caps; the bob is the one filled element and the only tape in the mark. In the app it animates with `plumb` once on load; in print and at 16px it hangs straight with the bob only. Wordmark: "Ratio" in Fraunces, opsz 144, weight 400, with "reason and proportion" beneath in mono eyebrow. Endorsed "a voidvision production".
+
+## Iconography and components
+
+Hand-drawn glyphs, 24px, 1.6px stroke, round caps, no fills except a tape bob. Cards: lining on worsted, 10px radius, 20 to 24px padding, one idea each. Drill rows: title, right-aligned mono summary in tape when it is a measurement, chevron. Buttons: chalk fill, worsted label, 44px minimum, `settle` on press. Focus: 2px chalk ring, 2px offset. Empty states: one Fraunces line, one muted sentence, one chalk action.

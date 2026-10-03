@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+// Stages the measuring models into web/public/ so the page never fetches
+// them from another origin (V3: the photo, and everything that reads it,
+// stays on this origin and in the tab).
+//
+// - MediaPipe Tasks models (Apache 2.0), from Google's model bucket at a
+//   pinned version path, downloaded once into .cache/ and checked against
+//   SHA-256 pins. Each is under Workers Static Assets' 25 MiB file limit.
+// - The MediaPipe vision WASM runtime, from the @mediapipe/tasks-vision
+//   package (pinned exactly in package.json and here by hash).
+//
+// None of these are tracked in git (rule 8): web/public/mp is gitignored,
+// and this runs before every build and dev server.
+
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const cacheDir = path.join(repoRoot, ".cache", "models");
+const outDir = path.join(repoRoot, "web", "public", "mp");
+
+const BUCKET = "https://storage.googleapis.com/mediapipe-models";
+
+// Served path (under /mp/) → source path in the bucket and its SHA-256.
+export const MODELS = {
+  "pose_landmarker_lite.task": {
+    src: "pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+    sha256: "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+  },
+  "selfie_multiclass_256x256.tflite": {
+    src: "image_segmenter/selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite",
+    sha256: "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0",
+  },
+};
+
+// Only the SIMD build: every browser Ratio supports has WASM SIMD, and one
+// runtime means one numeric path (the determinism risk in the brief).
+export const RUNTIME = {
+  "vision_wasm_internal.js": "e170ee67dd4e16c1a6fcd8840a206687e5a59b22c20e4a902bc445b095454d73",
+  "vision_wasm_internal.wasm": "8da277a733926eacd0474b8704b36742d6ec3231c57a860c5b889dff8f1df886",
+};
+
+const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+
+/** Throws unless buf matches its SHA-256 pin. */
+export function checkPin(file, buf, expected) {
+  const got = sha256(buf);
+  if (got !== expected) throw new Error(`fetch-models: ${file} sha256 ${got}, pinned ${expected}`);
+  return buf;
+}
+
+async function cached(name, { src, sha256: pin }) {
+  const target = path.join(cacheDir, name);
+  if (existsSync(target) && sha256(readFileSync(target)) === pin) return readFileSync(target);
+  const url = `${BUCKET}/${src}`;
+  console.log(`fetch-models: downloading ${name}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch-models: ${url} answered ${res.status}`);
+  const buf = checkPin(name, Buffer.from(await res.arrayBuffer()), pin);
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(target, buf);
+  return buf;
+}
+
+/** Stages the runtime and the models. Pins are checked before anything on disk changes. */
+export async function stage() {
+  const wasmDir = path.join(repoRoot, "node_modules", "@mediapipe", "tasks-vision", "wasm");
+  if (!existsSync(wasmDir)) throw new Error("fetch-models: @mediapipe/tasks-vision is not installed (npm ci)");
+  const runtime = Object.entries(RUNTIME).map(([f, pin]) => [f, checkPin(f, readFileSync(path.join(wasmDir, f)), pin)]);
+  const models = [];
+  for (const [name, spec] of Object.entries(MODELS)) models.push([name, await cached(name, spec)]);
+
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(path.join(outDir, "wasm"), { recursive: true });
+  for (const [f, buf] of runtime) writeFileSync(path.join(outDir, "wasm", f), buf);
+  for (const [f, buf] of models) writeFileSync(path.join(outDir, f), buf);
+  console.log(`fetch-models: staged ${models.length} models and the vision runtime in web/public/mp`);
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  stage().catch((err) => {
+    console.error(err.message ?? err);
+    process.exit(1);
+  });
+}

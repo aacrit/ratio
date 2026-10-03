@@ -1,0 +1,478 @@
+/* Layout and component styles for Cloth and Chalk (design/BRAND.md).
+   Colours always come from design/tokens.css; never a literal here. */
+
+* {
+  box-sizing: border-box;
+}
+
+/* hidden wins over every display rule below. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  line-height: 1.6;
+}
+
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 40px 20px 96px;
+  display: grid;
+  gap: 28px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+p {
+  margin: 0;
+}
+
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-weight: 400;
+  margin: 0;
+  text-wrap: balance;
+}
+
+h2 {
+  font-size: 1.35rem;
+}
+
+.eyebrow {
+  font: 500 0.72rem/1.2 var(--font-data);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+.muted {
+  color: var(--color-cream-muted);
+}
+
+/* ---- Masthead: the mark and the wordmark ---------------------------------- */
+
+.page-header {
+  display: grid;
+  gap: 8px;
+}
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.mark {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+.mark circle {
+  fill: var(--color-tape);
+  stroke: none;
+}
+
+.mark line {
+  stroke-width: 1.2;
+}
+
+.mark-plumb {
+  transform-box: view-box;
+  transform-origin: 12px 2px;
+}
+
+/* The plumb drops once on load, as a damped pendulum (--ease-plumb). */
+@media (prefers-reduced-motion: no-preference) {
+  .mark-plumb {
+    animation: plumb var(--dur-plumb) var(--ease-plumb) both;
+  }
+}
+
+@keyframes plumb {
+  from {
+    transform: rotate(calc(var(--plumb-swing) * -1));
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.wordmark {
+  display: grid;
+  gap: 4px;
+}
+
+.wordmark h1 {
+  font-size: clamp(3.4rem, 12vw, 5.6rem);
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  margin-left: -0.04em;
+}
+
+.lede {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-style: italic;
+  font-size: clamp(1.15rem, 3.4vw, 1.4rem);
+  line-height: 1.35;
+  max-width: 34ch;
+}
+
+/* ---- Buttons: chalk on worsted, settle on press --------------------------- */
+
+.btn,
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-cream);
+  color: var(--color-bg);
+  font: 600 0.92rem var(--font-structure);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    transform var(--dur-settle) var(--ease-settle);
+}
+
+.btn:hover,
+button:hover {
+  background: var(--color-cream-hover);
+}
+
+.btn:active,
+button:active {
+  transform: scale(0.97);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--color-cream);
+  border: 1px solid var(--color-border);
+}
+
+button:focus-visible,
+textarea:focus-visible,
+.drop:focus-within {
+  outline: 2px solid var(--color-cream);
+  outline-offset: 2px;
+}
+
+/* ---- The drop cloth -------------------------------------------------------- */
+
+.read {
+  display: grid;
+  gap: 16px;
+}
+
+.drop {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 28px 24px;
+  border: 1px dashed var(--color-cream-muted);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.drop[data-over] {
+  border-style: solid;
+  border-color: var(--color-cream);
+}
+
+.drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.drop-title {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: 1.3rem;
+  line-height: 1.3;
+}
+
+.drop-note {
+  color: var(--color-cream-muted);
+  max-width: var(--measure-reading);
+}
+
+.drop-btn {
+  margin-top: 6px;
+}
+
+/* Waiting shows its work: the tape extends at the real download rate. */
+.loadtape {
+  display: grid;
+  gap: 8px;
+}
+
+.load-label {
+  font-size: 0.9rem;
+}
+
+.bar {
+  height: 12px;
+  border-radius: 3px;
+  background: var(--color-cream-faint);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: 0;
+  background: var(--color-tape);
+}
+
+.read-status {
+  min-height: 1.4em;
+  max-width: var(--measure-reading);
+}
+
+.read-status[data-state="error"] {
+  color: var(--color-cream);
+}
+
+body[data-state="measuring"] .read-status {
+  color: var(--color-cream-muted);
+}
+
+/* ---- The read: the photo, then the argument -------------------------------- */
+
+.result {
+  display: grid;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .result {
+    grid-template-columns: var(--split-photo) 1fr;
+    gap: 36px;
+  }
+  /* The photo stays in view while the argument is read. */
+  .photo-col {
+    position: sticky;
+    top: 24px;
+  }
+}
+
+.photo-col {
+  background: var(--color-surface);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+.read-col {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.verdict {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: clamp(1.35rem, 3.6vw, 1.7rem);
+  line-height: 1.25;
+}
+
+/* The measured palette: the person's own colours, each as wide as its share. */
+.palette {
+  display: flex;
+  height: 18px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.row {
+  border-top: 1px solid var(--color-border);
+  padding: 14px 0;
+  display: grid;
+  gap: 10px;
+}
+
+/* argument: measure, then rule, then advice, in order. */
+@media (prefers-reduced-motion: no-preference) {
+  .rows .row {
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+      opacity var(--dur-normal) var(--ease-cinematic),
+      transform var(--dur-normal) var(--ease-cinematic);
+  }
+  .rows .row:nth-child(2) {
+    transition-delay: var(--dur-argument);
+  }
+  .rows .row:nth-child(3) {
+    transition-delay: calc(var(--dur-argument) * 2);
+  }
+  .rows .row:nth-child(4) {
+    transition-delay: calc(var(--dur-argument) * 3);
+  }
+  .rows .row:nth-child(5) {
+    transition-delay: calc(var(--dur-argument) * 4);
+  }
+  .rows.in .row {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.row-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.row-t {
+  font-weight: 600;
+}
+
+.row-n {
+  color: var(--color-tape);
+  font-size: 0.95rem;
+}
+
+.row[data-state="golden"] .row-n {
+  color: var(--color-section);
+}
+
+.row[data-state="borderline"] .row-n,
+.row-borderline b {
+  color: var(--color-borderline);
+}
+
+.row-b {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.row-b p {
+  max-width: var(--measure-reading);
+}
+
+.row-b b {
+  display: inline-block;
+  min-width: 6.2em;
+  font: 500 0.72rem var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+.hashline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.reading-hash {
+  font-size: 0.8rem;
+  color: var(--color-cream-muted);
+}
+
+/* ---- Feedback and footer ---------------------------------------------------- */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 22px 24px;
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+}
+
+label {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+textarea {
+  width: 100%;
+  background: var(--color-bg);
+  color: var(--color-cream);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  font-family: var(--font-structure);
+  font-size: 0.95rem;
+  resize: vertical;
+}
+
+#feedback-form button {
+  margin-top: 12px;
+}
+
+#feedback-status {
+  min-height: 1.2em;
+  font-size: 0.9rem;
+  color: var(--color-cream-muted);
+}
+
+#feedback-status[data-state="error"] {
+  color: var(--color-cream);
+}
+
+.page-footer {
+  display: flex;
+  gap: 18px;
+  font-size: 0.85rem;
+  color: var(--color-cream-muted);
+}
+
+a {
+  color: var(--color-cream);
+}
