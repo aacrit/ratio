@@ -3,6 +3,12 @@
   "name": "ratio",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-09-01",
+  "routes": [
+    { "pattern": "ratio.voidvision.org", "custom_domain": true }
+  ],
+  // workers.dev stays on: it is the contract's burst_host (contract.yaml).
+  "workers_dev": true,
+  "preview_urls": false,
   // Worker logs are kept (errors, and anything the Worker itself writes,
   // which is never a request body, IP or key), but invocation logs, one
   // record per request with its URL, headers and client details, are off,
