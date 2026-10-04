@@ -69,7 +69,11 @@ export async function readPhoto(file: Blob, hooks: ReadHooks = {}): Promise<Read
   let seen;
   try {
     seen = await see(pixels);
-  } catch {
+  } catch (e) {
+    // Never shown to a visitor (FAILURE_COPY stays generic, V4), but the real
+    // cause belongs in the console: scripts/fixture-hashes.mjs reads it to
+    // tell a genuine known limit (R3) from a bug in this worker.
+    console.error("ratio: the models failed to run:", e);
     return "models_failed";
   }
   if (seen.mask.width !== pixels.width || seen.mask.height !== pixels.height) return "models_failed";
