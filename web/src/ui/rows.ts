@@ -5,6 +5,7 @@
 // `argument` stagger) and their numerals count up as they land.
 
 import type { Bins, AdviceLine, LineState } from "../engine/rules";
+import { shownColour } from "../engine/constants";
 import { byName, colourLabel } from "../engine/names";
 import { measuredCopy } from "../engine/measured";
 import { RULEBOOK } from "../engine/rulebook";
@@ -26,7 +27,10 @@ export function para(label: string, text: string): HTMLParagraphElement {
   return p;
 }
 
-const lchCss = ({ L, C, h }: { L: number; C: number; h: number }) => `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h})`;
+const lchCss = (c: { L: number; C: number; h: number }) => {
+  const { L, C, h } = shownColour(c);
+  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h})`;
+};
 
 /** A palette as a strip, each colour as wide as its share. The photo's own colours carry it. */
 export function paletteStrip(bins: Bins, label = "The outfit's palette"): HTMLElement {

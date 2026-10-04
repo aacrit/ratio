@@ -9,13 +9,14 @@
 import { readingHash } from "../engine/hash";
 import { type Look, suggestLooks } from "../engine/looks";
 import { verdictOf as engineVerdict } from "../engine/verdict";
+import { shownColour } from "../engine/constants";
 import { colourLabel } from "../engine/names";
 import { ENGINE_VERSION, type LineState } from "../engine/rules";
 import type { Figure } from "../overlay";
 import type { Read } from "../read";
 import type { Reader } from "../reader";
 import { chalkFigure } from "../tryon/figure";
-import { type Bands, type PhotoPlan, refuseAll, refusedCardCopy, refusedCopy, showsOnPhoto } from "../tryon/recolour";
+import { type Bands, type PhotoPlan, refuseAll, refusedCardCopy, refusedCopy, refusedSwatches, showsOnPhoto } from "../tryon/recolour";
 import { countTo } from "./count";
 import { STATE_WORDS, paletteStrip, renderRows, stateLabel } from "./rows";
 import type { Sheet } from "./sheet";
@@ -47,11 +48,12 @@ export interface LooksDeps {
 
 const changeText = (from: LineState, to: LineState) => `${STATE_WORDS[from]} → ${STATE_WORDS[to]}`;
 
-function swatchChip(c: { L: number; C: number; h: number }): HTMLElement {
+function swatchChip(m: { L: number; C: number; h: number }): HTMLElement {
+  const c = shownColour(m);
   const chip = document.createElement("span");
   chip.className = "chip-swatch";
   chip.style.background = `oklch(${c.L.toFixed(3)} ${c.C.toFixed(3)} ${c.h})`;
-  chip.title = colourLabel(c);
+  chip.title = colourLabel(m);
   return chip;
 }
 
@@ -72,7 +74,7 @@ export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = []) =
 /** The sheet head's eyebrow under the hero numeral: the rule and its state. */
 export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].title}, ${stateLabel(lines[0])}`;
 
-export function setupLooks(d: LooksDeps): { shown: () => Shown } {
+export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => Promise<void> } {
   const { read } = d;
   const looks = suggestLooks(read.reading.bins, read.reading.lines);
   d.verdict.textContent = verdictOf(read.reading.lines, looks);
@@ -86,7 +88,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   if (!looks.length) {
     if (intro) intro.textContent = "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
     d.list.replaceChildren();
-    return { shown: () => shown };
+    return { shown: () => shown, settled: () => Promise.resolve() };
   }
   if (intro) intro.textContent = `${looks.length === 1 ? "One look" : `${looks.length} looks`} the rules prefer, judged by the same rulebook. Try one on the photo.`;
 
@@ -155,7 +157,11 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     d.hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
   };
 
+  // The last try or "as worn" in flight, with its recolour: the card waits
+  // for it, so a saved card always shows the photo its note describes.
+  let pending: Promise<unknown> = Promise.resolve();
   const tryLook = async (look: Look) => {
+    let landed: Promise<void> = Promise.resolve();
     if (current === look.id) return asWorn();
     const from = shown.lines;
     current = look.id;
@@ -179,10 +185,10 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     if (onPhoto) {
       let job = recoloured.get(look.id);
       if (!job) {
-        job = d.reader.recolour(read.display, read.mask, box, bands, read.palette, painted);
+        job = d.reader.recolour(read.display, read.mask, box, bands, read.palette, painted, refusedSwatches(look.moves, plan, read.palette));
         recoloured.set(look.id, job);
       }
-      void job.then((pixels) => current === look.id && d.figure.setLook(pixels));
+      landed = job.then((pixels) => void (current === look.id && d.figure.setLook(pixels)));
     } else d.figure.setLook(null);
     d.wipe.hidden = !onPhoto;
     // Over the photo the pointer becomes a grip while a look can be compared.
@@ -208,9 +214,10 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     }
     if (current === look.id) d.hash.textContent = `Trying a look. Same look, same reading. ${hh.slice(0, 4)} · ${ENGINE_VERSION}`;
     d.onTried();
+    await landed;
   };
 
-  d.trying.querySelector<HTMLButtonElement>(".trying-back")?.addEventListener("click", () => void asWorn());
+  d.trying.querySelector<HTMLButtonElement>(".trying-back")?.addEventListener("click", () => void (pending = asWorn()));
 
   d.list.replaceChildren(
     ...looks.map((look, i) => {
@@ -247,7 +254,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
       button.className = "btn";
       button.textContent = "Try it";
       button.setAttribute("aria-pressed", "false");
-      button.addEventListener("click", () => void tryLook(look));
+      button.addEventListener("click", () => void (pending = tryLook(look)));
       buttons.set(look.id, button);
       cards.set(look.id, li);
 
@@ -260,5 +267,5 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   );
   // The cards arrive after the rows, settling one after another.
   requestAnimationFrame(() => d.list.classList.add("in"));
-  return { shown: () => shown };
+  return { shown: () => shown, settled: () => pending.then(() => undefined, () => undefined) };
 }

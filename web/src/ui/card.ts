@@ -4,6 +4,7 @@
 // quiet line naming the site. No tracking, no watermark beyond that line,
 // nothing uploaded: the file is made here and saved by the browser.
 
+import { shownColour } from "../engine/constants";
 import { byName, colourLabel } from "../engine/names";
 import type { AdviceLine, Bins, LineState } from "../engine/rules";
 import { STATE_WORDS } from "./rows";
@@ -147,7 +148,8 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
   const total = named.reduce((t, s) => t + s.share, 0) || 1;
   for (const s of named) {
     const w = (rw * s.share) / total;
-    ctx.fillStyle = `oklch(${s.L} ${s.C} ${s.h})`;
+    const d = shownColour(s);
+    ctx.fillStyle = `oklch(${d.L} ${d.C} ${d.h})`;
     ctx.fillRect(px, y, w, 22);
     px += w;
   }

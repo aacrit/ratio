@@ -9,7 +9,7 @@ import type { RuleId } from "./engine/rulebook";
 import { ENGINE_VERSION } from "./engine/rules";
 import { sendEvent } from "./events";
 import { reducedMotion } from "./motion";
-import { SATURATED_CHROMA, nearEdge } from "./engine/constants";
+import { SATURATED_CHROMA, nearEdge, shownColour } from "./engine/constants";
 import { type LastRead, clearLastRead, loadLastRead, localDay } from "./rules/handoff";
 import {
   HANDLE_HIT,
@@ -47,7 +47,11 @@ function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<strin
   return el;
 }
 
-const lch = (c: { L: number; C: number; h: number }) => `oklch(${c.L.toFixed(3)} ${c.C.toFixed(3)} ${c.h})`;
+const lch = (s: { L: number; C: number; h: number }) => {
+  // A neutral is drawn with no chroma (engine/constants.ts shownColour).
+  const c = shownColour(s);
+  return `oklch(${c.L.toFixed(3)} ${c.C.toFixed(3)} ${c.h})`;
+};
 const f1 = (n: number) => n.toFixed(1);
 /** A marker beyond the instrument's ends says so: the handle stops at the end, "Yours" keeps the real value. */
 const past = (side: "below" | "above" | null) => (side ? ", past the end" : "");

@@ -17,6 +17,14 @@ export function neutralChromaAt(L: number): number {
 }
 
 export const isNeutral = (c: { L: number; C: number }): boolean => c.C < neutralChromaAt(c.L);
+
+/**
+ * The colour to draw for a swatch: a neutral is drawn with no chroma, so a
+ * cream or a white the engine reads as neutral never shows as a pale pink
+ * (a binned neutral keeps its small chroma at hue 0°). Display only: the
+ * readings and the hash keep the measured chroma.
+ */
+export const shownColour = (c: { L: number; C: number; h: number }): { L: number; C: number; h: number } => (isNeutral(c) ? { L: c.L, C: 0, h: 0 } : { L: c.L, C: c.C, h: c.h });
 /** From this OKLCH chroma a colour reads as saturated. */
 export const SATURATED_CHROMA = 0.11;
 

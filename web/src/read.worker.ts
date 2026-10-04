@@ -46,7 +46,7 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       return;
     }
     case "recolour": {
-      const out = recolour(msg.pixels, msg.mask, msg.box, msg.bands, msg.swatches, msg.moves);
+      const out = recolour(msg.pixels, msg.mask, msg.box, msg.bands, msg.swatches, msg.moves, msg.avoid);
       post({ type: "recoloured", id: msg.id, pixels: out }, [out.data.buffer]);
       return;
     }

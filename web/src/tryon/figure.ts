@@ -7,13 +7,15 @@
 import type { Bins } from "../engine/rules";
 import { GOLDEN, ratioText } from "../engine/rules";
 import { pieces } from "../engine/looks";
+import { shownColour } from "../engine/constants";
 
 const NS = "http://www.w3.org/2000/svg";
 const CROWN = 22;
 const SOLE = 420;
 const yOf = (r: number) => CROWN + (SOLE - CROWN) * r;
 
-const lab = ({ L, C, h }: { L: number; C: number; h: number }) => {
+const lab = (c: { L: number; C: number; h: number }) => {
+  const { L, C, h } = shownColour(c);
   const a = C * Math.cos((h * Math.PI) / 180), b = C * Math.sin((h * Math.PI) / 180);
   return `oklab(${L.toFixed(3)} ${a.toFixed(3)} ${b.toFixed(3)})`;
 };

@@ -123,7 +123,7 @@ function setupRead(): void {
   cloth.addEventListener("focusin", warm, { once: true });
 
   // The read on screen, for the wipe and the card.
-  let current: { figure: Figure; shown: () => Shown; credit: string | null } | null = null;
+  let current: { figure: Figure; shown: () => Shown; settled: () => Promise<void>; credit: string | null } | null = null;
 
   const showCloth = () => {
     well.hidden = true;
@@ -205,7 +205,7 @@ function setupRead(): void {
       const handOff = (s: Shown, look: string | null) => saveLastRead(lastReadOf({ engine: s.engine, hash: s.hash, source, look, bins: s.bins, lines: s.lines }));
       handOff({ title: "As worn", lines: read.reading.lines, bins: read.reading.bins, hash: read.hash, engine: read.reading.engine }, null);
       const looks = setupLooks({ read, reader, figure, sheet, rows, section: looksSection, list: looksList, heroN, heroEyebrow, verdict, trying, trial, paletteSlot, hash, wipe, asWornExtras, onTried: () => sendEvent("look_tried"), onShown: handOff });
-      current = { figure, shown: looks.shown, credit: sourceCredit };
+      current = { figure, shown: looks.shown, settled: looks.settled, credit: sourceCredit };
       sheet.measure();
       sheet.snap("half");
       // The argument follows the numeral, and never waits more than 2.5 s for it.
@@ -277,9 +277,11 @@ function setupRead(): void {
   // Save as card: whatever is on screen, as worn or the tried look.
   save.addEventListener("click", async () => {
     if (!current) return;
-    const shown = current.shown();
     save.disabled = true;
     save.textContent = "Drawing the card.";
+    // A look still being recoloured lands first: the card matches the photo and its note.
+    await current.settled();
+    const shown = current.shown();
     try {
       await saveCard({ still: current.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: current.credit ?? undefined });
       save.textContent = "Saved";

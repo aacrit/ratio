@@ -14,7 +14,7 @@ import ReadWorker from "./read.worker?worker";
 export type ToWorker =
   | { type: "load" }
   | { type: "read"; id: number; file: Blob }
-  | { type: "recolour"; id: number; pixels: Pixels; mask: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[] }
+  | { type: "recolour"; id: number; pixels: Pixels; mask: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[]; avoid: number[] }
   | { type: "plan"; id: number; pixels: Pixels; full: Mask; person: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[] };
 
 export type FromWorker =
@@ -120,13 +120,13 @@ export class Reader {
   }
 
   /** A recoloured copy of the display photo, computed off the page's thread. The buffers are copied, so the caller keeps its own. */
-  async recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[]): Promise<Pixels> {
+  async recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[], avoid: number[] = []): Promise<Pixels> {
     const id = this.next++;
     const reply = await new Promise<FromWorker>((resolve) => {
       this.waiting.set(id, { resolve });
       const data = new Uint8ClampedArray(pixels.data);
       const maskData = new Uint8Array(mask.data);
-      this.ensure().postMessage({ type: "recolour", id, pixels: { width: pixels.width, height: pixels.height, data }, mask: { width: mask.width, height: mask.height, data: maskData }, box, bands, swatches, moves } satisfies ToWorker, [data.buffer, maskData.buffer]);
+      this.ensure().postMessage({ type: "recolour", id, pixels: { width: pixels.width, height: pixels.height, data }, mask: { width: mask.width, height: mask.height, data: maskData }, box, bands, swatches, moves, avoid } satisfies ToWorker, [data.buffer, maskData.buffer]);
     });
     if (reply.type !== "recoloured") throw new Error("recolour failed");
     return reply.pixels;

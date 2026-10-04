@@ -14,7 +14,7 @@
 // alone is not enough: a white waistcoat and white breeches share a swatch
 // (found by the CI screenshots on David's Napoleon, 2026-10-04).
 
-import { type Lab, oklabToSrgb, srgbToOklab } from "../engine/color";
+import { type Lab, deltaE, oklabToSrgb, srgbToOklab } from "../engine/color";
 import type { Move } from "../engine/looks";
 import { colourName } from "../engine/names";
 import { CATEGORY, type Mask } from "../engine/measure";
@@ -111,8 +111,8 @@ export function honesty(pixels: Pixels, full: Mask, person: Mask, box: Box, band
   return { honest, targets };
 }
 
-/** Why a colour move stays on the chalk figure: nothing on the photo to move, or a doubtful recolour. */
-export type Refusal = "no_target" | "doubtful";
+/** Why a colour move stays on the chalk figure: nothing on the photo to move, a doubtful recolour, or the check could not run (no judgement). */
+export type Refusal = "no_target" | "doubtful" | "failed";
 
 /** Which of a look's moves the photo shows (indices into the moves) and which only the chalk figure shows. */
 export interface PhotoPlan {
@@ -137,8 +137,15 @@ export function photoPlan(pixels: Pixels, full: Mask, person: Mask, box: Box, ba
   return plan;
 }
 
-/** Every colour move refused, as when the check itself could not run. */
-export const refuseAll = (moves: Move[]): PhotoPlan => ({ paint: [], refused: moves.flatMap((m, i) => (m.kind === "break" ? [] : [{ i, reason: "doubtful" as const }])) });
+/** Every colour move refused because the check itself could not run: not a judgement on the photo. */
+export const refuseAll = (moves: Move[]): PhotoPlan => ({ paint: [], refused: moves.flatMap((m, i) => (m.kind === "break" ? [] : [{ i, reason: "failed" as const }])) });
+
+/** The swatches of a plan's refused moves, for recolour's `avoid`. */
+export const refusedSwatches = (moves: Move[], plan: PhotoPlan, swatches: Swatch[]): number[] =>
+  plan.refused.flatMap((x) => colourTargets([moves[x.i]], swatches).map((t) => t.swatch));
+
+/** The neutral line when the check could not run. */
+export const CHECK_FAILED = "The look is shown on the chalk figure only.";
 
 const isShoes = (m: Move) => m.kind === "accent" || (m.kind === "recolour" && m.piece === "shoes");
 
@@ -158,6 +165,7 @@ const subject = (ms: Move[]) => `${cap(listed(ms.map(partName)))} ${ms.length > 
 
 /** The trying panel's line when some or all of a look's colour moves are on the chalk figure only; null when none are. */
 export function refusedCopy(moves: Move[], plan: PhotoPlan): string | null {
+  if (plan.refused.some((x) => x.reason === "failed")) return CHECK_FAILED;
   const of = (r: Refusal) => plan.refused.filter((x) => x.reason === r).map((x) => moves[x.i]);
   const parts: string[] = [];
   const none = of("no_target");
@@ -184,9 +192,12 @@ export interface Box {
  * A recoloured copy of the photo. The mask is the read person's only
  * (engine/person.ts), so no one else's pixels can change. Each moved pixel keeps its lightness offset
  * in full and its chroma offset scaled to the target's chroma, so a dark fold
- * stays a dark fold in the new colour.
+ * stays a dark fold in the new colour. `avoid` lists the swatches of moves
+ * refused on the photo: a pixel nearer to one of them than to the target's
+ * own swatch is that piece's cloth, so a passing move (an accent on the
+ * shoes) never repaints a refused piece.
  */
-export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[]): Pixels {
+export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[], avoid: readonly number[] = []): Pixels {
   const targets = colourTargets(moves, swatches);
   const data = new Uint8ClampedArray(pixels.data);
   if (!targets.length) return { width: pixels.width, height: pixels.height, data };
@@ -215,6 +226,7 @@ export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swa
         // Read the original photo, never a pixel another move already changed.
         const px = srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
         if (!sameCloth(px, from)) continue;
+        if (avoid.some((j) => j !== swatch && j < swatches.length && deltaE(px, swatches[j].lab) < deltaE(px, from))) continue;
         const [r, g, b] = oklabToSrgb({
           L: Math.max(0, Math.min(1, to.L + (px.L - from.L))),
           a: to.a + (px.a - from.a) * k2,

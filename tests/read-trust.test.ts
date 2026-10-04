@@ -16,7 +16,8 @@ import { OTHER_MIN, UNSURE_COPY, isolatePerson, othersCopy } from "../web/src/en
 import { RULEBOOK } from "../web/src/engine/rulebook";
 import { yoursValues } from "../web/src/rules/model";
 import { type Bins, ENGINE_VERSION, readBins, readOutfit } from "../web/src/engine/rules";
-import { HONEST, honesty, photoPlan, refuseAll, refusedCardCopy, refusedCopy } from "../web/src/tryon/recolour";
+import { HONEST, honesty, photoPlan, recolour, refuseAll, refusedCardCopy, refusedCopy, refusedSwatches } from "../web/src/tryon/recolour";
+import { isNeutral, shownColour } from "../web/src/engine/constants";
 import { pieces } from "../web/src/engine/pieces";
 
 type Rgb = [number, number, number];
@@ -281,7 +282,9 @@ describe("2. recolour honesty", () => {
     const all = photoPlan(pixels, full, own, { left: 0, right: 0 }, bands, swatches, [black]);
     expect(refusedCopy([black], all)).toBeNull();
     expect(refusedCardCopy([black], all)).toBeNull();
-    expect(refuseAll(moves)).toEqual({ paint: [], refused: [{ i: 1, reason: "doubtful" }, { i: 2, reason: "doubtful" }] });
+    // A check that could not run is no judgement on the photo: a neutral line.
+    expect(refuseAll(moves)).toEqual({ paint: [], refused: [{ i: 1, reason: "failed" }, { i: 2, reason: "failed" }] });
+    expect(refusedCopy(moves, refuseAll(moves))).toBe("The look is shown on the chalk figure only.");
     for (const t of [refusedCopy(moves, plan), refusedCopy([black], half)]) expect(t).not.toContain("—");
   });
 });
@@ -386,6 +389,38 @@ describe("2b. value reads each colour's own lightness", () => {
     expect(measuredCopy(value, bins)).toBe("Upper piece 0.46, lower piece 0.68; lightness of each colour: grey 0.46 and 0.68.");
     const wide: Bins = { ...bins, top: { L: 0.24, C: 0, h: 0 }, palette: [sw(0.24, 0, 0, 0.5, 0.3), grey(0.68, 0.5, 0.7)] };
     expect(readBins(wide).find((l) => l.rule === "value")!.measured).toBe("range 0.44");
+  });
+});
+
+describe("an accent never repaints a refused piece", () => {
+  it("leaves out pixels nearer to a refused move's swatch than to the accent's own", () => {
+    // One band of shoe-coloured and lower-piece-coloured pixels: the accent on
+    // the shoes passes, the lower piece's recolour was refused.
+    const shoe: Rgb = [70, 40, 30], cloth: Rgb = [95, 60, 45];
+    const data = new Uint8ClampedArray([...shoe, 255, ...cloth, 255]);
+    const pixels = { width: 2, height: 1, data };
+    const mask = { width: 2, height: 1, data: Uint8Array.from([CATEGORY.clothes, CATEGORY.clothes]) };
+    const swatches: Swatch[] = [{ lab: srgbToOklab(...cloth), share: 0.6, y: 0.7 }, { lab: srgbToOklab(...shoe), share: 0.1, y: 0.95 }];
+    const bands = { upper: [0, 0], lower: [0, 0], shoes: [0, 0], other: [0, 0] } as const;
+    const accent = { kind: "accent" as const, L: 0.5, C: 0.12, h: 250, title: "", detail: "" };
+    const lower = { kind: "recolour" as const, swatch: 0, piece: "lower" as const, L: 0.2, C: 0, h: 0, title: "", detail: "" };
+    const moves = [lower, accent];
+    const plan = { paint: [1], refused: [{ i: 0, reason: "doubtful" as const }] };
+    expect(refusedSwatches(moves, plan, swatches)).toEqual([0]);
+    const without = recolour(pixels, mask, { left: 0, right: 1 }, bands, swatches, [accent]);
+    expect(Array.from(without.data.slice(4, 7))).not.toEqual(cloth);
+    const out = recolour(pixels, mask, { left: 0, right: 1 }, bands, swatches, [accent], refusedSwatches(moves, plan, swatches));
+    expect(Array.from(out.data.slice(0, 3))).not.toEqual(shoe);
+    expect(Array.from(out.data.slice(4, 7))).toEqual(cloth);
+  });
+});
+
+describe("neutrals are drawn without chroma", () => {
+  it("draws a cream the engine reads as neutral as a grey of its lightness, and a colour as itself", () => {
+    const cream = { L: 0.88, C: 0.03, h: 0 };
+    expect(isNeutral(cream)).toBe(true);
+    expect(shownColour(cream)).toEqual({ L: 0.88, C: 0, h: 0 });
+    expect(shownColour({ L: 0.3, C: 0.07, h: 255 })).toEqual({ L: 0.3, C: 0.07, h: 255 });
   });
 });
 
