@@ -16,19 +16,58 @@ import { parse as parseYaml } from "yaml";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f: string) => readFileSync(path.join(root, f), "utf8");
 const text = read("web/privacy.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+/** Every .ts file under a directory, at any depth, as a repo-relative path. */
+const tsFiles = (dir: string) =>
+  readdirSync(path.join(root, dir), { recursive: true, encoding: "utf8" })
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => `${dir}/${f.replace(/\\/g, "/")}`);
+const HANDOFF = "web/src/rules/handoff.ts";
 const workerFiles = () => readdirSync(path.join(root, "worker/src")).filter((f) => f.endsWith(".ts"));
 
 describe("web/privacy.html, claim by claim", () => {
   it("no anonymous id, cookie or local storage: no client or Worker code sets one", () => {
     expect(text).toContain("There is no anonymous id, no cookie, no local storage, and no third-party analytics script");
     for (const dir of ["web/src", "worker/src"]) {
-      for (const f of readdirSync(path.join(root, dir)).filter((x) => x.endsWith(".ts"))) {
-        expect(read(`${dir}/${f}`), f).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\.|document\.cookie|set-cookie/i);
+      for (const f of tsFiles(dir)) {
+        // The one exception, the tab's hand-off to the Rulebook, is paired with its own claim below.
+        const src = f === HANDOFF ? read(f).replace(/\bsessionStorage\./g, "") : read(f);
+        expect(src, f).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\.|document\.cookie|set-cookie/i);
       }
     }
     for (const page of readdirSync(path.join(root, "web")).filter((p) => p.endsWith(".html"))) {
       expect(read(`web/${page}`), page).not.toMatch(/googletagmanager|google-analytics|cloudflareinsights|plausible|posthog/i);
     }
+  });
+
+  it("the last reading is kept in session storage, numbers and labels only, never the photo; Clear removes it; only handoff.ts touches it", async () => {
+    expect(text).toContain("look is sent or counted, except that a reading took place and that a look was tried, and nothing is kept except as below");
+    expect(text).not.toContain("sent, stored or counted");
+    expect(text).toContain("the browser keeps that reading's rounded measurements, its results and, if you tried a look, the look's title, in session storage");
+    expect(text).toContain("never the photo or any of its pixels");
+    expect(text).toContain("It is kept for this tab's session (a browser that restores or duplicates the tab keeps it too); Clear on the Rulebook page removes it");
+    expect(text).toContain("It is never sent anywhere");
+    // Clear exists on the Rulebook and calls the one remover.
+    const page = read("web/src/rules.ts");
+    expect(page).toContain('clear.textContent = "Clear";');
+    expect(page).toMatch(/clear\.addEventListener\("click", \(\) => \{\s*clearLastRead\(\);/);
+    const src = read(HANDOFF);
+    expect(src).not.toMatch(/\b(localStorage|indexedDB)\.|fetch\(|XMLHttpRequest|sendBeacon/);
+    expect(src.match(/\bsessionStorage\.\w+/g)).toEqual(["sessionStorage.setItem", "sessionStorage.getItem", "sessionStorage.removeItem"]);
+    // What is stored is exactly these fields: the binned measurements and each line's label; no prose, no pixels.
+    const { lastReadOf } = await import("../web/src/rules/handoff");
+    const bins = { proportion: 0.5, waist: 0.38, top: { L: 0.5, C: 0, h: 0 }, bottom: { L: 0.3, C: 0, h: 0 }, palette: [], fit: null };
+    const stored = lastReadOf({
+      engine: "ratio-engine/0.5.0",
+      hash: "abcdef012345",
+      source: "photo",
+      look: null,
+      bins,
+      lines: [{ rule: "proportion", title: "Proportion", measured: "0.50 : 0.50", text: "advice prose", state: "advice", borderline: false }],
+    });
+    // "look" is the tried look's title, which the page discloses.
+    expect(Object.keys(stored).sort()).toEqual(["bins", "day", "engine", "hash", "lines", "look", "source", "v"]);
+    expect(Object.keys(stored.lines[0]).sort()).toEqual(["borderline", "measured", "rule", "state"]);
+    expect(Object.keys(stored.bins).sort()).toEqual(["bottom", "fit", "palette", "proportion", "top", "waist"]);
   });
 
   it("counts as daily totals: /e takes exactly one field and only increments a day count", () => {
