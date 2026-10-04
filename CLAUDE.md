@@ -29,6 +29,8 @@ measure; a versioned rulebook advises. Three laws:
    scores. `JUDGING_WORDS` in `web/src/engine/rules.ts` is linted over every
    line the rulebook can produce (`tests/engine.test.ts`).
 
+**UX cadence.** Personas and cadence live in `design/personas.md`: every PR is screenshotted in CI; after every second merged ticket, and before any release, a holistic UX pass is run as Noor (the super user), with Sam and Mara on what changed. Findings become tickets, and the pass is logged on the Board roadmap.
+
 No model writes advice: models only measure. An LLM is never on the read
 path. The risk plan and its enforcers are in `docs/RISKS.md`; the design
 language is law in `design/BRAND.md`.
