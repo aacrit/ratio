@@ -414,6 +414,21 @@ describe("copy law over every new line (V4)", () => {
   });
 });
 
+describe("5b. Read never contradicts its own advice", () => {
+  it("with no look to offer, the looks line says advice remains when a rule gives it", async () => {
+    const { looksIntroOf } = await import("../web/src/engine/verdict");
+    const advice = { rule: "proportion" as const, title: "", measured: "", text: "", state: "advice" as const, borderline: false };
+    expect(looksIntroOf([advice], 0)).not.toMatch(/on the mark or fine/);
+    expect(looksIntroOf([{ ...advice, state: "neutral" }], 0)).toMatch(/on the mark or fine/);
+    expect(looksIntroOf([advice], 2)).toMatch(/^2 looks/);
+  });
+
+  it("no tuck control on the proportion row of an upper piece that opens down the front", async () => {
+    const { read } = await import("node:fs").then((fs) => ({ read: (p: string) => fs.readFileSync(p, "utf8") }));
+    expect(read("web/src/ui/rows.ts")).toMatch(/line\.rule === "proportion" && bins\.front \? undefined/);
+  });
+});
+
 describe("8. the Rulebook", () => {
   it("the arrows move a handle the way they point: Down moves the break down the tape", () => {
     expect(keyStep("ArrowDown", true)).toBe(1);

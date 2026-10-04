@@ -114,7 +114,8 @@ export function renderRows(list: HTMLOListElement, lines: AdviceLine[], bins: Bi
         note.className = "row-borderline";
         body.append(note);
       }
-      const extra = opts.extra?.[line.rule];
+      // An upper piece that opens down the front does not tuck: its row shows no tuck control.
+      const extra = line.rule === "proportion" && bins.front ? undefined : opts.extra?.[line.rule];
       if (extra) body.append(extra);
       li.append(head, body);
       return li;

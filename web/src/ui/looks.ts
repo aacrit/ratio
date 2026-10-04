@@ -8,7 +8,7 @@
 
 import { readingHash } from "../engine/hash";
 import { type Look, suggestLooks } from "../engine/looks";
-import { verdictOf as engineVerdict } from "../engine/verdict";
+import { verdictOf as engineVerdict, looksIntroOf } from "../engine/verdict";
 import { shownColour } from "../engine/constants";
 import { colourLabel } from "../engine/names";
 import { ENGINE_VERSION, type LineState } from "../engine/rules";
@@ -86,11 +86,11 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   let shown = asWornShown;
 
   if (!looks.length) {
-    if (intro) intro.textContent = "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
+    if (intro) intro.textContent = looksIntroOf(read.reading.lines, 0);
     d.list.replaceChildren();
     return { shown: () => shown, settled: () => Promise.resolve() };
   }
-  if (intro) intro.textContent = `${looks.length === 1 ? "One look" : `${looks.length} looks`} the rules prefer, judged by the same rulebook. Try one on the photo.`;
+  if (intro) intro.textContent = looksIntroOf(read.reading.lines, looks.length);
 
   // Where each piece may be found on the figure: the upper piece from the
   // crown to the break, the lower from the break to the ankle, the shoes in

@@ -100,6 +100,17 @@ function keepSentence(lines: AdviceLine[], lead: AdviceLine | undefined, bins: B
   return `Keep ${words[keep.rule]}.`;
 }
 
+/**
+ * The line over the looks. With no look to offer it never claims the
+ * reading is all fine when a rule gives advice (p1 of UX pass 2: a zipped
+ * jacket at halves, where the advice is a shorter piece, not a move).
+ */
+export function looksIntroOf(lines: AdviceLine[], count: number): string {
+  if (count > 0) return `${count === 1 ? "One look" : `${count} looks`} the rules prefer, judged by the same rulebook. Try one on the photo.`;
+  if (lines.some((l) => l.state === "advice")) return "No look here improves the reading without breaking another rule. The advice in the reading below says what would.";
+  return "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
+}
+
 export function verdictOf(lines: AdviceLine[], looks: Look[], bins?: Bins): string {
   const advice = byOrder(lines.filter((l) => l.state === "advice"));
   const changes = advice.length;
