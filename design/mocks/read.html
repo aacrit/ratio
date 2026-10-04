@@ -53,6 +53,29 @@
         letter-spacing: 0.1em;
         transform: none;
       }
+      .neutral-line {
+        font-size: 0.86rem;
+        color: var(--color-cream-muted);
+        max-width: 48ch;
+      }
+      .save-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .save-row .btn[aria-pressed="true"] {
+        background: transparent;
+        color: var(--color-section);
+        border: 1px solid var(--color-section);
+      }
+      .save-status {
+        font-size: 0.86rem;
+        max-width: 48ch;
+      }
+      .save-status b {
+        font-weight: 600;
+        color: var(--color-section);
+      }
       .trying {
         display: grid;
         grid-template-columns: 84px 1fr;
@@ -118,10 +141,16 @@
         font-size: 0.84rem;
         flex: none;
       }
+      .look-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: end;
+      }
       .look .btn[aria-pressed="true"] {
         background: transparent;
-        color: var(--color-cream);
-        border: 1px solid var(--color-cream);
+        color: var(--color-section);
+        border: 1px solid var(--color-section);
       }
       /* The wardrobe ask: shown once, under the hash, the first time "Keep" is pressed. */
       .keep-ask {
@@ -168,7 +197,7 @@
     <main class="stage" aria-label="The stage">
       <div class="stage-light" aria-hidden="true"></div>
       <div class="photo-well">
-        <div class="figure" role="img" aria-label="The sample painting with the tape, the break line and the section mark drawn over it; a chalk wipe splits it, as worn on the left and the look on the right">
+        <div class="figure" role="img" aria-label="The sample painting with the tape, the break line and the section mark drawn over it; a chalk wipe splits it, the original on the left and the look on the right">
           <img src="../../web/public/samples/napoleon.jpg" width="750" height="1215" alt="" />
           <svg class="overlay" viewBox="0 0 750 1215" preserveAspectRatio="none" aria-hidden="true">
             <!-- The look, right of the wipe: the lower piece in navy and the shoes in oxblood (a mock approximation of the in-tab recolour). -->
@@ -196,25 +225,31 @@
           </svg>
           <span class="grip-dot" aria-hidden="true"></span>
           <span class="tag" style="left: 90.6%; top: 61.2%">0.64 : 0.36</span>
-          <span class="tag side" style="right: 52%; top: 2.5%">AS WORN</span>
+          <span class="tag side" style="right: 52%; top: 2.5%">ORIGINAL</span>
           <span class="tag side" style="left: 52%; top: 2.5%">THE LOOK</span>
+          <span class="tag side" style="left: 2.5%; bottom: 2.5%">SAMPLE: DAVID'S NAPOLEON</span>
         </div>
       </div>
       <div class="stage-foot">
-        <input class="wipe" type="range" min="0" max="100" value="50" aria-label="Compare: as worn on the left, the look on the right" />
+        <input class="wipe" type="range" min="0" max="100" value="50" aria-label="Compare: the original on the left, the look on the right" />
       </div>
     </main>
 
     <aside class="sheet" aria-label="The reading">
       <button class="grip" type="button" aria-label="Collapse the reading" aria-expanded="true"><span class="grip-bar"></span></button>
       <div class="sheet-body">
-        <section class="reading" aria-labelledby="hero-eyebrow">
+        <section class="reading" aria-labelledby="verdict">
           <header class="sheet-head">
             <div class="hero-row">
-              <p class="hero"><span class="hero-n" data-ratio data-state="golden">0.64 : 0.36</span></p>
-              <p id="hero-eyebrow" class="eyebrow">Proportion, on the mark</p>
+              <p class="verdict" id="verdict">Works. The proportions are strong. Navy trousers and oxblood shoes add one saturated note.</p>
+              <p id="hero-eyebrow" class="eyebrow">Sample: David's Napoleon · trying a look · <span data-ratio>0.64 : 0.36</span>, on the mark</p>
             </div>
-            <p class="verdict">The break sits near the golden section from below (0.618): a long upper piece over a short lower one.</p>
+            <p class="neutral-line">These measure the clothes' composition, not your body.</p>
+            <div class="save-row">
+              <button class="btn small" type="button" aria-pressed="true">Saved to wardrobe</button>
+              <button class="btn ghost small" type="button">Download this read (free)</button>
+            </div>
+            <p class="save-status" role="status"><b>Saved.</b> 1 of 3 outfits toward a Style Card. The wardrobe stays in this browser and keeps the reading, never the photo. Delete it any time from Card.</p>
             <div class="palette" role="img" aria-label="The look's palette: cream 25%, black 25%, cream 20%, charcoal 15%, navy 10%, oxblood 5%">
               <span style="--share: 0.25; background: oklch(0.93 0.03 105)"></span>
               <span style="--share: 0.25; background: oklch(0.19 0 0)"></span>
@@ -224,7 +259,7 @@
               <span style="--share: 0.05; background: oklch(0.36 0.11 25)"></span>
             </div>
             <div class="card trying">
-              <svg viewBox="0 0 236 440" class="chalk-figure" role="img" aria-label="The chalk figure dressed as the look: lower piece in navy, shoes in oxblood">
+              <svg viewBox="0 0 236 440" class="chalk-figure" role="img" aria-label="The chalk figure dressed as the look: navy trousers, oxblood shoes">
                 <g transform="translate(36 0)">
                   <path d="M54 277 L146 277 L142 410 L106 410 L100 323 L94 410 L58 410 Z" fill="oklch(0.3 0.07 255)" class="garment" />
                   <path d="M93 76 Q100 80 107 76 L140 86 L152 98 L147 152 L136 149 L152 277 L48 277 L64 149 L53 152 L48 98 L60 86 Z" fill="oklch(0.93 0.03 105)" class="garment" />
@@ -245,9 +280,9 @@
               </svg>
               <div class="trying-text">
                 <p class="eyebrow">Trying a look</p>
-                <p class="trying-title">Lower piece in navy (255°) + Shoes in oxblood (25°)</p>
+                <p class="trying-title">Navy trousers and oxblood shoes</p>
                 <p class="note">Colour changes show on the photo, in the tab. A tuck or a belt shows on the chalk figure and by the break mark, never painted onto the photo.</p>
-                <button class="btn ghost small" type="button">As worn</button>
+                <button class="btn ghost small" type="button">Show original</button>
               </div>
             </div>
           </header>
@@ -258,17 +293,17 @@
             <ol class="look-list">
               <li class="card look" data-on>
                 <div class="look-swatches"><span class="chip-swatch" style="background: oklch(0.3 0.07 255)"></span><span class="chip-swatch" style="background: oklch(0.36 0.11 25)"></span></div>
-                <h3 class="card-title">Lower piece in navy (255°)<br />+ Shoes in oxblood (25°)</h3>
-                <p class="note">Swap the lower piece for navy (255°). An accent of about a tenth gives the eye a place to rest.</p>
+                <h3 class="card-title">Navy trousers and oxblood shoes</h3>
+                <p class="note">Swap the trousers for navy. Oxblood shoes, about a tenth of the outfit, give the eye a place to rest.</p>
                 <div class="card-foot">
                   <ul class="look-changes"><li data-to="golden"><b>Chroma</b> fine → on the mark</li></ul>
-                  <button class="btn" type="button" aria-pressed="true">As worn</button>
+                  <div class="look-actions"><button class="btn ghost" type="button" aria-pressed="true">Saved to wardrobe</button><button class="btn" type="button">Show original</button></div>
                 </div>
               </li>
               <li class="card look">
                 <div class="look-swatches"><span class="chip-swatch" style="background: oklch(0.45 0.06 250)"></span><span class="chip-swatch" style="background: oklch(0.36 0.11 25)"></span></div>
-                <h3 class="card-title">Lower piece in denim (250°)<br />+ Shoes in oxblood (25°)</h3>
-                <p class="note">Swap the lower piece for denim (250°). An accent of about a tenth gives the eye a place to rest.</p>
+                <h3 class="card-title">Denim trousers and oxblood shoes</h3>
+                <p class="note">Swap the trousers for denim. Oxblood shoes, about a tenth of the outfit, give the eye a place to rest.</p>
                 <div class="card-foot">
                   <ul class="look-changes"><li data-to="golden"><b>Chroma</b> fine → on the mark</li></ul>
                   <button class="btn" type="button" aria-pressed="false">Try it</button>
@@ -276,8 +311,8 @@
               </li>
               <li class="card look">
                 <div class="look-swatches"><span class="chip-swatch" style="background: oklch(0.36 0.11 25)"></span></div>
-                <h3 class="card-title">Shoes in oxblood (25°)</h3>
-                <p class="note">An accent of about a tenth gives the eye a place to rest.</p>
+                <h3 class="card-title">Oxblood shoes</h3>
+                <p class="note">Oxblood shoes, about a tenth of the outfit, give the eye a place to rest.</p>
                 <div class="card-foot">
                   <ul class="look-changes"><li data-to="golden"><b>Chroma</b> fine → on the mark</li></ul>
                   <button class="btn" type="button" aria-pressed="false">Try it</button>
@@ -317,8 +352,8 @@
                 <p class="row-h"><span class="row-tt"><span class="row-t">Harmony</span><span class="row-s">on the mark</span></span><span class="row-n" data-ratio>Y · 105° 255° 25°</span></p>
                 <div class="row-b">
                   <p><b>Measured</b> 6 colours in the outfit: cream (105°), black, cream (105°), charcoal, navy (255°), oxblood (25°).</p>
-                  <p><b>Rule</b> Matsuda's hue templates (monochromatic, complementary, analogous, right-angle, split, double complementary, half wheel), fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.</p>
-                  <p><b>Advice</b> The hues fit the split template (neighbouring hues with a complementary accent), a classic harmony. Keep any new piece inside it, or neutral.</p>
+                  <p><b>Rule</b> Matsuda's hue templates (monochromatic, complementary, analogous, right-angle, analogous with a complementary accent, double complementary, half wheel), fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.</p>
+                  <p><b>Advice</b> The hues fit the analogous-with-a-complementary-accent template: neighbouring hues (cream, oxblood) with one hue from across the wheel (navy), a classic harmony. Keep any new piece inside it, or neutral.</p>
                 </div>
               </li>
               <li class="row" data-state="neutral">
@@ -340,11 +375,11 @@
               <li class="row" data-state="borderline" data-changed>
                 <p class="row-h"><span class="row-tt"><span class="row-t">Chroma</span><span class="row-s">on the mark, borderline</span></span><span class="row-n" data-ratio>1 saturated</span></p>
                 <div class="row-b">
-                  <p class="row-change">Was fine, now on the mark.</p>
+                  <p class="row-change">Was fine, now on the mark: the oxblood shoes give the outfit its one saturated note.</p>
                   <p><b>Measured</b> Chroma of each colour: 0.03, 0.00, 0.02, 0.01, 0.07, 0.11.</p>
                   <p><b>Rule</b> One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).</p>
                   <p><b>Advice</b> One saturated colour among quieter ones: a single voice, the way a painter places the brightest note. The palette is warm and cool in balance.</p>
-                  <p class="row-borderline"><b>Borderline</b> This measurement sits on the edge between two bands, so a slightly different photo may read the other way. Both readings apply.</p>
+                  <p class="row-borderline"><b>Borderline</b> Close to the line: a slightly different photo could tip it. Take this one as a nudge.</p>
                 </div>
               </li>
             </ol>
@@ -353,17 +388,7 @@
           <p class="credit">Jacques-Louis David, The Emperor Napoleon in His Study at the Tuileries, 1812. National Gallery of Art, Washington. Public domain, via Wikimedia Commons.</p>
           <div class="hashline">
             <p class="reading-hash" data-numeral title="Reading hash 89f0c2a1e7d4b36f5a08e9c1d2b7f4a6">Trying a look. Same look, same reading. 89f0 · ratio-engine/0.4.0</p>
-            <div class="hashline-actions">
-              <button class="btn ghost small" type="button">Save as card</button>
-              <button class="btn ghost small" type="button" aria-expanded="true" aria-controls="keep-ask">Keep in my wardrobe</button>
-            </div>
-          </div>
-          <div class="keep-ask" id="keep-ask">
-            <p>The wardrobe stays in this browser. It keeps the reading (the numbers, the palette, the chalk figure), never the photo. Three or more kept reads can make a Style Card. Delete any of them from Card.</p>
-            <div class="actions">
-              <button class="btn small" type="button">Keep this read</button>
-              <button class="btn ghost small" type="button">Not now</button>
-            </div>
+            <a class="btn ghost small" href="./card.html">Open Card</a>
           </div>
         </section>
 

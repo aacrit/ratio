@@ -366,7 +366,8 @@
         <p class="eyebrow">The rulebook · <span data-numeral>ratio-engine/0.4.0</span></p>
         <h1>Seven rules, each with its maths, its edges and its source.</h1>
         <p class="lede">Every reading is held against these and nothing else. Drag an instrument to see where a band ends. Your last read in this tab is marked on each one.</p>
-        <p class="yours-chip"><span class="dot" aria-hidden="true"></span><span>Your last read, as worn</span><span data-numeral>12eb · today</span><button class="btn ghost" type="button">Clear</button></p>
+        <p class="lede">The canons cited here (Euclid's section, the golden ratio, Dürer, Matsuda's templates) are European traditions, one lineage among many; the rulebook names its sources so you can weigh them.</p>
+        <p class="yours-chip"><span class="dot" aria-hidden="true"></span><span>Your last read: the sample with navy trousers and oxblood shoes</span><span data-numeral>89f0 · today</span><button class="btn ghost" type="button">Clear</button></p>
       </header>
 
       <!-- 1. Proportion: the hero instrument, live. -->
@@ -388,22 +389,18 @@
               <path d="M62 157.3 H118 M62 197.1 H118 M62 244.9 H118 M62 284.7 H118" stroke-dasharray="2 3" />
             </g>
             <g>
-              <text x="116" y="154" text-anchor="end">0.34</text>
-              <text x="116" y="193.8" text-anchor="end">0.44</text>
-              <text x="116" y="241.6" text-anchor="end">0.56</text>
-              <text x="116" y="281.4" text-anchor="end">0.66</text>
               <text x="86" y="93" text-anchor="end" class="band">short top</text>
               <text x="86" y="181" text-anchor="end" class="band">section</text>
               <text x="86" y="225" text-anchor="end" class="band">halves</text>
-              <text x="86" y="268" text-anchor="end" class="band">section, below</text>
+              <text x="86" y="262" text-anchor="end" class="band">section, below</text>
               <text x="86" y="356" text-anchor="end" class="band">long top</text>
             </g>
             <!-- The golden ticks. -->
             <path d="M120 174 H132" class="mark" />
             <path d="M120 268 H132" class="mark" />
             <!-- Yours: fixed, verdigris. -->
-            <path d="M112 276.7 H128" class="mark" />
-            <text x="120" y="297" text-anchor="end" class="yours">yours</text>
+            <path d="M100 276.7 H128" class="mark" />
+            <text x="96" y="280" text-anchor="end" class="yours">yours 0.64</text>
             <!-- The handle: the break line, dragged along the figure. -->
             <g id="prop-handle" transform="translate(0 276.7)">
               <path d="M120 0 H262" class="tape" stroke-width="2" />
@@ -490,7 +487,7 @@
           <rect x="14" y="44" width="228" height="12" rx="3" fill="url(#lgrad)" />
           <text x="14" y="74">0</text>
           <text x="242" y="74" text-anchor="end">1</text>
-          <!-- A worked pair: lower piece 0.30, shoes 0.36 (the first look). -->
+          <!-- Yours: trousers 0.30, shoes 0.36. -->
           <path d="M82.4 36 V64" class="tape" />
           <path d="M96.1 36 V64" class="tape" />
           <circle cx="82.4" cy="50" r="6" class="handle" />
@@ -502,12 +499,12 @@
           <path d="M14 152 H41.4" class="faint" />
           <path d="M14 148 V156 M41.4 148 V156" class="faint" />
           <text x="46" y="156">0.12</text>
-          <text x="14" y="186" class="yours">yours, as worn: no shoes measured</text>
+          <text x="14" y="186" class="yours">yours: ΔL 0.06, on the mark</text>
         </svg>
         <div class="rule-text">
           <p class="rule-eyebrow eyebrow"><span>Leg line</span><span class="uncal">calibrated: no, first estimates</span></p>
           <h2 id="r-legline">Shoes close in value to the lower piece continue the leg line; shoes in strong contrast end it at the ankle.</h2>
-          <p class="yours"><b>Yours</b> <span class="muted">not read as worn: the shoes were not found in the frame. The first look's pair is shown.</span></p>
+          <p class="yours" data-state="golden"><b>Yours</b> <span data-ratio>ΔL 0.06</span> <span class="state">on the mark · the line runs on</span></p>
         </div>
         <details class="drill">
           <summary>The maths, the edges, the sources</summary>
@@ -523,29 +520,33 @@
       <article class="rule" aria-labelledby="r-harmony">
         <div class="instrument wheel">
           <div class="ring" aria-hidden="true"></div>
-          <svg viewBox="0 0 256 200" width="100%" role="img" aria-label="The harmony instrument: the OKLCH hue ring with the analogous template's sector and the outfit's hues on it; the hue at 105 degrees sits just outside">
-            <!-- Sector of the analogous template (93.6°), rotated to 2°: an arc on the ring. -->
-            <path d="M128 100 L130.4 31.0 A69 69 0 0 1 196.7 106.7 Z" fill="var(--color-cream-faint)" stroke="var(--color-cream)" stroke-width="1.4" stroke-linejoin="round" />
-            <text x="166" y="64" class="band">V, analogous</text>
-            <!-- The outfit's hues: 0° (share 0.15) inside, 105° just outside, red chalk. -->
-            <circle cx="128" cy="31" r="7" fill="oklch(0.40 0.03 0)" stroke="var(--color-cream)" stroke-width="1.2" />
-            <text x="140" y="26">0°</text>
-            <circle cx="194.6" cy="117.9" r="9" fill="oklch(0.93 0.03 105)" stroke="var(--color-borderline)" stroke-width="2" />
-            <text x="242" y="146" text-anchor="end" class="red">105°, 11° outside</text>
+          <svg viewBox="0 0 256 200" width="100%" role="img" aria-label="The harmony instrument: the OKLCH hue ring with the template's two sectors, neighbouring hues and one accent across the wheel, and the outfit's three hues inside them">
+            <!-- The Y template: a 93.6° analogous sector (18° to 112°) and an 18° accent sector across the wheel (236° to 254°). -->
+            <path d="M128 100 L149.3 34.4 A69 69 0 0 1 192.0 125.9 Z" fill="var(--color-cream-faint)" stroke="var(--color-cream)" stroke-width="1.4" stroke-linejoin="round" />
+            <path d="M128 100 L70.8 138.6 A69 69 0 0 1 61.7 119.0 Z" fill="var(--color-cream-faint)" stroke="var(--color-cream)" stroke-width="1.4" stroke-linejoin="round" />
+            <text x="146" y="80" class="band">neighbouring hues</text>
+            <text x="14" y="160" class="band">one accent across</text>
+            <!-- The look's hues: cream 105°, oxblood 25°, navy 255°. -->
+            <circle cx="194.6" cy="117.9" r="8" fill="oklch(0.93 0.03 105)" stroke="var(--color-cream)" stroke-width="1.2" />
+            <text x="207" y="134">105°</text>
+            <circle cx="157.2" cy="37.5" r="8" fill="oklch(0.36 0.11 25)" stroke="var(--color-cream)" stroke-width="1.2" />
+            <text x="170" y="30">25°</text>
+            <circle cx="61.4" cy="117.9" r="8" fill="oklch(0.3 0.07 255)" stroke="var(--color-cream)" stroke-width="1.2" />
+            <text x="48" y="134" text-anchor="end">255°</text>
             <circle cx="128" cy="100" r="2" class="mark-fill" />
-            <text x="14" y="186" class="yours">yours: V · 105° 0°, borderline fit</text>
+            <text x="14" y="186" class="yours">yours: Y · 105° 255° 25°, on the mark</text>
             <text x="14" y="26" class="band">hue ring, OKLCH</text>
           </svg>
         </div>
         <div class="rule-text">
           <p class="rule-eyebrow eyebrow"><span>Harmony</span><span>calibrated</span></p>
-          <h2 id="r-harmony">Matsuda's hue templates, fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.</h2>
-          <p class="yours" data-state="borderline"><b>Yours</b> <span data-ratio>V · 105° 0°</span> <span class="state">on the mark, borderline</span></p>
+          <h2 id="r-harmony">Matsuda's hue templates, fitted on the perceptual OKLCH wheel: a few shapes of hues that sit well together. A palette inside one reads as harmonious.</h2>
+          <p class="yours" data-state="golden"><b>Yours</b> <span data-ratio>Y · 105° 255° 25°</span> <span class="state">on the mark · analogous with a complementary accent</span></p>
         </div>
         <details class="drill">
           <summary>The maths, the edges, the sources</summary>
           <div class="drill-body">
-            <p><b>Maths</b>Each template (monochromatic, complementary, analogous, right-angle, split, double complementary, half wheel) is rotated in 1° steps; its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of 4° or less names the palette.</p>
+            <p><b>Maths</b>Each template is rotated in 1° steps: monochromatic (one hue), complementary (two hues across the wheel), analogous (neighbouring hues), right-angle (a hue and one 90° away), analogous with a complementary accent (neighbouring hues plus one hue across the wheel), double complementary (two neighbourhoods across the wheel), half wheel (all warm or all cool); its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of 4° or less names the palette.</p>
             <div><b>Edges</b><dl class="edges"><dt>a colour counts as a neutral below chroma</dt><dd data-numeral>0.02</dd><dt>fit tolerance (area-weighted degrees)</dt><dd data-numeral>4</dd></dl></div>
             <div><b>Sources</b><ul class="sources"><li><a href="https://igl.ethz.ch/projects/color-harmonization/">Cohen-Or, Sorkine, Gal, Leyvand, Xu, Color Harmonization (SIGGRAPH 2006), after Matsuda's hue templates</a></li><li><a href="https://bottosson.github.io/posts/oklab/">Björn Ottosson, OKLab (2020)</a></li></ul></div>
           </div>
@@ -562,8 +563,8 @@
           <rect x="14" y="44" width="228" height="12" rx="3" fill="url(#lgrad2)" />
           <text x="14" y="74">0</text>
           <text x="242" y="74" text-anchor="end">1</text>
-          <!-- Yours: 0.93, 0.19, 0.78, 0.40, 0.70 -->
-          <g class="tape"><path d="M226 36 V64 M57.3 36 V64 M191.8 36 V64 M105.2 36 V64 M173.6 36 V64" /></g>
+          <!-- Yours: 0.93, 0.19, 0.78, 0.40, 0.30, 0.36 -->
+          <g class="tape"><path d="M226 36 V64 M57.3 36 V64 M191.8 36 V64 M105.2 36 V64 M82.4 36 V64 M96.1 36 V64" /></g>
           <path d="M57.3 92 H226" class="mark" />
           <path d="M57.3 88 V96 M226 88 V96" class="mark" />
           <text x="141" y="112" text-anchor="middle" class="n">range 0.74</text>
@@ -607,13 +608,15 @@
           <rect x="71" y="124" width="57" height="18" fill="oklch(0.19 0 0)" />
           <rect x="128" y="124" width="45.6" height="18" fill="oklch(0.78 0.02 105)" />
           <rect x="173.6" y="124" width="34.2" height="18" fill="oklch(0.40 0.005 0)" />
-          <rect x="207.8" y="124" width="34.2" height="18" fill="oklch(0.70 0.01 60)" />
+          <rect x="207.8" y="124" width="22.8" height="18" fill="oklch(0.3 0.07 255)" />
+          <rect x="230.6" y="124" width="11.4" height="18" fill="oklch(0.36 0.11 25)" />
           <rect x="14" y="124" width="228" height="18" rx="3" class="bar-ref" />
           <text x="42.5" y="158" text-anchor="middle">0.25</text>
           <text x="99.5" y="158" text-anchor="middle">0.25</text>
           <text x="150.8" y="158" text-anchor="middle">0.20</text>
           <text x="190.7" y="158" text-anchor="middle">0.15</text>
-          <text x="225" y="158" text-anchor="middle">0.15</text>
+          <text x="219" y="158" text-anchor="middle">0.10</text>
+          <text x="238" y="158" text-anchor="middle">0.05</text>
           <text x="14" y="186" class="yours">yours: 0.25 · 0.25 · 0.20, fine</text>
         </svg>
         <div class="rule-text">
@@ -641,24 +644,27 @@
           <g class="faint"><path d="M32.2 44 V64 M114.3 44 V64" /></g>
           <text x="32.2" y="40" text-anchor="middle">0.02</text>
           <text x="114.3" y="40" text-anchor="middle">0.11</text>
-          <text x="73" y="90" text-anchor="middle" class="band">muted</text>
+          <text x="73" y="92" text-anchor="middle" class="band">muted</text>
           <text x="178" y="90" text-anchor="middle" class="band">saturated</text>
           <text x="20" y="90" class="band">neutral</text>
-          <!-- Yours: 0.03, 0.00, 0.02, 0.01, 0.00 -->
+          <!-- Yours: 0.03, 0.00, 0.02, 0.01, 0.07, 0.11 (the last on the saturated edge: borderline) -->
           <circle cx="41.4" cy="54" r="6" fill="oklch(0.93 0.03 105)" stroke="var(--color-cream)" stroke-width="1" />
           <circle cx="32.2" cy="54" r="6" fill="oklch(0.78 0.02 105)" stroke="var(--color-cream)" stroke-width="1" />
           <circle cx="23.1" cy="54" r="6" fill="oklch(0.40 0.01 0)" stroke="var(--color-cream)" stroke-width="1" />
           <circle cx="14" cy="54" r="6" fill="oklch(0.19 0 0)" stroke="var(--color-cream)" stroke-width="1" />
+          <circle cx="77.8" cy="54" r="6" fill="oklch(0.3 0.07 255)" stroke="var(--color-cream)" stroke-width="1" />
+          <circle cx="114.3" cy="54" r="7" fill="oklch(0.36 0.11 25)" stroke="var(--color-borderline)" stroke-width="2" />
+          <text x="114.3" y="108" text-anchor="middle" class="red">0.11, on the edge</text>
           <text x="14" y="130" class="band">vibration: complements within 0.08 in lightness</text>
           <circle cx="40" cy="156" r="10" fill="oklch(0.55 0.14 25)" />
           <circle cx="56" cy="156" r="10" fill="oklch(0.55 0.14 205)" />
           <text x="74" y="160">both at 0.55: they vibrate</text>
-          <text x="14" y="186" class="yours">yours: 0 saturated, quiet</text>
+          <text x="14" y="186" class="yours">yours: 1 saturated, borderline</text>
         </svg>
         <div class="rule-text">
           <p class="rule-eyebrow eyebrow"><span>Chroma</span><span>calibrated</span></p>
           <h2 id="r-chroma">One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).</h2>
-          <p class="yours"><b>Yours</b> <span data-ratio>0 saturated</span> <span class="state">fine</span></p>
+          <p class="yours" data-state="borderline"><b>Yours</b> <span data-ratio>1 saturated</span> <span class="state">on the mark, borderline: the oxblood shoes sit on the saturated edge</span></p>
         </div>
         <details class="drill">
           <summary>The maths, the edges, the sources</summary>

@@ -45,7 +45,7 @@ The Read surface is an app frame, not a page (founder, 2026-10-04): a bar, a sta
 
 - **The bar** (52px): the mark with the plumb drop, the name, four tabs (Read · Face · Rules · Card, Inter 500, 44px touch width, a scrollable strip if the bar is too narrow) under one 2px chalk underline that glides to the chosen tab (`underline`), and one action at most ("Read another" while a photo is read). The name hides under 420px, the eyebrow under 768.
 - **The stage** fills the rest of the height and never scrolls away. Before a photo it is the drop cloth: the chalk figure under the lamp, one line, the actions. With a photo it is the photo well: the photo fitted to the room above the sheet, with the loading tape, a status line or the compare control in the foot beneath it. The whole stage accepts a drop.
-- **The sheet** holds everything that is read: the hero numeral and its eyebrow, the verdict, the palette, the looks, the argument, the hash, then feedback and the foot. On a phone it rides over the stage with three resting places: **peek** (the grip and the hero row), **half** (the viewport's half: verdict, palette, the first look), **full** (8px under the bar, and only then does it scroll inside). A drag follows the finger one to one, resists past the ends, and a release carries its velocity into the `sheet` spring. As the sheet rises the stage scales the photo (transform only) to the room above it, so the photo is always in view. From 1024 up the sheet is the side panel on the right, `--split-panel` (38.2%) wide: the stage keeps the major section, and the layout sits on the division it teaches.
+- **The sheet** holds everything that is read: the plain verdict and its eyebrow (the source and the first measurement, small), the body-neutral line, the save row, the palette, the looks, the argument, the hash, then feedback and the foot. On a phone it rides over the stage with three resting places: **peek** (the grip, the verdict and its eyebrow), **half** (the viewport's half: the save row, the palette, the first look), **full** (8px under the bar, and only then does it scroll inside). A drag follows the finger one to one, resists past the ends, and a release carries its velocity into the `sheet` spring. As the sheet rises the stage scales the photo (transform only) to the room above it, so the photo is always in view. From 1024 up the sheet is the side panel on the right, `--split-panel` (38.2%) wide: the stage keeps the major section, and the layout sits on the division it teaches.
 - Trying a look drops the sheet to half, so the photo and the wipe are in hand. The chalk figure dressed as the look rides in the sheet head beside "As worn".
 - The sheet's `ratio:snap` event is the one hook tests may use to place it.
 
@@ -57,7 +57,7 @@ The first screen is interactive in under a second on a mid-range phone: the page
 
 - **Fraunces** (display): the name, the drop title, the verdict, look titles, the lede. `font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0`: a crisp cut, the opposite of Dial's soft lamp. Emphasis is italic, never bold.
 - **Inter** (structure): labels, advice prose, buttons. Advice never exceeds `--measure-reading` (64ch).
-- **JetBrains Mono** (data): every numeral, with `tabular-nums`. A ratio pair is one element, `<span data-ratio>0.38 : 0.62</span>`, thin spaces (U+2009) round the colon, never wrapped apart. The rule's target follows in parentheses, muted: `0.38 : 0.62 (0.382)`. Angles carry the degree sign (`30°`), multipliers the multiplication sign (`1.3×`, never `x`). A reading hash is mono, muted, 4 hex characters shown, the full hash on hover. The hero numeral is the first reading's measurement at 2 to 2.6rem, weight 500.
+- **JetBrains Mono** (data): every numeral, with `tabular-nums`. A ratio pair is one element, `<span data-ratio>0.38 : 0.62</span>`, thin spaces (U+2009) round the colon, never wrapped apart. The rule's target follows in parentheses, muted: `0.38 : 0.62 (0.382)`. Angles carry the degree sign (`30°`), multipliers the multiplication sign (`1.3×`, never `x`). A reading hash is mono, muted, 4 hex characters shown, the full hash on hover. The first measurement rides the verdict's eyebrow in mono; the full numerals lead their rows in the argument. Colours are named plainly in verdicts, titles and advice (navy, oxblood); their degrees appear in Measured only.
 
 ## Motion presets
 
@@ -87,7 +87,8 @@ The read sequence: the photo settles onto the cloth the moment it is decoded (`a
 - **Never the person.** The subject of every sentence is a garment, a cut, a hem, a hue, a part, a palette. No scores, no "flaws", no "slimming", no body talk, no mood verdicts. A copy lint holds the forbidden list.
 - **Waiting shows its work.** "Loading the measuring models, 12.4 of 25.1 MB." Then "Measuring." Then the plumb line.
 - **Privacy is stated where it matters.** On the drop cloth, once: "It stays in this tab." Not repeated as a badge.
-- **Less at entry.** Peek shows one numeral and its eyebrow; half adds the verdict and the first look; the argument waits at full.
+- **Lead with the verdict.** One plain sentence, from the engine, says whether it works and the one change: "Works. The proportions are strong. Try navy trousers and oxblood shoes." The numbers follow in the argument. Peek shows the verdict and its eyebrow; half adds the save row and the first look; the argument waits at full.
+- **Never the body, said once per read.** "These measure the clothes' composition, not your body." sits under the verdict on every outfit read; Face has its own line.
 
 ## Copy voice
 
@@ -103,7 +104,7 @@ Precise, warm, unhurried; a tailor explaining a chalk mark. No exclamation marks
 - No full figure found. Use a photo that shows head to feet, facing the camera.
 - This browser can't run the models. Open the photo in Chrome, Firefox or Safari 16 or later.
 - Same photo, same reading. a3f2 · rulebook 1.0.
-- Buttons: Read a photo · Try the sample · Take a photo · Try it · As worn · Show the tuck · Save as card · Read another
+- Buttons: Read my outfit · Try a sample: David's Napoleon · Try it · Show original · Show the tuck · Save to wardrobe · Download this read (free) · Read another
 
 ## Heroes, one per surface
 
@@ -124,7 +125,7 @@ A rule card is an instrument beside its words: the instrument on the raised lini
 
 ## The wardrobe (within Read)
 
-Opt-in, this browser only (IndexedDB), deletable from Card. It keeps a reading and the chalk figure's inputs, never pixels: the photo is still gone when the tab closes. The ask is an inline block with a chalk rule on its left, shown once; "Kept" is a hard cut. Three to five kept reads draw the Style Card; a portrait read adds only its hair line.
+Opt-in, this browser only (IndexedDB), deletable from Card. One button, "Save to wardrobe", in the sheet head and on the active look card; pressing it is the opt-in, and it confirms in place ("Saved. 1 of 3 outfits toward a Style Card") with the disclosure in the status line. It keeps a reading and the chalk figure's inputs, never pixels: the photo is still gone when the tab closes. One entry per outfit (a photo); a look tried on it joins that entry. Three to five outfits draw the Style Card; a portrait read adds only its hair line.
 
 ## Iconography and components
 

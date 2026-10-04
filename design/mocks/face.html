@@ -27,9 +27,19 @@
       }
       .tag.canon {
         color: var(--hex-chalk);
-        font-size: 10px;
-        letter-spacing: 0.1em;
+        font-size: 11px;
+        letter-spacing: 0.04em;
         transform: translate(-100%, -50%);
+      }
+      .neutral-line {
+        font-size: 0.86rem;
+        color: var(--color-cream-muted);
+        max-width: 48ch;
+      }
+      .save-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
       }
       .waiting-note {
         font-size: 0.86rem;
@@ -84,11 +94,12 @@
             </g>
           </svg>
           <span class="tag hero-tag" style="left: 31.5%; top: 28.2%">1.62×</span>
+          <span class="tag canon" style="left: 34%; top: 46%; transform: none">SAMPLE: DÜRER'S SELF-PORTRAIT</span>
           <span class="tag third" style="left: 67.5%; top: 18.5%">0.26</span>
           <span class="tag third" style="left: 67.5%; top: 27.0%">0.38</span>
           <span class="tag third" style="left: 67.5%; top: 36.8%">0.36</span>
-          <span class="tag canon" style="left: 31%; top: 23.8%">⅓</span>
-          <span class="tag canon" style="left: 31%; top: 32.7%">⅔</span>
+          <span class="tag canon" style="left: 31%; top: 23.8%">1/3</span>
+          <span class="tag canon" style="left: 31%; top: 32.7%">2/3</span>
         </div>
       </div>
       <div class="stage-foot"></div>
@@ -97,13 +108,17 @@
     <aside class="sheet" aria-label="The reading">
       <button class="grip" type="button" aria-label="Collapse the reading" aria-expanded="true"><span class="grip-bar"></span></button>
       <div class="sheet-body">
-        <section class="reading" aria-labelledby="hero-eyebrow">
+        <section class="reading" aria-labelledby="verdict">
           <header class="sheet-head">
             <div class="hero-row">
-              <p class="hero"><span class="hero-n" data-ratio data-state="golden">1.62×</span></p>
-              <p id="hero-eyebrow" class="eyebrow">Length to width, on the mark</p>
+              <p class="verdict" id="verdict">Works. The hair sits where the face's proportions want it: width at the sides, a centre parting, length past the shoulders.</p>
+              <p id="hero-eyebrow" class="eyebrow">Sample: Dürer's self-portrait · <span data-ratio>1.62×</span> length to width, on the mark</p>
             </div>
-            <p class="verdict">Width at the sides is what a 1.62× oval asks for, and the hair as worn carries it there.</p>
+            <p class="neutral-line">These read the hair against the face's proportions. Never the face itself, and never a score.</p>
+            <div class="save-row">
+              <button class="btn small" type="button">Save to wardrobe</button>
+              <button class="btn ghost small" type="button">Download this read (free)</button>
+            </div>
           </header>
 
           <section class="argument" aria-labelledby="reading-title">
@@ -121,8 +136,8 @@
                 <p class="row-h"><span class="row-tt"><span class="row-t">Thirds</span><span class="row-s">fine</span></span><span class="row-n" data-ratio>0.26 · 0.38 · 0.36</span></p>
                 <div class="row-b">
                   <p><b>Measured</b> Hairline to brow 0.26, brow to nose base 0.38, nose base to chin 0.36 of the face length.</p>
-                  <p><b>Rule</b> The canon divides the face into three equal parts: hairline to brow, brow to nose base, nose base to chin. Hair can move the first line; nothing else moves.</p>
-                  <p><b>Advice</b> The upper third is the shortest, so the visible hairline is the one to keep. Hair parted or swept back without a fringe shows the full third, as worn; a fringe would shorten it further.</p>
+                  <p><b>Rule</b> The classical canon divides the face into three parts, hairline to brow, brow to nose base, nose base to chin, and treats equal thirds as its reference. Hair sets where the first line reads.</p>
+                  <p><b>Advice</b> The upper third reads shortest of the three. Swept back or parted, as worn, the hair shows it at full length; a fringe lowers the visible hairline, so that third reads shorter. Either is a choice; this is what each does to the read.</p>
                 </div>
               </li>
               <li class="row" data-state="neutral">
@@ -144,8 +159,8 @@
               <li class="row" data-state="neutral">
                 <p class="row-h"><span class="row-tt"><span class="row-t">Expression</span><span class="row-s">a portrait note</span></span><span class="row-n" data-ratio>smile 0.04 · eyes 0.62</span></p>
                 <div class="row-b">
-                  <p><b>Measured</b> Blendshape scores, each 0 to 1: mouth smile 0.04, eyes open 0.62, brow raise 0.00. Level gaze at the camera.</p>
-                  <p><b>Rule</b> A note for the portrait, never about the person: what the expression does for the picture. A smile that reaches the eyes reads as warm; a closed mouth and a level gaze read as formal.</p>
+                  <p><b>Measured</b> Mouth smile 0.04, eyes open 0.62, brow raise 0.00, each on a 0 to 1 scale. Level gaze at the camera.</p>
+                  <p><b>Rule</b> A note for the portrait, never about the person: what the expression does for the picture. A smile that reaches the eyes reads as warm; a closed mouth and a level gaze read as formal. Both are portraits.</p>
                   <p><b>Advice</b> A level gaze and a closed mouth: the formal portrait. Keep it for that. For a warm headshot, a smile that reaches the eyes, with both scores up.</p>
                 </div>
               </li>
@@ -161,10 +176,7 @@
           <p class="credit">Albrecht Dürer, Self-portrait at Twenty-eight (Self-portrait in a fur-trimmed robe), 1500. Alte Pinakothek, Munich. Public domain, via Wikimedia Commons.</p>
           <div class="hashline">
             <p class="reading-hash" data-numeral title="Reading hash 5b1dc83e4a9f27016d0e8b2c7a3f9e14">Same photo, same reading. 5b1d · ratio-engine/0.4.0 · face/0.1</p>
-            <div class="hashline-actions">
-              <button class="btn ghost small" type="button">Save as card</button>
-              <button class="btn ghost small" type="button">Keep in my wardrobe</button>
-            </div>
+            <a class="btn ghost small" href="./card.html">Open Card</a>
           </div>
         </section>
 
