@@ -96,8 +96,19 @@
         .rule.hero {
           grid-template-columns: 320px 1fr;
         }
-        .rule .instrument {
-          grid-row: 1 / 3;
+        .rule .instrument,
+        .rule .instrument-wrap {
+          grid-column: 1;
+        }
+        .rule .rule-text {
+          grid-column: 2;
+        }
+        .rule .drill {
+          grid-column: 1 / -1;
+        }
+        .rule.hero .drill {
+          grid-column: 2;
+          align-self: start;
         }
       }
       .rule-text {
@@ -392,12 +403,12 @@
             <path d="M120 268 H132" class="mark" />
             <!-- Yours: fixed, verdigris. -->
             <path d="M112 276.7 H128" class="mark" />
-            <text x="266" y="296" text-anchor="end" class="yours">yours 0.64, on the mark</text>
+            <text x="134" y="294" class="yours">yours 0.64</text>
             <!-- The handle: the break line, dragged along the figure. -->
             <g id="prop-handle" transform="translate(0 276.7)">
               <path d="M120 0 H262" class="tape" stroke-width="2" />
               <circle cx="262" cy="0" r="9" class="handle" />
-              <text id="prop-n" x="258" y="-7" text-anchor="end" class="n">0.64 : 0.36</text>
+              <text id="prop-n" x="250" y="-8" text-anchor="end" class="n">0.64 : 0.36</text>
             </g>
           </svg>
           <input id="prop-range" class="range-hidden" type="range" min="10" max="90" step="2" value="64" aria-label="The break, as a fraction of the height from the crown" />
@@ -520,7 +531,7 @@
             <circle cx="128" cy="31" r="7" fill="oklch(0.40 0.03 0)" stroke="var(--color-cream)" stroke-width="1.2" />
             <text x="140" y="26">0°</text>
             <circle cx="194.6" cy="117.9" r="9" fill="oklch(0.93 0.03 105)" stroke="var(--color-borderline)" stroke-width="2" />
-            <text x="207" y="134" class="red">105°, 11° outside</text>
+            <text x="242" y="146" text-anchor="end" class="red">105°, 11° outside</text>
             <circle cx="128" cy="100" r="2" class="mark-fill" />
             <text x="14" y="186" class="yours">yours: V · 105° 0°, borderline fit</text>
             <text x="14" y="26" class="band">hue ring, OKLCH</text>
@@ -563,7 +574,7 @@
           <path d="M100 154 H179.8" class="faint" />
           <path d="M100 150 V158 M179.8 150 V158" class="faint" />
           <text x="185" y="158">0.35</text>
-          <text x="14" y="186" class="yours">yours: range 0.74, high, light over dark</text>
+          <text x="14" y="186" class="yours">yours: range 0.74, light over dark</text>
         </svg>
         <div class="rule-text">
           <p class="rule-eyebrow eyebrow"><span>Value</span><span>calibrated</span></p>

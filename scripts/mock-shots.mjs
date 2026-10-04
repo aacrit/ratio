@@ -49,7 +49,7 @@ const note = (line) => {
 const browser = await chromium.launch();
 let failures = 0;
 for (const width of WIDTHS) {
-  const context = await browser.newContext({ viewport: { width, height: width < 1024 ? 812 : 900 }, deviceScaleFactor: 1, colorScheme: "dark" });
+  const context = await browser.newContext({ viewport: { width, height: width < 600 ? 812 : width < 1024 ? 1024 : 900 }, deviceScaleFactor: 1, colorScheme: "dark" });
   for (const mock of mocks) {
     const page = await context.newPage();
     const errors = [];
