@@ -33,6 +33,10 @@ jobs:
         run: |
           export CHROME_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
           node scripts/lighthouse.mjs http://localhost:4173/
+      # The G2 design mocks (design/mocks/*.html) at the three charter widths;
+      # the script serves the repo root itself.
+      - name: Mock screenshots (375, 768, 1280)
+        run: node scripts/mock-shots.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

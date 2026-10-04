@@ -12,7 +12,8 @@
 // - Only choices change: garment colour, tuck, belt, accent. Never the body.
 
 import type { BinnedSwatch } from "./colour-rules";
-import { colourLabel } from "./names";
+import { colourName } from "./names";
+import { isNeutral } from "./constants";
 import { type Piece, pieces as placedPieces } from "./pieces";
 import { type AdviceLine, type Bins, type LineState, readBins } from "./rules";
 
@@ -33,7 +34,6 @@ export interface Look {
   changes: { rule: AdviceLine["rule"]; title: string; from: LineState; to: LineState }[];
 }
 
-const NEUTRAL_CHROMA = 0.02;
 const SATURATED = 0.11;
 /** From this chroma a lead colour's hue is clear enough for its complement to mean something. */
 const CLEAR_HUE = 0.05;
@@ -87,7 +87,7 @@ export function normalise(b: Bins): Bins {
 export function applyMove(b: Bins, m: Move): Bins {
   if (m.kind === "break") return { ...b, proportion: m.to };
   const palette = b.palette.map((s) => ({ ...s }));
-  const colour = { L: m.L, C: m.C, h: m.C < NEUTRAL_CHROMA ? 0 : m.h };
+  const colour = { L: m.L, C: m.C, h: isNeutral(m) ? 0 : m.h };
   if (m.kind === "recolour") {
     const { upper, lower } = pieces(b);
     const s = palette[m.swatch];
@@ -116,6 +116,9 @@ export function applyMove(b: Bins, m: Move): Bins {
   return { ...b, palette };
 }
 
+/** A colour's plain name, for titles and advice; the degrees live in the Measured lines. */
+const plain = (c: { L: number; C: number; h: number }) => colourName(c.L, c.C, c.h);
+
 const PIECE_NAME: Record<Piece, string> = { upper: "Upper piece", lower: "Lower piece", shoes: "Shoes", other: "Accent" };
 const pieceName = (i: number, p: ReturnType<typeof pieces>) => PIECE_NAME[pieceOf(i, p)];
 
@@ -124,7 +127,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   const moves: Move[] = [];
   const state = (rule: AdviceLine["rule"]) => lines.find((l) => l.rule === rule)?.state;
   const p = pieces(b);
-  const chromatic = b.palette.filter((s) => s.C >= NEUTRAL_CHROMA);
+  const chromatic = b.palette.filter((s) => !isNeutral(s));
   const lead = chromatic[0];
 
   // Proportion: move the break to the waist.
@@ -145,7 +148,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   if (state("harmony") === "advice") chromatic.forEach((s) => recolourTargets.add(b.palette.indexOf(s)));
   for (const i of recolourTargets) {
     const s = b.palette[i];
-    const anchor = b.palette.find((x, j) => j !== i && x.C >= NEUTRAL_CHROMA) ?? lead;
+    const anchor = b.palette.find((x, j) => j !== i && !isNeutral(x)) ?? lead;
     const options: { L: number; C: number; h: number }[] = [];
     if (anchor && anchor !== s) {
       const C = Math.max(0.06, Math.min(0.12, s.C || 0.08));
@@ -157,7 +160,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     options.push({ L: 0.3, C: 0.07, h: 255 }, { L: 0.45, C: 0.06, h: 250 });
     for (const o of options) {
       if (labGap(s, { ...o, share: 0, y: 0 }) < 0.06) continue;
-      const label = colourLabel(o);
+      const label = plain(o);
       moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} in ${label}`, detail: `Swap the ${pieceName(i, p).toLowerCase()} for ${label}.` });
     }
   }
@@ -167,7 +170,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const s = b.palette[p.lower];
     const L = fix(Math.max(0.14, b.top.L - 0.2));
     const o = { L, C: s.C, h: s.h };
-    moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${colourLabel(o)}`, detail: "A darker value below grounds the figure." });
+    moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: "A darker value below grounds the figure." });
   }
 
   // Chroma: step the second loud colour down to a muted version of itself.
@@ -176,7 +179,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const s = loud[1];
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
-    moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${colourLabel(o)}`, detail: "One colour at full strength, the other stepped down." });
+    moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
   }
 
   // Accent: a tenth of the area. The complement of the lead hue when the lead
@@ -187,7 +190,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   if (state("shares") !== "golden") {
     const accents = lead && lead.C >= CLEAR_HUE ? [{ L: 0.5, C: 0.12, h: wrap(lead.h + 180) }] : CLASSIC_ACCENTS;
     for (const accent of accents) {
-      moves.push({ kind: "accent", ...accent, title: `Shoes in ${colourLabel(accent)}`, detail: "An accent of about a tenth gives the eye a place to rest." });
+      moves.push({ kind: "accent", ...accent, title: `Shoes in ${plain(accent)}`, detail: "An accent of about a tenth gives the eye a place to rest." });
     }
   }
   return moves;

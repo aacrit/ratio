@@ -4,7 +4,7 @@ At most 5 surfaces for v1. Any surface added later needs a charter amendment.
 
 | Surface | Why | Justifying user event | Kill date |
 |---|---|---|---|
-| **Read** `/` | Drop a full-length photo; it is measured in the tab and read against the rulebook, with the measurement drawn over the photo and a reading hash. Suggested looks and "try it" (amended 2026-10-04): the photo recoloured in the tab and proportion moves on a standard chalk figure; no generated images, no body reshaping, no shopping links. The wardrobe (opt-in, this browser only) lives here too | `reading_completed` | 2026-12-31 |
+| **Read** `/` | Drop a full-length photo; it is measured in the tab and read against the rulebook, with the measurement drawn over the photo and a reading hash. Suggested looks and "try it" (amended 2026-10-04): the photo recoloured in the tab and proportion moves on a standard chalk figure; no generated images, no body reshaping, no shopping links. The wardrobe (opt-in, this browser only; readings and chalk figures, never the photo) lives here too. An optional occasion chip (work, evening, weekend) weights the rules by a fixed table shown on the Rulebook page (amended 2026-10-04, G2) | `reading_completed` | 2026-12-31 |
 | **Face** `/face` | Hair (face proportions → length, parting, volume), makeup (undertone and contrast → palette), expression (a portrait note). Never a verdict on the person | `face_reading_completed` (Forge) | 2026-12-31 |
 | **Rulebook** `/rules` | Every rule, its maths, its band edges, its sources and its version (V1: show the method) | `rule_opened` (Forge) | 2026-12-31 |
 | **Style Card** `/card` | 3 to 5 photos into a printable personal reference, built in the tab; $12 once via Polar | `card_exported` | 2027-02-28 |
