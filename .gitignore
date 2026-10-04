@@ -31,6 +31,7 @@ coverage/
 # the measuring models, the vision runtime and their download cache (scripts/fetch-models.mjs)
 .cache/
 web/public/mp/
+web/public/samples/
 *.tflite
 *.task
 *.wasm

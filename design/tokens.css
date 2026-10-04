@@ -96,6 +96,14 @@
   /* Over the photo the overlay keeps the Cloth colours in both themes. */
   --overlay-muted: oklch(from var(--hex-chalk) l c h / 0.64);
   --overlay-tape-glow: oklch(from var(--hex-tape) l c h / 0.16);
+  /* The saved card is always Paper, whatever the screen theme (a page from
+     the geometer's notebook). Fixed values, the same derivations as Paper. */
+  --card-paper: oklch(from var(--hex-chalk) calc(l + 0.035) calc(c * 0.6) h);
+  --card-ink: var(--hex-worsted);
+  --card-muted: oklch(from var(--hex-worsted) l c h / 0.66);
+  --card-rule: oklch(from var(--hex-worsted) l c h / 0.14);
+  --card-tape: oklch(from var(--hex-tape) calc(l - 0.37) calc(c * 1.1) h);
+  --card-section: oklch(from var(--hex-verdigris) calc(l - 0.3) c h);
 
   /* Template aliases: the Spark scaffold reads these names. All neutral by
      rule (no fourth hue). Builders move to the Ratio names at Forge. */

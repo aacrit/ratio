@@ -3,6 +3,8 @@
 // damped pendulum, the tape draws from head to feet at chalk speed, the
 // break line draws across, then the numeral lands. "Show the tuck" glides
 // the break mark to the waist. Every stroke and numeral sits on the halo.
+// While a look is tried, a chalk wipe splits the photo: as worn on the left,
+// the look on the right; drag it (or use the range control) to compare.
 // Colours come from design/tokens.css; this file holds no colour literal.
 
 import { GOLDEN, type OutfitReading, ratioText } from "./engine/rules";
@@ -51,6 +53,11 @@ interface Scene {
 export class Figure {
   private ctx: CanvasRenderingContext2D;
   private photo: OffscreenCanvas;
+  /** The tried look's recoloured photo, or null when showing the outfit as worn. */
+  private look: OffscreenCanvas | null = null;
+  /** Where the look begins, as a fraction of the width (0 = all look, 1 = all as worn). */
+  private wipe = 1;
+  private wipeAnim: { done: Promise<void>; cancel: () => void } | null = null;
   private scene: Scene;
   private c = colours();
   private tuckAnim: { done: Promise<void>; cancel: () => void } | null = null;
@@ -84,8 +91,7 @@ export class Figure {
     return Math.max(14, this.m.left - 18);
   }
 
-  private line(x0: number, y0: number, x1: number, y1: number, colour: string, width: number) {
-    const { ctx } = this;
+  private line(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, colour: string, width: number) {
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(x0, y0);
@@ -98,11 +104,25 @@ export class Figure {
     ctx.stroke();
   }
 
-  draw(): void {
-    const { ctx, pixels, m, scene: s, c } = this;
+  /**
+   * Draws the scene. On screen by default; into another context (the saved
+   * card) with `still`, which draws the look whole and no wipe.
+   */
+  draw(target: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D = this.ctx, still = false): void {
+    const ctx = target;
+    const { pixels, m, scene: s, c } = this;
     const unit = Math.max(1, pixels.width / 340);
     ctx.clearRect(0, 0, pixels.width, pixels.height);
-    ctx.drawImage(this.photo, 0, 0);
+    ctx.drawImage(still && this.look ? this.look : this.photo, 0, 0);
+    if (!still && this.look && this.wipe < 1) {
+      const x0 = Math.round(pixels.width * this.wipe);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, 0, pixels.width - x0, pixels.height);
+      ctx.clip();
+      ctx.drawImage(this.look, 0, 0);
+      ctx.restore();
+    }
 
     // The plumb line from the crown, swinging about its top.
     if (s.plumbAlpha > 0) {
@@ -111,7 +131,7 @@ export class Figure {
       const x1 = m.centerX + Math.sin(a) * len;
       const y1 = m.top + Math.cos(a) * len;
       ctx.globalAlpha = s.plumbAlpha;
-      this.line(m.centerX, m.top, x1, y1, c.chalk, 1.1 * unit);
+      this.line(ctx, m.centerX, m.top, x1, y1, c.chalk, 1.1 * unit);
       ctx.fillStyle = c.tape;
       ctx.beginPath();
       ctx.arc(x1, y1, 3.2 * unit, 0, Math.PI * 2);
@@ -123,16 +143,16 @@ export class Figure {
     const x = this.tapeX;
     if (s.tape > 0) {
       const yEnd = m.top + this.h * s.tape;
-      this.line(x, m.top, x, yEnd, c.tape, 1.6 * unit);
+      this.line(ctx, x, m.top, x, yEnd, c.tape, 1.6 * unit);
       for (let i = 0; i <= 10; i++) {
         const y = m.top + (this.h * i) / 10;
         if (y > yEnd) break;
         const len = (i % 5 === 0 ? 9 : 4) * unit;
-        this.line(x - len, y, x, y, c.tape, 1.1 * unit);
+        this.line(ctx, x - len, y, x, y, c.tape, 1.1 * unit);
       }
       const gy = m.top + this.h * GOLDEN;
       if (gy <= yEnd) {
-        this.line(x, gy, x + 11 * unit, gy, s.near ? c.section : c.muted, 1.4 * unit);
+        this.line(ctx, x, gy, x + 11 * unit, gy, s.near ? c.section : c.muted, 1.4 * unit);
         if (s.near) {
           ctx.strokeStyle = c.section;
           ctx.lineWidth = 1.6 * unit;
@@ -146,14 +166,14 @@ export class Figure {
     // Where a tuck would put the break: a faint chalk line.
     if (s.ghostRow !== null) {
       ctx.setLineDash([3 * unit, 4 * unit]);
-      this.line(x, s.ghostRow, m.right + 14 * unit, s.ghostRow, c.muted, 1 * unit);
+      this.line(ctx, x, s.ghostRow, m.right + 14 * unit, s.ghostRow, c.muted, 1 * unit);
       ctx.setLineDash([]);
     }
 
     // The break, drawn across the figure, and its numeral.
     if (s.breakRow !== null && s.across > 0) {
       const xEnd = x + (m.right + 14 * unit - x) * s.across;
-      this.line(x, s.breakRow, xEnd, s.breakRow, c.tape, 1.6 * unit);
+      this.line(ctx, x, s.breakRow, xEnd, s.breakRow, c.tape, 1.6 * unit);
     }
     if (s.breakRow !== null && s.label !== null) {
       const text = ratioText(s.label);
@@ -176,6 +196,79 @@ export class Figure {
       ctx.textBaseline = "middle";
       ctx.fillText(text, bx + 5 * unit, s.breakRow + 0.5);
     }
+
+    // The wipe: a chalk line with a grip, and the two sides named.
+    if (!still && this.look && this.wipe > 0 && this.wipe < 1) {
+      const wx = pixels.width * this.wipe;
+      this.line(ctx, wx, 0, wx, pixels.height, c.chalk, 1.4 * unit);
+      ctx.fillStyle = c.halo;
+      ctx.beginPath();
+      ctx.arc(wx, pixels.height / 2, 9 * unit, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = c.chalk;
+      ctx.lineWidth = 1.4 * unit;
+      ctx.stroke();
+      ctx.font = `500 ${Math.round(9 * unit)}px "JetBrains Mono", ui-monospace, monospace`;
+      ctx.textBaseline = "middle";
+      for (const [label, x, align] of [["AS WORN", wx - 8 * unit, "right"], ["THE LOOK", wx + 8 * unit, "left"]] as const) {
+        const w = ctx.measureText(label).width + 8 * unit;
+        const lx = align === "right" ? x - w : x;
+        ctx.fillStyle = c.halo;
+        ctx.beginPath();
+        ctx.roundRect(lx, 8 * unit, w, 14 * unit, 3 * unit);
+        ctx.fill();
+        ctx.fillStyle = c.chalk;
+        ctx.textAlign = "left";
+        ctx.fillText(label, lx + 4 * unit, 15 * unit);
+      }
+    }
+  }
+
+  /**
+   * Shows a tried look's recoloured photo behind the wipe, which glides to
+   * the middle so both sides are in view; null returns to the outfit as worn.
+   */
+  setLook(pixels: Pixels | null): void {
+    this.wipeAnim?.cancel();
+    if (!pixels) {
+      const from = this.wipe;
+      this.wipeAnim = spring(springToken("glide"), from, 1, (w) => {
+        this.wipe = w;
+        this.draw();
+      });
+      void this.wipeAnim.done.then(() => {
+        if (this.wipe >= 1) this.look = null;
+        this.draw();
+      });
+      return;
+    }
+    const next = new OffscreenCanvas(pixels.width, pixels.height);
+    next.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
+    this.look = next;
+    const from = this.wipe;
+    this.wipeAnim = spring(springToken("glide"), from, 0.5, (w) => {
+      this.wipe = w;
+      this.draw();
+    });
+  }
+
+  /** Moves the wipe (0 = all the look, 1 = all as worn), from a drag or the range control. */
+  setWipe(fraction: number): void {
+    this.wipeAnim?.cancel();
+    this.wipe = Math.max(0, Math.min(1, fraction));
+    this.draw();
+  }
+
+  get hasLook(): boolean {
+    return this.look !== null;
+  }
+
+  /** The photo with its overlay at rest, the look whole when one is tried: for the saved card. */
+  still(): OffscreenCanvas {
+    const out = new OffscreenCanvas(this.pixels.width, this.pixels.height);
+    const ctx = out.getContext("2d");
+    if (ctx) this.draw(ctx, true);
+    return out;
   }
 
   /** The read sequence: plumb, chalk, lands. Resolves when the numeral has landed; the plumb keeps settling after. */

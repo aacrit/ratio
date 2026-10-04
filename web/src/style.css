@@ -246,6 +246,61 @@ textarea:focus-visible,
   margin-top: 6px;
 }
 
+/* Other ways in: the sample painting, and the phone's own camera. */
+.drop-alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+/* The camera button only where there is a camera to hand: touch screens. */
+.camera-btn,
+.camera-tip {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .camera-btn {
+    display: inline-flex;
+  }
+  .camera-tip {
+    display: block;
+    flex-basis: 100%;
+    font-size: 0.85rem;
+    color: var(--color-cream-muted);
+    max-width: var(--measure-reading);
+  }
+}
+
+/* The compare control under the photo, and the sample's credit. */
+.wipe {
+  width: 100%;
+  margin: 10px 0 0;
+  accent-color: var(--color-cream);
+}
+
+.credit {
+  margin: 8px 12px 10px;
+  font-size: 0.78rem;
+  color: var(--color-cream-muted);
+}
+
+/* While a look is shown, the photo can be dragged to move the wipe. */
+.figure {
+  touch-action: pan-y;
+}
+
+body[data-compare="on"] .figure {
+  cursor: ew-resize;
+}
+
+.hash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Waiting shows its work: the tape extends at the real download rate. */
 .loadtape {
   display: grid;

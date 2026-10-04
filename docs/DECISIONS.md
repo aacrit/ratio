@@ -29,3 +29,9 @@ The founder asked for outfit suggestions with a way to try them, without image m
 
 ## 2026-10-04: product plan decisions
 The founder decided four plan questions in chat, each as recommended (plan: https://claude.ai/artifact/FZ5BWa4pKbzdo8QgZ4ukPh). Charter amendment: suggested looks and "try it" belong to the Read surface (photo recolour in the tab, chalk figure for proportion moves; no generated images, no body reshaping, no shopping links), replacing the brief's "no virtual try-on". The wardrobe is in v1 inside Read, opt-in and kept in this browser only. The first visit gets one public-domain sample photo, staged by hash like the models. After G2 the Rulebook page is built first.
+
+## 2026-10-04: Dial on hold; Ratio takes the build slot
+The founder put Dial on hold (archived, nothing torn down; Board gate `dial-hold`). The one build slot (R-07) is free for Ratio once G2 is signed.
+
+## 2026-10-04: four UX design decisions (chat)
+The sample is a painted full-length portrait of an adult in the public domain: Jacques-Louis David, The Emperor Napoleon in His Study at the Tuileries (1812). The Blue Boy was set aside because its sitter is a child and Ratio is for adults. The sample is staged by hash like the models and credited under the photo and on saved cards. A look is compared with a chalk wipe on the photo, worn left and look right, moved by a drag or a range control. "Save as card" draws a 4:5 card on Paper in the tab: the photo at rest, the readings, the palette, the hash and one site line. "Take a photo" opens the phone's own camera, shown only on touch screens, with a framing tip.

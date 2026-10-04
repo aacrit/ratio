@@ -26,6 +26,8 @@ export interface LooksDeps {
   trial: HTMLElement;
   paletteSlot: HTMLElement;
   hash: HTMLElement;
+  /** The compare control under the photo: as worn on the left, the look on the right. */
+  wipe: HTMLInputElement;
   /** Rows extras for the reading as worn (the tuck button). */
   asWornExtras: () => Parameters<typeof renderRows>[3];
   onTried: () => void;
@@ -41,18 +43,29 @@ function swatchChip(c: { L: number; C: number; h: number }): HTMLElement {
   return chip;
 }
 
-export function setupLooks(d: LooksDeps): void {
+/** What is on screen now, for "Save as card": the outfit as worn or the tried look. */
+export interface Shown {
+  title: string;
+  lines: Read["reading"]["lines"];
+  bins: Read["reading"]["bins"];
+  hash: string;
+  engine: string;
+}
+
+export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   const { read } = d;
   const looks = suggestLooks(read.reading.bins, read.reading.lines);
   d.section.hidden = false;
   d.trying.hidden = true;
   d.trial.replaceChildren();
   const intro = d.section.querySelector<HTMLElement>(".looks-intro");
+  const asWornShown: Shown = { title: "As worn", lines: read.reading.lines, bins: read.reading.bins, hash: read.hash, engine: read.reading.engine };
+  let shown = asWornShown;
 
   if (!looks.length) {
     if (intro) intro.textContent = "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
     d.list.replaceChildren();
-    return;
+    return { shown: () => shown };
   }
   if (intro) intro.textContent = `${looks.length === 1 ? "One look" : `${looks.length} looks`} the rules prefer, each judged by the same rulebook that read your outfit. Try one to see it on your photo.`;
 
@@ -65,6 +78,7 @@ export function setupLooks(d: LooksDeps): void {
 
   const asWorn = async () => {
     current = null;
+    shown = asWornShown;
     buttons.forEach((b) => {
       b.setAttribute("aria-pressed", "false");
       b.textContent = "Try it";
@@ -72,7 +86,9 @@ export function setupLooks(d: LooksDeps): void {
     d.trying.hidden = true;
     d.trial.replaceChildren();
     d.figure.showBreakAt(null);
-    void d.figure.setPhoto(read.pixels);
+    d.figure.setLook(null);
+    d.wipe.hidden = true;
+    document.body.dataset.compare = "off";
     renderRows(d.rows, read.reading.lines, read.reading.bins, d.asWornExtras());
     d.rows.classList.add("in");
     d.paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
@@ -87,8 +103,14 @@ export function setupLooks(d: LooksDeps): void {
       b.textContent = id === look.id ? "As worn" : "Try it";
     });
     // The photo: colour moves only. The chalk figure: the whole look.
-    if (showsOnPhoto(look.moves, read.palette)) void d.figure.setPhoto(recolour(read.pixels, owners(), read.palette, look.moves));
-    else void d.figure.setPhoto(read.pixels);
+    // Colour moves show on the photo behind the wipe; a look of proportion
+    // moves alone leaves the photo as worn and shows on the chalk figure.
+    const onPhoto = showsOnPhoto(look.moves, read.palette);
+    d.figure.setLook(onPhoto ? recolour(read.pixels, owners(), read.palette, look.moves) : null);
+    d.wipe.hidden = !onPhoto;
+    // Over the photo the pointer becomes a grip while a look can be compared.
+    document.body.dataset.compare = onPhoto ? "on" : "off";
+    d.wipe.value = "50";
     const brk = look.moves.find((m) => m.kind === "break");
     d.figure.showBreakAt(brk && brk.kind === "break" ? brk.to : null);
     const belt = look.moves.some((m) => m.kind === "break" && m.title.startsWith("Belt"));
@@ -100,6 +122,7 @@ export function setupLooks(d: LooksDeps): void {
     d.rows.classList.add("in");
     d.paletteSlot.replaceChildren(paletteStrip(look.bins, "The look's palette"));
     const h = await readingHash({ engine: ENGINE_VERSION, bins: look.bins });
+    if (current === look.id) shown = { title: look.title, lines: look.lines, bins: look.bins, hash: h, engine: ENGINE_VERSION };
     if (current === look.id) d.hash.textContent = `Trying a look. Same look, same reading. ${h.slice(0, 4)} · ${ENGINE_VERSION}`;
     d.onTried();
   };
@@ -156,4 +179,5 @@ export function setupLooks(d: LooksDeps): void {
       return li;
     }),
   );
+  return { shown: () => shown };
 }

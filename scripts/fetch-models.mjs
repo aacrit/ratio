@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cacheDir = path.join(repoRoot, ".cache", "models");
 const outDir = path.join(repoRoot, "web", "public", "mp");
+const samplesDir = path.join(repoRoot, "web", "public", "samples");
 
 const BUCKET = "https://storage.googleapis.com/mediapipe-models";
 
@@ -42,6 +43,18 @@ export const RUNTIME = {
   "vision_wasm_internal.wasm": "8da277a733926eacd0474b8704b36742d6ec3231c57a860c5b889dff8f1df886",
 };
 
+// The first-visit sample (founder, 2026-10-04: a painted full-length
+// portrait, an adult, public domain). Jacques-Louis David, The Emperor
+// Napoleon in His Study at the Tuileries (1812), National Gallery of Art,
+// Washington; public domain, via Wikimedia Commons (Web Gallery of Art copy).
+// Staged like the models: pinned, never in git, served from this origin.
+export const SAMPLES = {
+  "napoleon.jpg": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/e/ed/Jacques-Louis_David_-_Napoleon_in_his_Study_-_WGA6093.jpg",
+    sha256: "2443631a3bd6ba673be324419f7b5ccee52f62cdb4d85679c6454a3f92c44c18",
+  },
+};
+
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 
 /** Throws unless buf matches its SHA-256 pin. */
@@ -51,12 +64,13 @@ export function checkPin(file, buf, expected) {
   return buf;
 }
 
-async function cached(name, { src, sha256: pin }) {
+async function cached(name, { src, url: direct, sha256: pin }) {
   const target = path.join(cacheDir, name);
   if (existsSync(target) && sha256(readFileSync(target)) === pin) return readFileSync(target);
-  const url = `${BUCKET}/${src}`;
+  const url = direct ?? `${BUCKET}/${src}`;
   console.log(`fetch-models: downloading ${name}`);
-  const res = await fetch(url);
+  // Wikimedia asks every client to name itself.
+  const res = await fetch(url, { headers: { "user-agent": "ratio-build/1 (+https://ratio.voidvision.org)" } });
   if (!res.ok) throw new Error(`fetch-models: ${url} answered ${res.status}`);
   const buf = checkPin(name, Buffer.from(await res.arrayBuffer()), pin);
   mkdirSync(cacheDir, { recursive: true });
@@ -71,11 +85,16 @@ export async function stage() {
   const runtime = Object.entries(RUNTIME).map(([f, pin]) => [f, checkPin(f, readFileSync(path.join(wasmDir, f)), pin)]);
   const models = [];
   for (const [name, spec] of Object.entries(MODELS)) models.push([name, await cached(name, spec)]);
+  const samples = [];
+  for (const [name, spec] of Object.entries(SAMPLES)) samples.push([name, await cached(name, spec)]);
 
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(path.join(outDir, "wasm"), { recursive: true });
   for (const [f, buf] of runtime) writeFileSync(path.join(outDir, "wasm", f), buf);
   for (const [f, buf] of models) writeFileSync(path.join(outDir, f), buf);
+  rmSync(samplesDir, { recursive: true, force: true });
+  mkdirSync(samplesDir, { recursive: true });
+  for (const [f, buf] of samples) writeFileSync(path.join(samplesDir, f), buf);
   console.log(`fetch-models: staged ${models.length} models and the vision runtime in web/public/mp`);
 }
 

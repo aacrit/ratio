@@ -36,6 +36,12 @@
           <span class="btn drop-btn">Read this photo</span>
           <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" />
         </label>
+        <div class="drop-alt">
+          <button id="try-sample" class="btn ghost" type="button">Try with a sample: David's Napoleon, 1812</button>
+          <label id="camera-btn" class="btn ghost camera-btn" for="camera">Take a photo</label>
+          <input id="camera" class="visually-hidden" type="file" accept="image/*" capture="environment" />
+          <p class="camera-tip">For a full-length photo, ask someone to stand three steps back with the phone at waist height, your head to your feet in the frame.</p>
+        </div>
         <div id="loading" class="loadtape" hidden>
           <p id="load-label" class="load-label" data-numeral>Loading the measuring models.</p>
           <div class="bar"><div id="load-fill" class="fill"></div></div>
@@ -45,6 +51,8 @@
         <div id="result" class="result" hidden>
           <div class="photo-col">
             <canvas id="figure" class="figure" role="img" aria-label="Your photo with the tape, the break line and the golden-section mark drawn over it"></canvas>
+            <input id="wipe" class="wipe" type="range" min="0" max="100" value="50" aria-label="Compare: as worn on the left, the look on the right" hidden />
+            <p id="credit" class="credit" hidden></p>
           </div>
           <div class="read-col">
             <div id="trying" class="trying" hidden>
@@ -61,7 +69,10 @@
             <ol id="advice" class="rows"></ol>
             <div class="hashline">
               <p id="reading-hash" class="reading-hash" data-numeral></p>
-              <button id="read-another" class="btn ghost" type="button">Read another</button>
+              <span class="hash-actions">
+                <button id="save-card" class="btn ghost" type="button">Save as card</button>
+                <button id="read-another" class="btn ghost" type="button">Read another</button>
+              </span>
             </div>
           </div>
         </div>

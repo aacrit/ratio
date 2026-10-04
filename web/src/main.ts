@@ -8,7 +8,8 @@
 import { Figure } from "./overlay";
 import { FAILURE_COPY, readPhoto } from "./read";
 import { chalkFigure } from "./tryon/figure";
-import { setupLooks } from "./ui/looks";
+import { saveCard } from "./ui/card";
+import { type Shown, setupLooks } from "./ui/looks";
 import { paletteStrip, renderRows } from "./ui/rows";
 import { loadModels } from "./vision";
 
@@ -53,6 +54,12 @@ function setupRead(): void {
   const looksList = $<HTMLOListElement>("look-list");
   const trying = $<HTMLElement>("trying");
   const trial = $<HTMLElement>("trial");
+  const wipe = $<HTMLInputElement>("wipe");
+  const credit = $<HTMLElement>("credit");
+  const save = $<HTMLButtonElement>("save-card");
+  const sample = $<HTMLButtonElement>("try-sample");
+  const camera = $<HTMLInputElement>("camera");
+  if (!wipe || !credit || !save || !sample || !camera) return;
   if (!input || !drop || !status || !loading || !loadFill || !loadLabel || !result || !canvas || !verdict || !rows || !hash || !again || !paletteSlot || !looksSection || !looksList || !trying || !trial) return;
 
   const mb = (n: number) => (n / 1e6).toFixed(1);
@@ -78,8 +85,11 @@ function setupRead(): void {
   drop.addEventListener("pointerenter", warm, { once: true });
   input.addEventListener("focus", warm, { once: true });
 
+  // The read on screen, for the wipe and the card.
+  let current: { figure: Figure; shown: () => Shown; credit: string | null } | null = null;
+
   let busy = false;
-  const run = async (file: File) => {
+  const run = async (file: Blob, sourceCredit: string | null = null) => {
     if (busy) return;
     busy = true;
     warm();
@@ -101,6 +111,9 @@ function setupRead(): void {
       result.hidden = false;
       document.body.dataset.state = "read";
       const figure = new Figure(canvas, read.pixels, read.measure, read.reading);
+      wipe.hidden = true;
+      credit.hidden = sourceCredit === null;
+      credit.textContent = sourceCredit ?? "";
       // The verdict is the proportion line's first sentence.
       verdict.textContent = read.reading.lines[0].text.split(/(?<=\.)\s/)[0];
       paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
@@ -125,15 +138,76 @@ function setupRead(): void {
       hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
       hash.title = `Reading hash ${read.hash}`;
       reportCoreSuccess();
-      setupLooks({ read, figure, rows, section: looksSection, list: looksList, trying, trial, paletteSlot, hash, asWornExtras, onTried: () => sendEvent("look_tried") });
+      const looks = setupLooks({ read, figure, rows, section: looksSection, list: looksList, trying, trial, paletteSlot, hash, wipe, asWornExtras, onTried: () => sendEvent("look_tried") });
+      current = { figure, shown: looks.shown, credit: sourceCredit };
       // The argument follows the numeral, and never waits more than 2.5 s for it.
       await Promise.race([figure.play(), new Promise((r) => setTimeout(r, 2500))]);
       rows.classList.add("in");
     } finally {
       busy = false;
       input.value = "";
+      camera.value = "";
     }
   };
+
+  camera.addEventListener("change", () => {
+    const file = camera.files?.[0];
+    if (file) void run(file);
+  });
+
+  // The sample: a public-domain painting staged with the models, read like any photo.
+  const SAMPLE_CREDIT = "Jacques-Louis David, The Emperor Napoleon in His Study at the Tuileries, 1812. National Gallery of Art, Washington. Public domain, via Wikimedia Commons.";
+  sample.addEventListener("click", async () => {
+    if (busy) return;
+    status.textContent = "Fetching the sample.";
+    try {
+      const res = await fetch("/samples/napoleon.jpg");
+      if (!res.ok) throw new Error(String(res.status));
+      void run(await res.blob(), SAMPLE_CREDIT);
+    } catch {
+      status.textContent = "The sample did not load. Check the connection and try again.";
+      status.dataset.state = "error";
+    }
+  });
+
+  // The wipe: the range control and a drag on the photo move the same line.
+  wipe.addEventListener("input", () => current?.figure.setWipe(Number(wipe.value) / 100));
+  let dragging = false;
+  const dragTo = (e: PointerEvent) => {
+    if (!current?.figure.hasLook) return;
+    const r = canvas.getBoundingClientRect();
+    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    current.figure.setWipe(f);
+    wipe.value = String(Math.round(f * 100));
+  };
+  canvas.addEventListener("pointerdown", (e) => {
+    if (!current?.figure.hasLook) return;
+    dragging = true;
+    canvas.setPointerCapture(e.pointerId);
+    dragTo(e);
+  });
+  canvas.addEventListener("pointermove", (e) => dragging && dragTo(e));
+  canvas.addEventListener("pointerup", () => (dragging = false));
+  canvas.addEventListener("pointercancel", () => (dragging = false));
+
+  // Save as card: whatever is on screen, as worn or the tried look.
+  save.addEventListener("click", async () => {
+    if (!current) return;
+    const shown = current.shown();
+    save.disabled = true;
+    save.textContent = "Drawing the card.";
+    try {
+      await saveCard({ still: current.figure.still(), title: shown.title, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: current.credit ?? undefined });
+      save.textContent = "Saved";
+    } catch {
+      save.textContent = "Could not draw the card";
+    } finally {
+      setTimeout(() => {
+        save.disabled = false;
+        save.textContent = "Save as card";
+      }, 1600);
+    }
+  });
 
   input.addEventListener("change", () => {
     const file = input.files?.[0];
