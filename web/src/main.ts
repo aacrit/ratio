@@ -41,7 +41,7 @@ import { Sheet } from "./ui/sheet";
 import { type ShortcutHandlers, SHORTCUT_LIST, setupShortcuts } from "./ui/shortcuts";
 import { renderStrip } from "./ui/strip";
 import { type TabsApi, setupTabs } from "./ui/tabs";
-import { type LastRead, lastReadOf, loadLastRead, saveLastRead } from "./rules/handoff";
+import { type LastRead, lastReadOf, loadLastRead, saveLastRead, wornOf } from "./rules/handoff";
 import { addSessionRead, findSessionReadByHash4, hash4, selectSessionRead, type SessionRead, sessionReads, stepSessionRead } from "./session";
 
 /**
@@ -188,12 +188,19 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     again.textContent = "Read my outfit";
   };
 
-  /** The URL fragment names the read on screen; back and forward step through them. */
+  /**
+   * The URL names the read on screen; back and forward step through them.
+   * Always the full path, never a bare `#...` fragment: a bare fragment
+   * resolves against whatever path is already in the address bar, which is
+   * still "/rules" immediately after returning from it in-app (showReadRoute
+   * updates the view before this runs, not the URL, when it is not itself
+   * pushing), and would otherwise leave the address bar on "/rules#r=...".
+   */
   const setUrlHash = (h: string, push: boolean) => {
-    const frag = `#r=${hash4(h)}`;
-    if (location.hash === frag) return;
-    if (push) history.pushState({ r: hash4(h) }, "", frag);
-    else history.replaceState({ r: hash4(h) }, "", frag);
+    const url = `/#r=${hash4(h)}`;
+    if (location.pathname === "/" && location.hash === `#r=${hash4(h)}`) return;
+    if (push) history.pushState({ r: hash4(h) }, "", url);
+    else history.replaceState({ r: hash4(h) }, "", url);
   };
 
   // Every showRead call gets the next generation; a call whose reveal is
@@ -353,7 +360,11 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     const othersNote = $<HTMLElement>("others-note");
     if (othersNote) othersNote.hidden = true;
 
-    const bins = last.bins;
+    // Always the outfit as worn, even when the last thing before a reload
+    // was a tried look: the restore starts there, and looks can be tried
+    // fresh from it, on the chalk figure only.
+    const worn = wornOf(last);
+    const bins = worn.bins;
     const asWornLines = readBins(bins);
     const looks = suggestLooks(bins, asWornLines);
 
@@ -411,8 +422,8 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
         return li;
       }),
     );
-    hash.textContent = `Same photo, same reading. ${last.hash.slice(0, 4)} · ${last.engine}`;
-    hash.title = `Reading hash ${last.hash}`;
+    hash.textContent = `Same photo, same reading. ${worn.hash.slice(0, 4)} · ${last.engine}`;
+    hash.title = `Reading hash ${worn.hash}`;
     sheet.measure();
     sheet.snap("half");
   };

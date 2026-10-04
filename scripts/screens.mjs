@@ -257,17 +257,18 @@ async function run(name, viewport) {
   // nothing ever unloads. The tab, not a goto.
   const hashBefore = (await page.textContent("#reading-hash"))?.trim();
   const verdictBefore = (await page.textContent("#verdict"))?.trim();
-  const navsDuringRulesSwitch = [];
-  const onNav = (f) => f.parentFrame() === null && navsDuringRulesSwitch.push(f.url());
-  page.on("framenavigated", onNav);
+  // A real navigation (unlike history.pushState, which also fires
+  // framenavigated, so that event is not a reliable signal here) tears down
+  // the page's JS realm: a marker set on window would not survive it.
+  await page.evaluate(() => (window.__t3NoReload = true));
   await page.click("#rules-tab");
   await page.waitForTimeout(500);
-  page.off("framenavigated", onNav);
   const inAppPath = await page.evaluate(() => location.pathname);
+  const survivedReload = await page.evaluate(() => window.__t3NoReload === true);
   const backVisible = await page.isVisible("#back-to-read");
-  note(`${name}: in-app Rules: path ${inAppPath}, no navigation: ${navsDuringRulesSwitch.length === 0}, "Back to your reading" visible: ${backVisible}`);
+  note(`${name}: in-app Rules: path ${inAppPath}, no reload: ${survivedReload}, "Back to your reading" visible: ${backVisible}`);
   if (inAppPath !== "/rules") errors.push(`clicking the Rules tab did not reach /rules in-app (path: ${inAppPath})`);
-  if (navsDuringRulesSwitch.length) errors.push(`Rules tab caused a real navigation: ${navsDuringRulesSwitch.join(", ")}`);
+  if (!survivedReload) errors.push("the Rules tab caused a real page reload, not an in-app switch");
   if (!backVisible) errors.push('"Back to your reading" did not appear on Rules after a read');
   await page.click("#back-to-read");
   await page.waitForTimeout(500);
