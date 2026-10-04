@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="build" content="__BUILD__" />
     <meta name="description" content="Ratio reads a photo of an outfit with the mathematics of design and gives the same advice every time. The photo never leaves your browser." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='20' rx='2' fill='none' stroke='%23888' stroke-width='2'/%3E%3Ccircle cx='12' cy='14.4' r='2.6' fill='%23888'/%3E%3C/svg%3E" />
@@ -10,9 +10,9 @@
     <link rel="stylesheet" href="./src/style.css" />
     <title>Ratio</title>
   </head>
-  <body data-state="idle">
-    <main class="page">
-      <header class="masthead">
+  <body class="app" data-state="idle" data-compare="off">
+    <header class="bar">
+      <a class="brand" href="./" aria-label="Ratio, home">
         <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
           <rect x="2" y="2" width="20" height="20" rx="2" />
           <g class="mark-plumb">
@@ -20,86 +20,114 @@
             <circle cx="12" cy="14.36" r="1.7" />
           </g>
         </svg>
-        <div class="wordmark">
-          <h1>Ratio</h1>
-          <p class="eyebrow">reason and proportion</p>
-        </div>
-      </header>
-      <p class="lede">A design consultant that measures the photo and shows the rule. Never the person, only the choice.</p>
+        <span class="brand-name">Ratio</span>
+        <span class="brand-eyebrow">reason and proportion</span>
+      </a>
+      <div class="bar-actions">
+        <button id="read-another" class="btn ghost small" type="button" hidden>Read another</button>
+      </div>
+    </header>
 
-      <section class="read" aria-labelledby="read-title">
-        <h2 id="read-title" class="visually-hidden">Read an outfit</h2>
-        <label class="drop" id="drop" for="photo">
-          <span id="drop-figure" class="drop-figure" aria-hidden="true"></span>
-          <span class="drop-title">Drop a full-length photo. It stays in this tab.</span>
-          <span class="drop-note">One person, standing, head to feet, facing the camera. Adults only. Ratio reads the outfit: proportion and colour.</span>
-          <span class="btn drop-btn">Read this photo</span>
-          <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" />
-        </label>
-        <div class="drop-alt">
-          <button id="try-sample" class="btn ghost" type="button">Try with a sample: David's Napoleon, 1812</button>
+    <main class="stage" id="stage" aria-label="The stage">
+      <div class="stage-light" aria-hidden="true"></div>
+
+      <section class="cloth" id="drop" aria-labelledby="drop-title">
+        <span id="drop-figure" class="drop-figure" aria-hidden="true"></span>
+        <h1 id="drop-title" class="drop-title">Drop a full-length photo. It stays in this tab.</h1>
+        <p class="drop-note">One person, standing, head to feet, facing the camera. Adults only. Ratio reads the outfit: proportion and colour.</p>
+        <div class="drop-actions">
+          <input id="photo" class="file-input" type="file" accept="image/jpeg,image/png,image/webp" />
+          <label class="btn" for="photo">Read a photo</label>
+          <button id="try-sample" class="btn ghost" type="button">Try the sample</button>
+          <input id="camera" class="file-input" type="file" accept="image/*" capture="environment" />
           <label id="camera-btn" class="btn ghost camera-btn" for="camera">Take a photo</label>
-          <input id="camera" class="visually-hidden" type="file" accept="image/*" capture="environment" />
-          <p class="camera-tip">For a full-length photo, ask someone to stand three steps back with the phone at waist height, your head to your feet in the frame.</p>
         </div>
+        <p class="camera-tip">For a full-length photo, ask someone to stand three steps back with the phone at waist height, your head to your feet in the frame.</p>
+        <p class="sample-note">The sample is a painting: Jacques-Louis David, Napoleon in his study, 1812.</p>
+      </section>
+
+      <div class="photo-well" id="photo-well" hidden>
+        <canvas id="figure" class="figure" role="img" aria-label="Your photo with the tape, the break line and the golden-section mark drawn over it"></canvas>
+      </div>
+
+      <div class="stage-foot">
         <div id="loading" class="loadtape" hidden>
           <p id="load-label" class="load-label" data-numeral>Loading the measuring models.</p>
-          <div class="bar"><div id="load-fill" class="fill"></div></div>
+          <div class="bar-track"><div id="load-fill" class="fill"></div></div>
         </div>
         <p id="read-status" class="read-status" role="status" aria-live="polite"></p>
+        <input id="wipe" class="wipe" type="range" min="0" max="100" value="50" aria-label="Compare: as worn on the left, the look on the right" hidden />
+      </div>
+    </main>
 
-        <div id="result" class="result" hidden>
-          <div class="photo-col">
-            <canvas id="figure" class="figure" role="img" aria-label="Your photo with the tape, the break line and the golden-section mark drawn over it"></canvas>
-            <input id="wipe" class="wipe" type="range" min="0" max="100" value="50" aria-label="Compare: as worn on the left, the look on the right" hidden />
-            <p id="credit" class="credit" hidden></p>
-          </div>
-          <div class="read-col">
+    <aside class="sheet" id="sheet" data-snap="peek" aria-label="The reading">
+      <button class="grip" id="grip" type="button" aria-label="Expand the reading" aria-expanded="false" aria-controls="sheet-body"><span class="grip-bar"></span></button>
+      <div class="sheet-body" id="sheet-body">
+        <section class="intro" id="intro" aria-labelledby="intro-title">
+          <h2 id="intro-title" class="visually-hidden">What Ratio does</h2>
+          <p class="lede" data-peek>A design consultant that measures the photo and shows the rule. Never the person, only the choice.</p>
+          <dl class="reads">
+            <div><dt>Proportion</dt><dd>Where the break between the pieces falls, against the thirds and the golden section.</dd></div>
+            <div><dt>Volume and line</dt><dd>Fitted against full, and whether the shoes carry the leg line to the floor.</dd></div>
+            <div><dt>Colour</dt><dd>Harmony, value, shares and chroma, over the outfit's own palette.</dd></div>
+          </dl>
+          <p class="intro-note">Every reading shows what was measured, the rule it was held against, and the advice. Same photo, same reading, every time. The models download once, about 24 MB, and stay in the browser.</p>
+        </section>
+
+        <section class="reading" id="result" aria-labelledby="hero-eyebrow" hidden>
+          <header class="sheet-head" id="sheet-head">
+            <div class="hero-row" data-peek>
+              <p class="hero"><span id="hero-n" class="hero-n" data-ratio></span></p>
+              <p id="hero-eyebrow" class="eyebrow hero-eyebrow"></p>
+            </div>
+            <p id="verdict" class="verdict"></p>
+            <div id="palette-slot" class="palette-slot"></div>
             <div id="trying" class="trying" hidden>
               <div id="trial" class="trial"></div>
               <div class="trying-text">
                 <p class="eyebrow">Trying a look</p>
                 <p class="trying-title"></p>
-                <p class="trying-note">Colour changes are shown on your photo, in the tab. A tuck or a belt is shown on the chalk figure and by the break mark, never painted onto the photo.</p>
-                <button class="btn ghost trying-back" type="button">As worn</button>
+                <p class="trying-note">Colour changes show on the photo, in the tab. A tuck or a belt shows on the chalk figure and by the break mark, never painted onto the photo.</p>
+                <button class="btn ghost small trying-back" type="button">As worn</button>
               </div>
             </div>
-            <p id="verdict" class="verdict"></p>
-            <div id="palette-slot"></div>
+          </header>
+
+          <section id="looks" class="looks" aria-labelledby="looks-title" hidden>
+            <h2 id="looks-title" class="eyebrow section-title">Looks to try</h2>
+            <p class="looks-intro"></p>
+            <ol id="look-list" class="look-list"></ol>
+          </section>
+
+          <section class="argument" aria-labelledby="reading-title">
+            <h2 id="reading-title" class="eyebrow section-title">The reading</h2>
             <ol id="advice" class="rows"></ol>
-            <div class="hashline">
-              <p id="reading-hash" class="reading-hash" data-numeral></p>
-              <span class="hash-actions">
-                <button id="save-card" class="btn ghost" type="button">Save as card</button>
-                <button id="read-another" class="btn ghost" type="button">Read another</button>
-              </span>
-            </div>
+          </section>
+
+          <p id="credit" class="credit" hidden></p>
+          <div class="hashline">
+            <p id="reading-hash" class="reading-hash" data-numeral></p>
+            <button id="save-card" class="btn ghost small" type="button">Save as card</button>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="looks" class="looks" aria-labelledby="looks-title" hidden>
-        <h2 id="looks-title">Looks to try</h2>
-        <p class="looks-intro"></p>
-        <ol id="look-list" class="look-list"></ol>
-      </section>
+        <details class="feedback" id="feedback-card">
+          <summary>Tell us what is missing</summary>
+          <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
+          <form id="feedback-form" novalidate>
+            <label for="feedback-text">Feedback</label>
+            <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
+            <button class="btn small" type="submit">Send</button>
+            <p id="feedback-status" role="status" aria-live="polite"></p>
+          </form>
+        </details>
 
-      <section class="card" id="feedback-card">
-        <h2>Tell us what is missing</h2>
-        <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
-        <form id="feedback-form" novalidate>
-          <label for="feedback-text">Feedback</label>
-          <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
-          <button class="btn" type="submit">Send</button>
-          <p id="feedback-status" role="status" aria-live="polite"></p>
-        </form>
-      </section>
-
-      <footer class="page-footer">
-        <span>A voidvision production</span>
-        <a href="./privacy.html">Privacy</a>
-      </footer>
-    </main>
+        <footer class="sheet-foot">
+          <span>A voidvision production</span>
+          <a href="./privacy.html">Privacy</a>
+        </footer>
+      </div>
+    </aside>
 
     <script type="module" src="./src/main.ts"></script>
   </body>

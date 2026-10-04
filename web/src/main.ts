@@ -5,13 +5,21 @@
 // needed (see web/privacy.html). Every POST is same-origin JSON: the Worker
 // refuses anything else (worker/src/guard.ts), so never use sendBeacon,
 // which sends text/plain.
-import { Figure } from "./overlay";
-import { FAILURE_COPY, readPhoto } from "./read";
+//
+// The page: a bar, a stage that holds the photo, and a sheet that holds the
+// reading (design/BRAND.md, Stage and sheet). The models and the measuring
+// run in the read worker (reader.ts); this thread only draws.
+
+import { Velocity, reducedMotion } from "./motion";
+import { Figure, showPhoto } from "./overlay";
+import type { Pixels } from "./engine/resample";
+import { Reader } from "./reader";
 import { chalkFigure } from "./tryon/figure";
 import { saveCard } from "./ui/card";
-import { type Shown, setupLooks } from "./ui/looks";
+import { countTo } from "./ui/count";
+import { type Shown, heroEyebrowOf, setupLooks, verdictOf } from "./ui/looks";
 import { paletteStrip, renderRows } from "./ui/rows";
-import { loadModels } from "./vision";
+import { Sheet } from "./ui/sheet";
 
 function sendEvent(name: string): void {
   fetch("/e", {
@@ -38,13 +46,18 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 function setupRead(): void {
   const input = $<HTMLInputElement>("photo");
-  const drop = $<HTMLElement>("drop");
+  const stage = $<HTMLElement>("stage");
+  const cloth = $<HTMLElement>("drop");
   const status = $<HTMLElement>("read-status");
   const loading = $<HTMLElement>("loading");
   const loadFill = $<HTMLElement>("load-fill");
   const loadLabel = $<HTMLElement>("load-label");
-  const result = $<HTMLElement>("result");
+  const well = $<HTMLElement>("photo-well");
   const canvas = $<HTMLCanvasElement>("figure");
+  const intro = $<HTMLElement>("intro");
+  const result = $<HTMLElement>("result");
+  const heroN = $<HTMLElement>("hero-n");
+  const heroEyebrow = $<HTMLElement>("hero-eyebrow");
   const verdict = $<HTMLElement>("verdict");
   const rows = $<HTMLOListElement>("advice");
   const hash = $<HTMLElement>("reading-hash");
@@ -59,9 +72,35 @@ function setupRead(): void {
   const save = $<HTMLButtonElement>("save-card");
   const sample = $<HTMLButtonElement>("try-sample");
   const camera = $<HTMLInputElement>("camera");
-  const dropAlt = document.querySelector<HTMLElement>(".drop-alt");
-  if (!wipe || !credit || !save || !sample || !camera || !dropAlt) return;
-  if (!input || !drop || !status || !loading || !loadFill || !loadLabel || !result || !canvas || !verdict || !rows || !hash || !again || !paletteSlot || !looksSection || !looksList || !trying || !trial) return;
+  const foot = stage?.querySelector<HTMLElement>(".stage-foot") ?? null;
+  const sheetEl = $<HTMLElement>("sheet");
+  const sheetBody = $<HTMLElement>("sheet-body");
+  const grip = $<HTMLButtonElement>("grip");
+  if (!input || !stage || !cloth || !status || !loading || !loadFill || !loadLabel || !well || !canvas || !intro || !result) return;
+  if (!heroN || !heroEyebrow || !verdict || !rows || !hash || !again || !paletteSlot || !looksSection || !looksList || !trying || !trial) return;
+  if (!wipe || !credit || !save || !sample || !camera || !sheetEl || !sheetBody || !grip || !foot) return;
+
+  const reader = new Reader();
+  const sheet = new Sheet(sheetEl, sheetBody, grip);
+
+  // The stage fits the photo to the room above the sheet: a scale on the
+  // well (compositor only) that follows the sheet's edge frame by frame.
+  // The foot (status, loading tape, compare control) rides up with it.
+  sheet.onMove((top) => {
+    if (sheet.isWide) {
+      well.style.transform = "";
+      foot.style.transform = "";
+      return;
+    }
+    const stageTop = stage.getBoundingClientRect().top;
+    const footBottom = stageTop + foot.offsetTop + foot.offsetHeight;
+    const lift = Math.max(0, footBottom + 8 - top);
+    foot.style.transform = lift > 0 ? `translate3d(0, ${(-lift).toFixed(1)}px, 0)` : "";
+    const wellTop = stageTop + well.offsetTop;
+    const room = top - lift - wellTop - 10;
+    const k = Math.max(0.3, Math.min(1, room / Math.max(1, well.offsetHeight)));
+    well.style.transform = k < 1 ? `scale(${k.toFixed(4)})` : "";
+  });
 
   const mb = (n: number) => (n / 1e6).toFixed(1);
   const onProgress = (loaded: number, total: number) => {
@@ -69,13 +108,13 @@ function setupRead(): void {
     loadLabel.textContent = `Loading the measuring models, ${mb(loaded)} of ${mb(all)} MB.`;
     loadFill.style.width = `${all ? (100 * loaded) / all : 0}%`;
   };
-  // Start the models' one-time download as soon as someone shows intent.
+  // Start the models' one-time download on the first sign of intent.
   let warmed = false;
   const warm = () => {
     if (warmed) return;
     warmed = true;
     loading.hidden = false;
-    loadModels(onProgress).then(
+    reader.warm(onProgress).then(
       () => (loading.hidden = true),
       () => {
         loading.hidden = true;
@@ -83,11 +122,21 @@ function setupRead(): void {
       },
     );
   };
-  drop.addEventListener("pointerenter", warm, { once: true });
-  input.addEventListener("focus", warm, { once: true });
+  stage.addEventListener("pointerenter", warm, { once: true });
+  stage.addEventListener("pointerdown", warm, { once: true });
+  stage.addEventListener("dragenter", warm, { once: true });
+  cloth.addEventListener("focusin", warm, { once: true });
 
   // The read on screen, for the wipe and the card.
   let current: { figure: Figure; shown: () => Shown; credit: string | null } | null = null;
+
+  const showCloth = () => {
+    well.hidden = true;
+    delete well.dataset.in;
+    cloth.hidden = false;
+    document.body.dataset.state = "idle";
+    again.hidden = true;
+  };
 
   let busy = false;
   const run = async (file: Blob, sourceCredit: string | null = null) => {
@@ -98,27 +147,36 @@ function setupRead(): void {
     status.textContent = "Measuring.";
     status.removeAttribute("data-state");
     try {
-      const read = await readPhoto(file);
-      if (typeof read === "string") {
-        status.textContent = FAILURE_COPY[read];
+      const { read, copy } = await reader.read(file, (display: Pixels) => {
+        // The photo shows the moment it is decoded; the models are still at work.
+        showPhoto(canvas, display);
+        cloth.hidden = true;
+        well.hidden = false;
+        requestAnimationFrame(() => (well.dataset.in = ""));
+      });
+      if (!read) {
+        status.textContent = copy ?? "The measuring models did not load. Check the connection and try again; they download once, then stay in the browser.";
         status.dataset.state = "error";
-        result.hidden = true;
-        looksSection.hidden = true;
-        document.body.dataset.state = "idle";
+        showCloth();
         return;
       }
       status.textContent = "";
-      drop.hidden = true;
-      dropAlt.hidden = true;
-      result.hidden = false;
       document.body.dataset.state = "read";
-      const figure = new Figure(canvas, read.pixels, read.measure, read.reading);
+      again.hidden = false;
+      const figure = new Figure(canvas, read.display, read.pixels, read.measure, read.reading);
       wipe.hidden = true;
+      document.body.dataset.compare = "off";
+
+      // The sheet: the hero numeral and the verdict first, then the argument.
+      intro.hidden = true;
+      result.hidden = false;
+      heroN.textContent = "";
+      heroN.dataset.state = read.reading.lines[0].borderline ? "borderline" : read.reading.lines[0].state;
+      heroEyebrow.textContent = heroEyebrowOf(read.reading.lines);
+      verdict.textContent = verdictOf(read.reading.lines);
+      paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
       credit.hidden = sourceCredit === null;
       credit.textContent = sourceCredit ?? "";
-      // The verdict is the proportion line's first sentence.
-      verdict.textContent = read.reading.lines[0].text.split(/(?<=\.)\s/)[0];
-      paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
 
       // The tuck button belongs to the proportion row of the reading as worn.
       const asWornExtras = () => {
@@ -126,7 +184,7 @@ function setupRead(): void {
         if (first.state !== "advice" || read.measure.breakRow === null) return {};
         const tuck = document.createElement("button");
         tuck.type = "button";
-        tuck.className = "btn ghost";
+        tuck.className = "btn ghost small";
         tuck.textContent = "Show the tuck";
         let on = false;
         tuck.addEventListener("click", () => {
@@ -136,15 +194,18 @@ function setupRead(): void {
         });
         return { extra: { proportion: tuck } };
       };
-      renderRows(rows, read.reading.lines, read.reading.bins, asWornExtras());
+      const rendered = renderRows(rows, read.reading.lines, read.reading.bins, asWornExtras());
       hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
       hash.title = `Reading hash ${read.hash}`;
       reportCoreSuccess();
-      const looks = setupLooks({ read, figure, rows, section: looksSection, list: looksList, trying, trial, paletteSlot, hash, wipe, asWornExtras, onTried: () => sendEvent("look_tried") });
+      const looks = setupLooks({ read, reader, figure, sheet, rows, section: looksSection, list: looksList, heroN, heroEyebrow, verdict, trying, trial, paletteSlot, hash, wipe, asWornExtras, onTried: () => sendEvent("look_tried") });
       current = { figure, shown: looks.shown, credit: sourceCredit };
+      sheet.measure();
+      sheet.snap("half");
       // The argument follows the numeral, and never waits more than 2.5 s for it.
       await Promise.race([figure.play(), new Promise((r) => setTimeout(r, 2500))]);
-      rows.classList.add("in");
+      countTo(heroN, read.reading.lines[0].measured);
+      rendered.land();
     } finally {
       busy = false;
       input.value = "";
@@ -161,7 +222,9 @@ function setupRead(): void {
   const SAMPLE_CREDIT = "Jacques-Louis David, The Emperor Napoleon in His Study at the Tuileries, 1812. National Gallery of Art, Washington. Public domain, via Wikimedia Commons.";
   sample.addEventListener("click", async () => {
     if (busy) return;
+    warm();
     status.textContent = "Fetching the sample.";
+    status.removeAttribute("data-state");
     try {
       const res = await fetch("/samples/napoleon.jpg");
       if (!res.ok) throw new Error(String(res.status));
@@ -172,25 +235,38 @@ function setupRead(): void {
     }
   });
 
-  // The wipe: the range control and a drag on the photo move the same line.
+  // The wipe: the range control and a drag on the photo move the same line;
+  // a drag let go carries on with the finger's speed and settles.
   wipe.addEventListener("input", () => current?.figure.setWipe(Number(wipe.value) / 100));
+  const velocity = new Velocity();
   let dragging = false;
+  const fractionAt = (e: PointerEvent) => {
+    const r = canvas.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  };
   const dragTo = (e: PointerEvent) => {
     if (!current?.figure.hasLook) return;
-    const r = canvas.getBoundingClientRect();
-    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    const f = fractionAt(e);
     current.figure.setWipe(f);
+    velocity.push(f);
     wipe.value = String(Math.round(f * 100));
   };
   canvas.addEventListener("pointerdown", (e) => {
     if (!current?.figure.hasLook) return;
     dragging = true;
     canvas.setPointerCapture(e.pointerId);
+    velocity.reset(fractionAt(e));
     dragTo(e);
   });
   canvas.addEventListener("pointermove", (e) => dragging && dragTo(e));
-  canvas.addEventListener("pointerup", () => (dragging = false));
-  canvas.addEventListener("pointercancel", () => (dragging = false));
+  const release = () => {
+    if (!dragging) return;
+    dragging = false;
+    const v = velocity.value;
+    if (Math.abs(v) > 0.2 && !reducedMotion()) current?.figure.flingWipe(v, (w) => (wipe.value = String(Math.round(w * 100))));
+  };
+  canvas.addEventListener("pointerup", release);
+  canvas.addEventListener("pointercancel", release);
 
   // Save as card: whatever is on screen, as worn or the tried look.
   save.addEventListener("click", async () => {
@@ -217,22 +293,31 @@ function setupRead(): void {
   });
   again.addEventListener("click", () => {
     result.hidden = true;
-    looksSection.hidden = true;
-    drop.hidden = false;
-    dropAlt.hidden = false;
-    document.body.dataset.state = "idle";
+    intro.hidden = false;
+    document.body.dataset.compare = "off";
+    wipe.hidden = true;
+    showCloth();
+    sheet.measure();
+    sheet.snap("peek");
     input.click();
   });
-  drop.addEventListener("dragover", (e) => {
+
+  // The whole stage is the drop cloth.
+  stage.addEventListener("dragover", (e) => {
     e.preventDefault();
-    drop.dataset.over = "true";
+    stage.dataset.over = "true";
   });
-  drop.addEventListener("dragleave", () => delete drop.dataset.over);
-  drop.addEventListener("drop", (e) => {
+  stage.addEventListener("dragleave", () => delete stage.dataset.over);
+  stage.addEventListener("drop", (e) => {
     e.preventDefault();
-    delete drop.dataset.over;
+    delete stage.dataset.over;
     const file = e.dataTransfer?.files[0];
     if (file) void run(file);
+  });
+  // A click on the cloth's empty ground opens the file picker, like the old drop zone.
+  cloth.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("button, label, input, a")) return;
+    input.click();
   });
 }
 
@@ -279,7 +364,17 @@ function setupDropFigure(): void {
   slot.replaceChildren(chalkFigure({ proportion: null, waist: 0.38, top: rest, bottom: rest, palette: [], fit: null }, { outline: true, label: "A chalk figure with the tape beside it, waiting for a photo" }));
 }
 
+/** The browser's own chrome takes the page ground's colour (from the tokens, never a literal here). */
+function setThemeColor(): void {
+  const meta = document.createElement("meta");
+  meta.name = "theme-color";
+  meta.content = getComputedStyle(document.body).backgroundColor;
+  document.head.append(meta);
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => (meta.content = getComputedStyle(document.body).backgroundColor));
+}
+
 sendEvent("page_view");
+setThemeColor();
 setupDropFigure();
 setupRead();
 setupFeedback();

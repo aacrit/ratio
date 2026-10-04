@@ -36,11 +36,13 @@ export const MODELS = {
   },
 };
 
-// Only the SIMD build: every browser Ratio supports has WASM SIMD, and one
-// runtime means one numeric path (the determinism risk in the brief).
+// Only the SIMD module build: every browser Ratio supports has WASM SIMD,
+// and one runtime means one numeric path (the determinism risk in the
+// brief). The module build is the one a module worker can import
+// (web/src/vision.ts runs the models in web/src/read.worker.ts).
 export const RUNTIME = {
-  "vision_wasm_internal.js": "e170ee67dd4e16c1a6fcd8840a206687e5a59b22c20e4a902bc445b095454d73",
-  "vision_wasm_internal.wasm": "8da277a733926eacd0474b8704b36742d6ec3231c57a860c5b889dff8f1df886",
+  "vision_wasm_module_internal.js": "da8934057f147b622e82cfb4c0dbd85461c598e268588b5a8ba9ca963a8ff82d",
+  "vision_wasm_module_internal.wasm": "2dabd8e23c60984628beb7bb338764c81a08e6837145273f59578684b5d53c1b",
 };
 
 // The first-visit sample (founder, 2026-10-04: a painted full-length
