@@ -8,6 +8,7 @@
 
 import { readingHash } from "../engine/hash";
 import { type Look, suggestLooks } from "../engine/looks";
+import { verdictOf as engineVerdict } from "../engine/verdict";
 import { colourLabel } from "../engine/names";
 import { ENGINE_VERSION, type LineState } from "../engine/rules";
 import type { Figure } from "../overlay";
@@ -61,8 +62,8 @@ export interface Shown {
   engine: string;
 }
 
-/** The verdict is the proportion line's first sentence. */
-export const verdictOf = (lines: Read["reading"]["lines"]) => lines[0].text.split(/(?<=\.)\s/)[0];
+/** The plain verdict (engine/verdict.ts): whether it works, and the best look in everyday words. */
+export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = []) => engineVerdict(lines, looks);
 
 /** The sheet head's eyebrow under the hero numeral: the rule and its state. */
 export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].title}, ${stateLabel(lines[0])}`;
@@ -70,6 +71,7 @@ export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].ti
 export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   const { read } = d;
   const looks = suggestLooks(read.reading.bins, read.reading.lines);
+  d.verdict.textContent = verdictOf(read.reading.lines, looks);
   d.section.hidden = false;
   d.trying.hidden = true;
   d.trial.replaceChildren();
@@ -106,7 +108,8 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     countTo(d.heroN, lines[0].measured, fromLines[0].measured);
     d.heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
     d.heroEyebrow.textContent = heroEyebrowOf(lines);
-    d.verdict.textContent = verdictOf(lines);
+    // As worn, the verdict names the best look; on a tried look, it judges that look.
+    d.verdict.textContent = verdictOf(lines, lines === read.reading.lines ? looks : []);
   };
 
   const asWorn = async () => {

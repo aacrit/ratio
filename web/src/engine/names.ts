@@ -4,7 +4,7 @@
 // degrees are always shown beside the name: the name is a courtesy, the
 // number is the measurement.
 
-const NEUTRAL_CHROMA = 0.02;
+import { isNeutral } from "./constants";
 
 interface Band {
   from: number;
@@ -32,7 +32,7 @@ const BANDS: Band[] = [
 ];
 
 export function colourName(L: number, C: number, h: number): string {
-  if (C < NEUTRAL_CHROMA) {
+  if (isNeutral({ L, C })) {
     if (L < 0.28) return "black";
     if (L < 0.45) return "charcoal";
     if (L < 0.7) return "grey";
@@ -48,5 +48,5 @@ export function colourName(L: number, C: number, h: number): string {
 /** "navy (255°)" or "black". */
 export function colourLabel(s: { L: number; C: number; h: number }): string {
   const name = colourName(s.L, s.C, s.h);
-  return s.C < NEUTRAL_CHROMA ? name : `${name} (${Math.round(s.h)}°)`;
+  return isNeutral(s) ? name : `${name} (${Math.round(s.h)}°)`;
 }

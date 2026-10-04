@@ -72,3 +72,35 @@ describe("rulebook", () => {
     }
   });
 });
+
+describe("user-sim fixes (2026-10-04)", () => {
+  it("a light, barely tinted colour is a neutral; a dark one at the same chroma is not", async () => {
+    const { isNeutral } = await import("../web/src/engine/constants");
+    expect(isNeutral({ L: 0.74, C: 0.03 })).toBe(true);
+    expect(isNeutral({ L: 0.23, C: 0.026 })).toBe(false);
+  });
+
+  it("a third reads as composed, as the rule says", async () => {
+    const lines = readBins({ proportion: 0.32, waist: 0.38, top: { L: 0.8, C: 0, h: 0 }, bottom: { L: 0.3, C: 0, h: 0 }, palette: [], fit: null });
+    expect(lines[0].state).toBe("golden");
+    expect(lines[0].text).toMatch(/a third/);
+  });
+
+  it("two colours tied for the lead are advice, not fine", async () => {
+    const { sharesLine } = await import("../web/src/engine/colour-rules");
+    const sw = (share: number) => ({ L: 0.5, C: 0, h: 0, share, y: 0.5 });
+    expect(sharesLine([sw(0.25), sw(0.25), sw(0.2), sw(0.15), sw(0.15)]).state).toBe("advice");
+  });
+
+  it("the plain verdict counts the advice and names the best look in everyday words", async () => {
+    const { verdictOf, plainMove } = await import("../web/src/engine/verdict");
+    expect(plainMove({ kind: "recolour", swatch: 1, piece: "lower", L: 0.3, C: 0.07, h: 255, title: "", detail: "" })).toBe("navy for the lower piece");
+    expect(plainMove({ kind: "accent", L: 0.36, C: 0.11, h: 25, title: "", detail: "" })).toBe("oxblood shoes");
+    const advice = { rule: "shares" as const, title: "", measured: "", text: "", state: "advice" as const, borderline: false };
+    const fine = { ...advice, state: "neutral" as const };
+    expect(verdictOf([fine], [])).toMatch(/^Works\. /);
+    expect(verdictOf([advice], [])).toBe("Works, with one change worth making.");
+    expect(verdictOf([advice, advice], [])).toMatch(/^Two changes would help/);
+    for (const v of [verdictOf([fine], []), verdictOf([advice, advice, advice], [])]) for (const w of JUDGING_WORDS) expect(v.toLowerCase()).not.toContain(w);
+  });
+});

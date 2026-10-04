@@ -4,6 +4,19 @@
 
 /** Below this OKLCH chroma a colour reads as a neutral. Dark colours carry little chroma, so it is low. */
 export const NEUTRAL_CHROMA = 0.02;
+
+/**
+ * The neutral line rises with lightness: a cream at chroma 0.03 reads as an
+ * off-white (a neutral), while a plum at the same chroma in the dark still
+ * reads as plum. From NEUTRAL_CHROMA at mid lightness up to 0.045 at white
+ * (the stylist user-sim, 2026-10-04: "treat anything below about 0.04 chroma
+ * as neutral before you fit templates", for light colours).
+ */
+export function neutralChromaAt(L: number): number {
+  return NEUTRAL_CHROMA + 0.025 * Math.min(1, Math.max(0, (L - 0.5) / 0.45));
+}
+
+export const isNeutral = (c: { L: number; C: number }): boolean => c.C < neutralChromaAt(c.L);
 /** From this OKLCH chroma a colour reads as saturated. */
 export const SATURATED_CHROMA = 0.11;
 
