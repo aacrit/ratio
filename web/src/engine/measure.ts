@@ -183,7 +183,11 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
   // hip line is often covered by an untucked top, the shoulders never are.
   const shoulderW = sx1 - sx0;
   const rowsAround = Math.max(1, Math.round((hipY - shoulderY) * 0.04));
-  const topW = fabricAround(mask, shoulderY + (hipY - shoulderY) * 0.5, sx0 - shoulderW * 0.25, sx1 + shoulderW * 0.25, rowsAround);
+  // The narrowest of three torso rows: an arm on the hip or held out widens
+  // one row, rarely all three (the stylist user-sim caught an arm read as a
+  // loose cut on David's Napoleon, 2026-10-04).
+  const torsoRow = (f: number) => fabricAround(mask, shoulderY + (hipY - shoulderY) * f, sx0 - shoulderW * 0.25, sx1 + shoulderW * 0.25, rowsAround);
+  const topW = Math.min(torsoRow(0.35), torsoRow(0.5), torsoRow(0.65));
   const reach = Math.max(hx1 - hx0, shoulderW) * 1.2;
   const kneeW = fabricAround(mask, kneeY, hx0 - reach, hx1 + reach, rowsAround);
   const fit = shoulderW > 4 && topW > shoulderW * 0.4 && kneeW > 0 ? { top: topW / shoulderW, legs: kneeW / shoulderW } : null;
