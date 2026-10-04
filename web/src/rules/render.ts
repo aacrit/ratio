@@ -35,12 +35,12 @@ import {
 } from "./model";
 
 export const PROVENANCE =
-  "The canons cited here (Euclid's section, the golden ratio, Dürer, Matsuda's templates) are European traditions, one lineage among many; the rulebook names its sources so you can weigh them.";
+  "The canons cited here (Euclid's section, the golden ratio, Matsuda's templates) are European and Japanese traditions, one lineage among many; the rulebook names its sources so you can weigh them.";
 export const LEDE = "Every reading is held against these and nothing else. Drag an instrument to see where a band ends. Your last read in this tab is marked on each one.";
 export const NO_READ_CHIP = "Read a photo and your values appear on each instrument.";
 export const DRILL_SUMMARY = "The maths, the edges, the sources";
-export const UNCALIBRATED = "calibrated: no, first estimates";
-export const UNCALIBRATED_NOTE = 'The edges are first estimates. The labelled fixture set (risk R1) sets them, and this line changes to "calibrated" when it has.';
+export const UNCALIBRATED = "set by hand, not yet calibrated";
+export const UNCALIBRATED_NOTE = `The edges are set by hand, to be calibrated against labelled photos (docs/RISKS.md R1). Read marks this rule's advice "first estimate" until then, and this line changes to "calibrated" when it is.`;
 
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export const esc = (s: string | number): string => String(s).replace(/[&<>"']/g, (c) => ESC[c]);
@@ -71,7 +71,7 @@ ${labels}
 <g class="yours-layer" data-yours-layer="proportion"></g>
 <g class="prop-handle" data-handle="proportion" transform="translate(0 ${f1(propY(start.r))})"><rect class="hit" x="${tapeX - 8}" y="-16" width="${handleEnd - tapeX + 8 + HANDLE_HIT}" height="32" /><path d="M${tapeX} 0 H${handleEnd}" class="tape" stroke-width="2" /><circle cx="${handleEnd}" cy="0" r="9" class="handle" /><text x="${handleEnd - 12}" y="-8" text-anchor="end" class="n" data-readout="proportion">${esc(pairText(start.r))}</text></g>
 </svg>
-<input class="range-hidden" type="range" data-range="proportion" min="${PROPORTION_RANGE.min}" max="${PROPORTION_RANGE.max}" step="${PROPORTION_RANGE.step}" value="${start.r}" aria-label="The break, as a fraction of the height from the crown" aria-valuetext="${esc(`${pairText(start.r)}, ${start.label}`)}" />
+<input class="range-hidden" type="range" data-range="proportion" min="${PROPORTION_RANGE.min}" max="${PROPORTION_RANGE.max}" step="${PROPORTION_RANGE.step}" value="${start.r}" aria-orientation="vertical" aria-label="The break, as a fraction of the height from the crown; the arrow keys move it the way they point" aria-valuetext="${esc(`${pairText(start.r)}, ${start.label}`)}" />
 </div>`;
 }
 
@@ -196,7 +196,7 @@ function drill(id: RuleId, e: RuleEntry): string {
 <p><b>Maths</b>${esc(e.maths)}</p>
 <div><b>Edges</b><dl class="edges">${edges}</dl></div>
 <div><b>Sources</b><ul class="sources">${sources}</ul></div>
-${e.calibrated ? "" : `<p class="uncal-note"><b>Calibrated: no, first estimates</b>${esc(UNCALIBRATED_NOTE)}</p>`}
+${e.calibrated ? "" : `<p class="uncal-note"><b>Set by hand</b>${esc(UNCALIBRATED_NOTE)}</p>`}
 </div>
 </details>`;
 }

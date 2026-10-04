@@ -42,7 +42,7 @@ describe("web/privacy.html, claim by claim", () => {
   it("the last reading is kept in session storage, numbers and labels only, never the photo; Clear removes it; only handoff.ts touches it", async () => {
     expect(text).toContain("look is sent or counted, except that a reading took place and that a look was tried, and nothing is kept except as below");
     expect(text).not.toContain("sent, stored or counted");
-    expect(text).toContain("the browser keeps that reading's rounded measurements, its results and, if you tried a look, the look's title, in session storage");
+    expect(text).toContain("the browser keeps that reading's rounded measurements, its results and, if you tried a look, the look's title, measurements and results beside them, in session storage");
     expect(text).toContain("never the photo or any of its pixels");
     expect(text).toContain("It is kept for this tab's session (a browser that restores or duplicates the tab keeps it too); Clear on the Rulebook page removes it");
     expect(text).toContain("It is never sent anywhere");

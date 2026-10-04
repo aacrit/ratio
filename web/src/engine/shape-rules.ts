@@ -3,6 +3,7 @@
 // loose", never anything about the body under it.
 
 import { FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, nearEdge } from "./constants";
+import type { ShoesWhy } from "./measure";
 import type { AdviceLine } from "./rules";
 
 export type TopFit = "fitted" | "straight" | "loose";
@@ -13,9 +14,17 @@ export const legFit = (r: number): LegFit => (r < FIT_LEGS[0] ? "narrow" : r < F
 
 const two = (v: number) => v.toFixed(2);
 
+/**
+ * The words for a volume reading, from its numbers: the one place they are
+ * made, so the line, its Measured copy and the Rulebook can never disagree
+ * (Mara, 2026-10-04: "1.10× · 0.90×" said "fitted over wide").
+ */
+export function volumeWords(fit: { top: number; legs: number }): { top: TopFit; legs: LegFit } {
+  return { top: topFit(fit.top), legs: legFit(fit.legs) };
+}
+
 export function volumeLine(fit: { top: number; legs: number }): AdviceLine {
-  const t = topFit(fit.top);
-  const l = legFit(fit.legs);
+  const { top: t, legs: l } = volumeWords(fit);
   // Fit ratios are binned to 0.05.
   const borderline = nearEdge(fit.top, FIT_TOP, 0.05) || nearEdge(fit.legs, FIT_LEGS, 0.05);
   const base = { rule: "volume" as const, title: "Volume", measured: `${two(fit.top)}× · ${two(fit.legs)}×`, borderline };
@@ -41,4 +50,25 @@ export function legLine(lowerL: number, shoesL: number): AdviceLine {
     return { ...base, state: "golden", text: `The shoes sit close in value to the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line runs unbroken to the floor.` };
   }
   return { ...base, state: "neutral", text: `The shoes contrast with the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line ends at the ankle and the shoes become a point of their own. Shoes nearer the lower piece's value would carry the line down.` };
+}
+
+/** The volume line when an arm or a hand crosses every torso row: said, never guessed. */
+export function volumeUnread(_why: "arms"): AdviceLine {
+  return {
+    rule: "volume",
+    title: "Volume",
+    measured: "not read",
+    state: "unread",
+    borderline: false,
+    text: "An arm or a hand lies over the upper piece on every row Ratio reads it on, so its width was not read: a sleeve would have counted as the cut. A photo with the arms a little away from the sides lets Ratio read it.",
+  };
+}
+
+/** The leg line when the shoes could not be read, saying why. */
+export function legUnread(why: ShoesWhy): AdviceLine {
+  const text =
+    why === "cut_off"
+      ? "The shoes are cut off by the frame, so the leg line was not read. A photo with the feet in full lets Ratio read it."
+      : "The shoes merge with the floor: Ratio could not tell where they begin, so the leg line was not read. A plainer floor or more light at the feet lets Ratio read it.";
+  return { rule: "legline", title: "Leg line", measured: "not read", state: "unread", borderline: false, text };
 }

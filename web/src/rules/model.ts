@@ -255,6 +255,39 @@ export const stripX = (L: number) => SCALE_X.from + (SCALE_X.to - SCALE_X.from) 
 /** A marked value beyond a scale's ends: the marker sits at the end and says so, so the handle and "Yours" never disagree silently. */
 export const offScale = (v: number, min: number, max: number): "below" | "above" | null => (v < min - 1e-9 ? "below" : v > max + 1e-9 ? "above" : null);
 
+/**
+ * The arrow keys on an instrument: the handle moves the way the arrow points
+ * (Noor, 2026-10-04: ArrowDown moved the proportion handle up). On the
+ * vertical tape, Down moves the break down the figure (a larger value) and
+ * Up moves it up; Right and Left move the value the way they do on every
+ * horizontal scale, Right up the value (down the tape), Left down it. On a
+ * horizontal scale, Right and Up raise the value, Left and Down lower it.
+ * Page keys move five steps; Home and End go to the ends. Returns the steps
+ * to move, or "min" / "max", or null for any other key.
+ */
+export function keyStep(key: string, vertical: boolean): number | "min" | "max" | null {
+  switch (key) {
+    case "ArrowDown":
+      return vertical ? 1 : -1;
+    case "ArrowUp":
+      return vertical ? -1 : 1;
+    case "ArrowRight":
+      return 1;
+    case "ArrowLeft":
+      return -1;
+    case "PageDown":
+      return vertical ? 5 : -5;
+    case "PageUp":
+      return vertical ? -5 : 5;
+    case "Home":
+      return "min";
+    case "End":
+      return "max";
+    default:
+      return null;
+  }
+}
+
 /** A handle is taken only by a press within this many instrument units of it, so a thumb scrolling the page past an instrument never moves it. */
 export const HANDLE_HIT = 22;
 

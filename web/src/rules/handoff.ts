@@ -24,6 +24,13 @@ export interface LastReadLine {
   borderline: boolean;
 }
 
+/** One reading: its hash, its bins and its lines' labels. */
+export interface Reading {
+  hash: string;
+  bins: Bins;
+  lines: LastReadLine[];
+}
+
 export interface LastRead {
   v: 1;
   engine: string;
@@ -36,10 +43,32 @@ export interface LastRead {
   day: string;
   bins: Bins;
   lines: LastReadLine[];
+  /**
+   * The outfit as worn, kept beside a tried look (look not null), so the
+   * Rulebook marks the as-worn read first and the look as a second marker
+   * (Noor, 2026-10-04). Absent when look is null: then bins and lines are
+   * the outfit as worn.
+   */
+  worn?: Reading;
+}
+
+/** The outfit as worn, whichever reading was stored. */
+export const wornOf = (r: LastRead): Reading => r.worn ?? { hash: r.hash, bins: r.bins, lines: r.lines };
+/** The tried look, or null. */
+export const lookOf = (r: LastRead): (Reading & { title: string }) | null => (r.look !== null && r.worn ? { title: r.look, hash: r.hash, bins: r.bins, lines: r.lines } : null);
+
+/**
+ * A tried look keeps the outfit as worn beside it: the read stores the
+ * outfit as worn first (look null), and each look after it carries that
+ * reading on. Pure: the tests feed it values.
+ */
+export function withWorn(next: LastRead, prev: LastRead | null): LastRead {
+  if (next.look === null || next.worn || !prev || prev.source !== next.source || prev.engine !== next.engine) return next;
+  return { ...next, worn: wornOf(prev) };
 }
 
 const RULE_IDS: readonly RuleId[] = ["proportion", "volume", "legline", "harmony", "value", "shares", "chroma"];
-const STATES: readonly LineState[] = ["golden", "advice", "neutral"];
+const STATES: readonly LineState[] = ["golden", "advice", "neutral", "unread"];
 const MAX_SWATCHES = 8;
 
 type Obj = Record<string, unknown>;
@@ -70,7 +99,27 @@ function bins(x: unknown): Bins | null {
     if (!isObj(x.fit) || !num(x.fit.top, 0, 5) || !num(x.fit.legs, 0, 5)) return null;
     fit = { top: x.fit.top, legs: x.fit.legs };
   }
-  return { proportion, waist: x.waist, top, bottom, palette, fit };
+  const out: Bins = { proportion, waist: x.waist, top, bottom, palette, fit };
+  if (x.fitWhy !== undefined) {
+    if (x.fitWhy !== "arms") return null;
+    out.fitWhy = "arms";
+  }
+  if (x.shoesWhy !== undefined) {
+    if (x.shoesWhy !== "cut_off" && x.shoesWhy !== "floor") return null;
+    out.shoesWhy = x.shoesWhy;
+  }
+  if (x.front !== undefined) {
+    if (x.front !== true) return null;
+    out.front = true;
+  }
+  return out;
+}
+
+function reading(x: unknown): Reading | null {
+  if (!isObj(x) || !str(x.hash, 128) || !/^[0-9a-f]{8,128}$/.test(x.hash)) return null;
+  const b = bins(x.bins);
+  const ls = lines(x.lines);
+  return b && ls ? { hash: x.hash, bins: b, lines: ls } : null;
 }
 
 function lines(x: unknown): LastReadLine[] | null {
@@ -85,7 +134,7 @@ function lines(x: unknown): LastReadLine[] | null {
 
 /** The stored value, or null when it is absent, malformed, or not ours. Pure: the tests feed it strings. */
 export function parseLastRead(raw: string | null | undefined): LastRead | null {
-  if (typeof raw !== "string" || raw.length === 0 || raw.length > 8_000) return null;
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 16_000) return null;
   let x: unknown;
   try {
     x = JSON.parse(raw);
@@ -101,7 +150,14 @@ export function parseLastRead(raw: string | null | undefined): LastRead | null {
   const b = bins(x.bins);
   const ls = lines(x.lines);
   if (!b || !ls) return null;
-  return { v: 1, engine: x.engine, hash: x.hash, source: x.source, look: x.look, day: x.day, bins: b, lines: ls };
+  const out: LastRead = { v: 1, engine: x.engine, hash: x.hash, source: x.source, look: x.look, day: x.day, bins: b, lines: ls };
+  if (x.worn !== undefined) {
+    const w = reading(x.worn);
+    // The as-worn reading rides only beside a look.
+    if (!w || x.look === null) return null;
+    out.worn = w;
+  }
+  return out;
 }
 
 /** Today in the visitor's own calendar, YYYY-MM-DD. */
@@ -128,7 +184,7 @@ export function lastReadOf(r: { engine: string; hash: string; source: LastRead["
 // data, quota): every access is wrapped, and a refusal means no marker.
 export function saveLastRead(r: LastRead): void {
   try {
-    sessionStorage.setItem(LAST_READ_KEY, JSON.stringify(r));
+    sessionStorage.setItem(LAST_READ_KEY, JSON.stringify(withWorn(r, r.look === null ? null : loadLastRead())));
   } catch {
     // The Rulebook simply shows no marker.
   }

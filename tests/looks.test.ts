@@ -48,7 +48,7 @@ describe("suggested looks", () => {
   it("proposes the tuck first for near-equal halves", () => {
     const b = example();
     const moves = candidateMoves(b, readBins(b));
-    expect(moves[0]).toMatchObject({ kind: "break", to: 0.38, title: "Tuck the front" });
+    expect(moves[0]).toMatchObject({ kind: "break", to: 0.38, title: "A front tuck, if it tucks" });
   });
 
   it("only returns looks the rulebook reads as better, best first", () => {

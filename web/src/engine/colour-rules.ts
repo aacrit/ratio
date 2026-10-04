@@ -8,7 +8,8 @@
 // 2. Value: the lightness range (Notan) and where the weight sits: dark
 //    below light reads grounded, dark above light reads top-heavy.
 // 3. Shares: area of the dominant, secondary and accent colours against the
-//    interior designer's 60-30-10, and against the golden split 0.62 : 0.38.
+//    interior designer's 60-30-10 (a convention of that trade, not a canon),
+//    and against the golden split 0.62 : 0.38.
 // 4. Chroma: how many voices are saturated, Albers' vibration (complements
 //    at equal lightness and high chroma), and the warm and cool balance.
 
@@ -59,7 +60,7 @@ export const TEMPLATES: Template[] = [
   { id: "L", name: "right-angle", gloss: "a hue and one at a right angle to it", sectors: [[0, 18], [90, 79.2]] },
   { id: "Y", name: "analogous with a complementary accent", gloss: "neighbouring hues and one accent from across the wheel", sectors: [[0, 93.6], [180, 18]] },
   { id: "X", name: "double complementary", gloss: "two neighbourhoods across the wheel", sectors: [[0, 93.6], [180, 93.6]] },
-  { id: "T", name: "half-wheel", gloss: "all warm or all cool", sectors: [[0, 180]] },
+  { id: "T", name: "half-wheel", gloss: "hues within one half of the wheel, a 180° arc anywhere on it", sectors: [[0, 180]] },
 ];
 
 /** Degrees outside the nearest sector, 0 when inside. */
@@ -157,7 +158,7 @@ export function sharesLine(palette: BinnedSwatch[]): AdviceLine {
     return { ...base, state: "advice", text: `The two main colours share the outfit almost equally (${pct(a)} and ${pct(b)}), so they compete for the lead. Let one dominate, near 0.60, with the other near 0.30 and a small accent near 0.10.` };
   }
   if (off <= SHARE_EDGES.near6030) {
-    return { ...base, state: "golden", text: `Close to 60-30-10: a dominant colour, a secondary and an accent, the proportion interior designers and painters use to give a palette one voice.` };
+    return { ...base, state: "golden", text: `Close to 60-30-10: a dominant colour, a secondary and an accent, the interior designer's rule of thumb for giving a palette one voice.` };
   }
   if (a < 0.4) {
     return { ...base, state: "neutral", text: `No colour leads: the largest holds ${pct(a)} of the outfit, the rest share it in small parts. A calm, mixed palette; one colour near 0.60 would give it a lead.` };

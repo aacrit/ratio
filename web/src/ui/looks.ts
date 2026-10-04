@@ -69,7 +69,7 @@ export interface Shown {
 }
 
 /** The plain verdict (engine/verdict.ts): whether it works, and the best look in everyday words. */
-export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = []) => engineVerdict(lines, looks);
+export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = [], bins?: Read["reading"]["bins"]) => engineVerdict(lines, looks, bins);
 
 /** The sheet head's eyebrow under the hero numeral: the rule and its state. */
 export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].title}, ${stateLabel(lines[0])}`;
@@ -77,7 +77,7 @@ export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].ti
 export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => Promise<void> } {
   const { read } = d;
   const looks = suggestLooks(read.reading.bins, read.reading.lines);
-  d.verdict.textContent = verdictOf(read.reading.lines, looks);
+  d.verdict.textContent = verdictOf(read.reading.lines, looks, read.reading.bins);
   d.section.hidden = false;
   d.trying.hidden = true;
   d.trial.replaceChildren();
@@ -127,12 +127,12 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   /** The recoloured photo for each look, computed once in the worker. */
   const recoloured = new Map<string, Promise<Parameters<Figure["setLook"]>[0]>>();
 
-  const setHead = (lines: Read["reading"]["lines"], fromLines: Read["reading"]["lines"]) => {
+  const setHead = (lines: Read["reading"]["lines"], fromLines: Read["reading"]["lines"], bins: Read["reading"]["bins"]) => {
     countTo(d.heroN, lines[0].measured, fromLines[0].measured);
     d.heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
     d.heroEyebrow.textContent = heroEyebrowOf(lines);
     // As worn, the verdict names the best look; on a tried look, it judges that look.
-    d.verdict.textContent = verdictOf(lines, lines === read.reading.lines ? looks : []);
+    d.verdict.textContent = verdictOf(lines, lines === read.reading.lines ? looks : [], bins);
   };
 
   const asWorn = async () => {
@@ -151,7 +151,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     d.figure.setLook(null);
     d.wipe.hidden = true;
     document.body.dataset.compare = "off";
-    setHead(read.reading.lines, from);
+    setHead(read.reading.lines, from, read.reading.bins);
     renderRows(d.rows, read.reading.lines, read.reading.bins, { beforeMeasured: new Map(from.map((l) => [l.rule, l.measured])), ...d.asWornExtras() }).land();
     d.paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
     d.hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
@@ -201,7 +201,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     d.trying.hidden = false;
     const title = d.trying.querySelector<HTMLElement>(".trying-title");
     if (title) title.textContent = look.title;
-    setHead(look.lines, from);
+    setHead(look.lines, from, look.bins);
     // On a phone the sheet drops to half so the photo and the wipe are in view.
     if (!d.sheet.isWide) d.sheet.snap("half");
     renderRows(d.rows, look.lines, look.bins, { before, beforeMeasured: new Map(from.map((l) => [l.rule, l.measured])) }).land();
@@ -236,7 +236,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
 
       const moves = document.createElement("p");
       moves.className = "look-moves";
-      moves.textContent = look.moves.map((mv) => mv.detail).join(" ");
+      moves.textContent = [...look.moves.map((mv) => mv.detail), ...look.keeps].join(" ");
 
       const changes = document.createElement("ul");
       changes.className = "look-changes";

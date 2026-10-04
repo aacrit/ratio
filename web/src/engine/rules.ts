@@ -14,13 +14,13 @@ import { binShares, isNeutral } from "./constants";
 import { byName } from "./names";
 import { pieces } from "./pieces";
 import type { RuleId } from "./rulebook";
-import { legLine, volumeLine } from "./shape-rules";
-import type { OutfitMeasure } from "./measure";
+import { legLine, legUnread, volumeLine, volumeUnread } from "./shape-rules";
+import type { OutfitMeasure, ShoesWhy } from "./measure";
 import type { Swatch } from "./palette";
 
 export { NEUTRAL_CHROMA };
 
-export const ENGINE_VERSION = "ratio-engine/0.6.0";
+export const ENGINE_VERSION = "ratio-engine/0.7.0";
 
 export const GOLDEN = 0.382;
 export const PROPORTION_BIN = 0.02;
@@ -44,7 +44,8 @@ export const JUDGING_WORDS = ["flaw", "flatter", "slim", "fat", "ugly", "unflatt
 
 // golden: the measurement sits near the golden section (the gold accent means
 // only this). advice: a change is suggested. neutral: measured, nothing to change.
-export type LineState = "golden" | "advice" | "neutral";
+// unread: the photo did not let Ratio measure it, and the line says why.
+export type LineState = "golden" | "advice" | "neutral" | "unread";
 
 export interface AdviceLine {
   rule: RuleId;
@@ -64,8 +65,14 @@ export interface Bins {
   bottom: { L: number; C: number; h: number };
   /** The outfit's palette, largest share first. */
   palette: BinnedSwatch[];
-  /** Volume: upper piece and legs fabric width over shoulder distance, binned to 0.05; null when unmeasured. */
+  /** Volume: the upper piece's and each leg's fabric width over the shoulder distance, binned to 0.05; null when unmeasured. */
   fit: { top: number; legs: number } | null;
+  /** Why volume was not read: an arm or a hand crosses every torso row. */
+  fitWhy?: "arms";
+  /** Why the shoes were not read: cut off by the frame, or not told apart from the floor. */
+  shoesWhy?: ShoesWhy;
+  /** The upper piece opens or zips down the front, so it does not tuck. */
+  front?: true;
 }
 
 const round = (v: number, step: number) => Math.round(v / step) * step;
@@ -79,9 +86,16 @@ function borderlineIn(bands: readonly { from: number; to: number }[], raw: numbe
   return bands.some((b) => b.from > 0 && Math.abs(raw - b.from) < half);
 }
 
-const binColour = (c: Lab) => {
+/**
+ * A colour in bins. Whether it is a neutral is decided on the binned
+ * lightness and chroma, the values every rule reads: deciding it on the raw
+ * values let a grey at chroma 0.018 keep hue 0 and then read as chromatic
+ * once its chroma rounded to 0.02 ("one hue, 0°", Mara, 2026-10-04).
+ */
+export const binColour = (c: Lab) => {
   const { L, C, h } = labToLch(c);
-  return { L: fix(round(L, 0.02)), C: fix(round(C, 0.01)), h: isNeutral({ L, C }) ? 0 : fix(round(h, 5) % 360, 0) };
+  const bin = { L: fix(round(L, 0.02)), C: fix(round(C, 0.01)) };
+  return { ...bin, h: isNeutral(bin) ? 0 : fix(round(h, 5) % 360, 0) };
 };
 
 /** The palette in bins; shares by largest remainder, so they sum to exactly 1.00. */
@@ -99,6 +113,9 @@ export function binsOf(m: OutfitMeasure, palette: Swatch[]): Bins {
     bottom: binColour(m.bottomColour),
     palette: binPalette(palette),
     fit: m.fit ? { top: fix(round(m.fit.top, 0.05)), legs: fix(round(m.fit.legs, 0.05)) } : null,
+    ...(m.fit === null && m.fitWhy ? { fitWhy: m.fitWhy } : {}),
+    ...(m.shoesWhy ? { shoesWhy: m.shoesWhy } : {}),
+    ...(m.front ? { front: true as const } : {}),
   };
 }
 
@@ -121,12 +138,27 @@ function proportionLine(b: Bins, rawBreak: number | null): AdviceLine {
   const id = bandOf(PROPORTION_BANDS, r);
   const measured = ratioText(r);
   const tuck = ratioText(b.waist);
+  // An upper piece that opens or zips down the front (a jacket, a hoodie)
+  // hangs to its hem and does not tuck (Mara, 2026-10-04: "Try a front tuck"
+  // on a zipped jacket). Otherwise the tuck is offered as a condition, never
+  // an order: the photo cannot show whether a piece tucks.
+  const shorter = `A shorter upper piece, ending near the waist (about ${tuck}), would move the break near the golden section.`;
   const texts: Record<ProportionBand, { text: string; state: LineState }> = {
     "short-top": { text: `The break sits high, near ${r.toFixed(2)}, so the lower block carries the length. Keep the bottom's line unbroken to the shoe and the effect holds.`, state: "neutral" },
     golden: { text: `The break sits near ${nearestDivision(r)}. The eye reads a short upper block over a long lower one, the classic division. Keep it.`, state: "golden" },
-    halves: { text: `Near-equal halves read as boxy. A front tuck moves the break to your waist, about ${tuck}, near the golden section, and shows the rise of what you wear below.`, state: "advice" },
+    halves: {
+      text: b.front
+        ? `Near-equal halves read as boxy. The upper piece opens down the front, so it hangs to its hem rather than tucking. ${shorter}`
+        : `Near-equal halves read as boxy. If the upper piece tucks, a front tuck moves the break to the waist, about ${tuck}, near the golden section, and shows the rise of what you wear below.`,
+      state: "advice",
+    },
     "golden-long": { text: `The break sits near ${nearestDivision(1 - r)} from below: a long upper piece over a short lower one. It is the second classical division. Keep the lower block narrow.`, state: "golden" },
-    "long-top": { text: `The upper piece covers most of the figure, so the break has little to divide. Belt it at the waist, about ${tuck}, to give the eye a division near the golden section.`, state: "advice" },
+    "long-top": {
+      text: b.front
+        ? `The upper piece covers most of the figure, so the break has little to divide. It opens down the front, so a belt would sit under it. ${shorter}`
+        : `The upper piece covers most of the figure, so the break has little to divide. Belt it at the waist, about ${tuck}, to give the eye a division near the golden section.`,
+      state: "advice",
+    },
   };
   return { rule: "proportion", title: "Proportion", measured, ...texts[id], borderline };
 }
@@ -145,8 +177,10 @@ export interface OutfitReading {
 export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
   const lines = [proportionLine(bins, rawBreak)];
   if (bins.fit) lines.push(volumeLine(bins.fit));
+  else if (bins.fitWhy) lines.push(volumeUnread(bins.fitWhy));
   const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
   if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
+  else if (p.shoes < 0 && bins.shoesWhy) lines.push(legUnread(bins.shoesWhy));
   if (bins.palette.length) {
     // Harmony, shares and chroma read the palette as people name it, one
     // name, one entry; value reads every swatch's own lightness, so a light

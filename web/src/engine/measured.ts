@@ -5,6 +5,7 @@
 
 import { byName, colourLabel, colourName } from "./names";
 import { pieces } from "./pieces";
+import { volumeWords } from "./shape-rules";
 import { type AdviceLine, type Bins, ratioText } from "./rules";
 
 const two = (v: number) => v.toFixed(2);
@@ -26,10 +27,15 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
   const named = byName(bins.palette);
   const each = (value: (s: (typeof named)[number]) => number) => named.map((s) => `${colourLabel(s)} ${two(value(s))}`).join(", ");
   switch (line.rule) {
-    case "volume":
-      return bins.fit ? `Upper piece ${two(bins.fit.top)}× the shoulder width at mid-torso; both legs ${two(bins.fit.legs)}× at the knee.` : "Volume was not measured.";
+    case "volume": {
+      if (!bins.fit) return bins.fitWhy === "arms" ? "Not read: an arm or a hand lies over every row Ratio reads the upper piece on." : "Volume was not measured.";
+      // The words come from the same function the rule uses (shape-rules.ts volumeWords).
+      const w = volumeWords(bins.fit);
+      return `Upper piece ${two(bins.fit.top)}× the shoulder width on the torso rows no arm crosses, ${w.top}; each leg ${two(bins.fit.legs)}× at the knee, ${w.legs}.`;
+    }
     case "legline": {
       const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
+      if (p.shoes < 0 && bins.shoesWhy) return bins.shoesWhy === "cut_off" ? "Not read: the frame cuts the shoes off." : "Not read: the shoes merge with the floor.";
       if (p.lower < 0 || p.shoes < 0) return "Lightness of the lower piece against the shoes.";
       return `Lightness of the lower piece ${two(bins.palette[p.lower].L)}, the shoes ${two(bins.palette[p.shoes].L)}.`;
     }

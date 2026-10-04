@@ -19,7 +19,7 @@ import type { Move } from "../engine/looks";
 import { colourName } from "../engine/names";
 import { CATEGORY, type Mask } from "../engine/measure";
 import type { Swatch } from "../engine/palette";
-import type { Piece } from "../engine/pieces";
+import { type Piece, isShoes as isShoeSwatch } from "../engine/pieces";
 import type { Pixels } from "../engine/resample";
 
 const lchToLab = (L: number, C: number, h: number): Lab => ({ L, a: C * Math.cos((h * Math.PI) / 180), b: C * Math.sin((h * Math.PI) / 180) });
@@ -42,8 +42,10 @@ export function colourTargets(moves: Move[], swatches: Swatch[]): Target[] {
   for (const m of moves) {
     if (m.kind === "recolour" && m.swatch < swatches.length) targets.push({ swatch: m.swatch, piece: m.piece, to: lchToLab(m.L, m.C, m.h) });
     if (m.kind === "accent") {
-      // Accents show on the photo only when the shoes were measured.
-      const shoes = swatches.findIndex((s) => s.y >= 0.9);
+      // Accents show on the photo only when the shoes were measured: the
+      // same shoe test as the rules (pieces.ts isShoes), so the leg line and
+      // the photo never disagree about whether there are shoes.
+      const shoes = swatches.findIndex(isShoeSwatch);
       if (shoes >= 0) targets.push({ swatch: shoes, piece: "shoes", to: lchToLab(m.L, m.C, m.h) });
     }
   }

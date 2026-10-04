@@ -10,7 +10,7 @@ import { ENGINE_VERSION } from "./engine/rules";
 import { sendEvent } from "./events";
 import { reducedMotion } from "./motion";
 import { SATURATED_CHROMA, nearEdge, shownColour } from "./engine/constants";
-import { type LastRead, clearLastRead, loadLastRead, localDay } from "./rules/handoff";
+import { type LastRead, type Reading, clearLastRead, loadLastRead, localDay, lookOf, wornOf } from "./rules/handoff";
 import {
   HANDLE_HIT,
   PROPORTION_RANGE,
@@ -21,6 +21,7 @@ import {
   type ScaleDef,
   type YoursValues,
   huePoint,
+  keyStep,
   pairText,
   proportionAt,
   proportionNote,
@@ -133,6 +134,14 @@ function setupProportion(): (r: number) => void {
     }
   };
   range.addEventListener("input", () => set(Number(range.value)));
+  // The tape is vertical: the arrows move the break the way they point
+  // (a range control's own keys would move it the other way).
+  range.addEventListener("keydown", (e) => {
+    const step = keyStep(e.key, true);
+    if (step === null) return;
+    e.preventDefault();
+    set(step === "min" ? PROPORTION_RANGE.min : step === "max" ? PROPORTION_RANGE.max : at + step * PROPORTION_RANGE.step);
+  });
   // The handle is the break line itself, from the tape to its knob.
   const grab = ({ x, y }: Point) => Math.abs(y - propY(at)) <= 16 && x >= PROP_GEOM.tapeX - 8 && x <= PROP_GEOM.handleEnd + HANDLE_HIT;
   bindDrag(svg, grab, ({ y }) => set((y - PROP_GEOM.crown) / (PROP_GEOM.sole - PROP_GEOM.crown)));
@@ -211,24 +220,37 @@ const NOT_READ: Partial<Record<RuleId, string>> = {
   legline: "not read as worn: the shoes were not found in the frame.",
 };
 
+/** Why a rule was not read as worn, from the reading's own reasons when it has one. */
+function notRead(rule: RuleId, worn: Reading): string {
+  if (rule === "volume" && worn.bins.fitWhy === "arms") return "not read as worn: an arm or a hand lies over the upper piece on every row.";
+  if (rule === "legline" && worn.bins.shoesWhy === "cut_off") return "not read as worn: the frame cuts the shoes off.";
+  if (rule === "legline" && worn.bins.shoesWhy === "floor") return "not read as worn: the shoes merge with the floor.";
+  return NOT_READ[rule] ?? "not read as worn in this photo.";
+}
+
+/** The "Yours" line under each card: the outfit as worn, and a tried look's value after it. */
 function yoursLines(last: LastRead | null, v: YoursValues | null): void {
+  const worn = last ? wornOf(last) : null;
+  const look = last ? lookOf(last) : null;
   page?.querySelectorAll<HTMLElement>("[data-yours]").forEach((p) => {
     const rule = p.dataset.yours as RuleId;
     const valueEl = p.querySelector<HTMLElement>(".yours-v");
     const stateEl = p.querySelector<HTMLElement>(".state");
     if (!valueEl || !stateEl) return;
     delete p.dataset.state;
-    const line = last?.lines.find((l) => l.rule === rule);
-    if (!last || !line) {
+    const line = worn?.lines.find((l) => l.rule === rule);
+    if (!worn || !line || line.state === "unread") {
       valueEl.hidden = true;
       valueEl.textContent = "";
-      stateEl.textContent = last ? (NOT_READ[rule] ?? "not read as worn in this photo.") : "not read yet";
+      stateEl.textContent = worn ? notRead(rule, worn) : "not read yet";
       return;
     }
     valueEl.hidden = false;
     valueEl.textContent = line.measured;
     let words = line.borderline ? `${STATE_WORDS[line.state]}, borderline` : STATE_WORDS[line.state];
     if (rule === "harmony" && v?.harmony?.fits && v.harmony.hues.length > 1) words += ` · ${v.harmony.name}`;
+    const tried = look?.lines.find((l) => l.rule === rule);
+    if (tried && tried.measured !== line.measured) words += `; the look: ${tried.measured}, ${STATE_WORDS[tried.state]}`;
     stateEl.textContent = words;
     if (line.borderline) p.dataset.state = "borderline";
     else if (line.state === "golden") p.dataset.state = "golden";
@@ -245,13 +267,15 @@ function layer(id: string): SVGGElement | null {
   return page?.querySelector<SVGGElement>(`[data-yours-layer="${id}"]`) ?? null;
 }
 
-function scaleMark(id: string, value: number): void {
+function scaleMark(id: string, value: number, look = false): void {
   const g = layer(id);
   const s: ScaleDef = scaleById(id);
   const y = SCALE_LAYOUT[s.rule]?.find((l) => l.id === id)?.y;
   if (!g || y === undefined) return;
   const x = scaleX(s, value);
-  g.append(svgEl("path", { d: `M${f1(x)} ${y + 10} V${y + 16}`, class: "mark" }), svgEl("text", { x: f1(Math.max(34, Math.min(222, x))), y: y + 31, "text-anchor": "middle", class: "yours" }, `yours ${s.format(value)}${past(offScale(value, s.min, s.max))}`));
+  // As worn: a verdigris tick labelled "yours". A tried look: a dashed chalk tick labelled "look", a line lower.
+  if (look) g.append(svgEl("path", { d: `M${f1(x)} ${y + 8} V${y + 18}`, class: "chalk dashed" }), svgEl("text", { x: f1(Math.max(34, Math.min(222, x))), y: y + 42, "text-anchor": "middle" }, `look ${s.format(value)}${past(offScale(value, s.min, s.max))}`));
+  else g.append(svgEl("path", { d: `M${f1(x)} ${y + 10} V${y + 16}`, class: "mark" }), svgEl("text", { x: f1(Math.max(34, Math.min(222, x))), y: y + 31, "text-anchor": "middle", class: "yours" }, `yours ${s.format(value)}${past(offScale(value, s.min, s.max))}`));
 }
 
 function stripTick(id: string, L: number, cls: string): number {
@@ -264,13 +288,28 @@ function bracket(id: string, a: number, b: number): void {
   layer(`${id}-strip`)?.append(svgEl("path", { d: `M${f1(a)} 152 H${f1(b)} M${f1(a)} 148 V156 M${f1(b)} 148 V156`, class: "mark" }));
 }
 
-function label(rule: RuleId, last: LastRead): void {
+function label(rule: RuleId, worn: Reading): void {
   const t = page?.querySelector(`[data-yours-label="${rule}"]`);
-  const line = last.lines.find((l) => l.rule === rule);
-  if (t && line) t.textContent = `yours: ${line.measured}`;
+  const line = worn.lines.find((l) => l.rule === rule);
+  if (t && line && line.state !== "unread") t.textContent = `yours: ${line.measured}`;
 }
 
-function marks(last: LastRead, v: YoursValues): void {
+/** A tried look's values as a second marker on the proportion tape and the scales, beside the outfit as worn. */
+function lookMarks(look: YoursValues, worn: YoursValues): void {
+  const pg = layer("proportion");
+  if (pg && look.proportion !== null && look.proportion !== worn.proportion) {
+    const y = propY(look.proportion);
+    const yoursY = worn.proportion === null ? null : propY(worn.proportion);
+    const ly = yoursY !== null && Math.abs(yoursY - y) < 14 ? (y > yoursY ? y + 14 : y - 8) : y + 3;
+    pg.append(svgEl("path", { d: `M100 ${f1(y)} H128`, class: "chalk dashed" }), svgEl("text", { x: 96, y: f1(ly), "text-anchor": "end" }, `look ${look.proportion.toFixed(2)}`));
+  }
+  if (look.volumeTop !== null && look.volumeTop !== worn.volumeTop) scaleMark("volume-top", look.volumeTop, true);
+  if (look.volumeLegs !== null && look.volumeLegs !== worn.volumeLegs) scaleMark("volume-legs", look.volumeLegs, true);
+  if (look.legline && look.legline.gap !== worn.legline?.gap) scaleMark("legline", look.legline.gap, true);
+  if (look.value && look.value.range !== worn.value?.range) scaleMark("value", look.value.range, true);
+}
+
+function marks(last: Reading, v: YoursValues): void {
   clearMarks();
   // Proportion: a fixed verdigris tick beside the tape, its label clear of the band names.
   const pg = layer("proportion");
@@ -345,15 +384,19 @@ function setupYours(proportion: (r: number) => void, scales: Map<string, (v: num
   const initial = Array.from(chip.childNodes, (n) => n.cloneNode(true));
 
   const show = (last: LastRead | null) => {
-    const v = last ? yoursValues(last.bins) : null;
+    // The outfit as worn is marked first; a tried look is the second marker.
+    const worn = last ? wornOf(last) : null;
+    const look = last ? lookOf(last) : null;
+    const v = worn ? yoursValues(worn.bins) : null;
     yoursLines(last, v);
-    if (!last || !v) {
+    if (!last || !worn || !v) {
       clearMarks();
       chip.replaceChildren(...initial.map((n) => n.cloneNode(true)));
       delete chip.dataset.read;
       return;
     }
-    marks(last, v);
+    marks(worn, v);
+    if (look) lookMarks(yoursValues(look.bins), v);
     // The handles start at your values.
     if (v.proportion !== null) proportion(v.proportion);
     if (v.volumeTop !== null) scales.get("volume-top")?.(v.volumeTop);
@@ -366,10 +409,10 @@ function setupYours(proportion: (r: number) => void, scales: Map<string, (v: num
     dot.setAttribute("aria-hidden", "true");
     const what = document.createElement("span");
     const source = last.source === "sample" ? "the sample" : "your photo";
-    what.textContent = `Your last read: ${source}${last.look ? ` with ${last.look.charAt(0).toLowerCase()}${last.look.slice(1)}` : ""}`;
+    what.textContent = `Your last read: ${source}, as worn${look ? `; the look ${look.title.charAt(0).toLowerCase()}${look.title.slice(1)} is the dashed mark` : ""}`;
     const meta = document.createElement("span");
     meta.dataset.numeral = "";
-    meta.textContent = `${last.hash.slice(0, 4)} · ${last.day === localDay() ? "today" : last.day}`;
+    meta.textContent = `${worn.hash.slice(0, 4)} · ${last.day === localDay() ? "today" : last.day}`;
     const parts: Node[] = [dot, what, meta];
     if (last.engine !== ENGINE_VERSION) {
       const old = document.createElement("span");

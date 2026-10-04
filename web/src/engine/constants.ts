@@ -2,7 +2,7 @@
 // and the rulebook (rulebook.ts), so what the page states is what the engine
 // does. Changing any of these changes readings: bump ENGINE_VERSION.
 
-/** Below this OKLCH chroma a colour reads as a neutral. Dark colours carry little chroma, so it is low. */
+/** At or below this OKLCH chroma a colour reads as a neutral. Dark colours carry little chroma, so it is low. */
 export const NEUTRAL_CHROMA = 0.02;
 
 /**
@@ -16,7 +16,12 @@ export function neutralChromaAt(L: number): number {
   return NEUTRAL_CHROMA + 0.025 * Math.min(1, Math.max(0, (L - 0.5) / 0.45));
 }
 
-export const isNeutral = (c: { L: number; C: number }): boolean => c.C < neutralChromaAt(c.L);
+/**
+ * At or below the neutral line (engine 0.7.0): rules read chroma binned to
+ * 0.01, and a grey at 0.018 binned to 0.02 sat exactly on the line and read
+ * as a hue (Mara, 2026-10-04: "one hue, 0°" from a light-cast grey).
+ */
+export const isNeutral = (c: { L: number; C: number }): boolean => c.C <= neutralChromaAt(c.L) + 1e-9;
 
 /**
  * The colour to draw for a swatch: a neutral is drawn with no chroma, so a
@@ -28,10 +33,15 @@ export const shownColour = (c: { L: number; C: number; h: number }): { L: number
 /** From this OKLCH chroma a colour reads as saturated. */
 export const SATURATED_CHROMA = 0.11;
 
-/** Upper piece fabric width over shoulder distance: fitted below [0], loose above [1]. First estimates (R1 calibrates). */
+/** Upper piece fabric width over shoulder distance: fitted below [0], loose above [1]. Set by hand (R1 calibrates). */
 export const FIT_TOP: readonly [number, number] = [1.15, 1.4];
-/** Both legs' fabric at the knee over shoulder distance: narrow below [0], wide above [1]. First estimates (R1 calibrates). */
-export const FIT_LEGS: readonly [number, number] = [0.6, 0.85];
+/**
+ * Each leg's fabric at the knee over shoulder distance: narrow below [0],
+ * wide above [1]. Set by hand (R1 calibrates). Engine 0.7.0 reads each leg
+ * on its own: the 0.6.0 edges were for both legs summed, so skinny trousers
+ * (0.42 a leg) read as wide (Mara, 2026-10-04).
+ */
+export const FIT_LEGS: readonly [number, number] = [0.45, 0.6];
 
 /** Lightness difference between lower piece and shoes under which the leg line reads continuous. */
 export const LEG_LINE_EDGE = 0.12;
