@@ -56,16 +56,21 @@ async function run(name, viewport) {
   const looks = await page.$$(".look .btn");
   note(`${name}: looks offered: ${looks.length}`);
   for (const t of await page.$$eval(".look-title", (ts) => ts.map((t) => t.textContent))) note(`${name}:   look: ${t}`);
-  if (looks.length) {
-    await looks[0].click();
+  // Try each look in turn: screenshot the first, and the wipe on the first
+  // look that changes the photo.
+  for (let i = 0; i < looks.length; i++) {
+    await looks[i].click();
     await page.waitForTimeout(1600);
-    await shot("3-try");
+    if (i === 0) await shot("3-try");
     if (await page.isVisible("#wipe")) {
       await page.fill("#wipe", "25");
       await page.dispatchEvent("#wipe", "input");
       await page.waitForTimeout(300);
       await shot("4-wipe");
-    } else note(`${name}: the first look has no colour move, so no wipe`);
+      note(`${name}: wipe shown on look ${i + 1}`);
+      break;
+    }
+    if (i === looks.length - 1) note(`${name}: no look changes the photo, so no wipe`);
   }
 
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);

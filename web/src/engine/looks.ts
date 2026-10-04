@@ -35,6 +35,14 @@ export interface Look {
 
 const NEUTRAL_CHROMA = 0.02;
 const SATURATED = 0.11;
+/** From this chroma a lead colour's hue is clear enough for its complement to mean something. */
+const CLEAR_HUE = 0.05;
+/** Accents a tailor reaches for when the outfit has no clear lead hue: oxblood, cognac, navy. */
+const CLASSIC_ACCENTS = [
+  { L: 0.36, C: 0.11, h: 25 },
+  { L: 0.5, C: 0.1, h: 60 },
+  { L: 0.3, C: 0.07, h: 255 },
+];
 const fix = (v: number, d = 2) => Number(v.toFixed(d));
 const wrap = (h: number) => ((Math.round(h / 5) * 5) % 360 + 360) % 360;
 
@@ -171,12 +179,16 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${colourLabel(o)}`, detail: "One colour at full strength, the other stepped down." });
   }
 
-  // Accent: a tenth of the area in a complement of the lead hue, or a warm
-  // accent when the outfit is all neutrals.
+  // Accent: a tenth of the area. The complement of the lead hue when the lead
+  // is a real colour; when it is near-neutral (a cream, a stone), the
+  // complement of a barely-there hue means little, so the tailor's classic
+  // accents are offered instead (oxblood, cognac, navy). The rulebook ranks
+  // them like any other move.
   if (state("shares") !== "golden") {
-    const h = lead ? wrap(lead.h + 180) : 50;
-    const accent = { L: 0.5, C: 0.12, h };
-    moves.push({ kind: "accent", ...accent, title: `Shoes in ${colourLabel(accent)}`, detail: "An accent of about a tenth gives the eye a place to rest." });
+    const accents = lead && lead.C >= CLEAR_HUE ? [{ L: 0.5, C: 0.12, h: wrap(lead.h + 180) }] : CLASSIC_ACCENTS;
+    for (const accent of accents) {
+      moves.push({ kind: "accent", ...accent, title: `Shoes in ${colourLabel(accent)}`, detail: "An accent of about a tenth gives the eye a place to rest." });
+    }
   }
   return moves;
 }
