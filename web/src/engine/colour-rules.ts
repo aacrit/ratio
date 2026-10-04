@@ -57,7 +57,7 @@ export const TEMPLATES: Template[] = [
   { id: "I", name: "complementary", gloss: "two hues across the wheel", sectors: [[0, 18], [180, 18]] },
   { id: "V", name: "analogous", gloss: "neighbouring hues", sectors: [[0, 93.6]] },
   { id: "L", name: "right-angle", gloss: "a hue and one 90° away", sectors: [[0, 18], [90, 79.2]] },
-  { id: "Y", name: "analogous with an accent", gloss: "neighbouring hues and one accent from across the wheel", sectors: [[0, 93.6], [180, 18]] },
+  { id: "Y", name: "analogous with a complementary accent", gloss: "neighbouring hues and one accent from across the wheel", sectors: [[0, 93.6], [180, 18]] },
   { id: "X", name: "double complementary", gloss: "two neighbourhoods across the wheel", sectors: [[0, 93.6], [180, 93.6]] },
   { id: "T", name: "half-wheel", gloss: "all warm or all cool", sectors: [[0, 180]] },
 ];
