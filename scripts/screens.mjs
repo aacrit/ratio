@@ -31,7 +31,12 @@ async function run(name, viewport) {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
-  page.on("console", (m) => m.type() === "error" && !/\/e\b|TensorFlow Lite|XNNPACK/.test(m.text()) && errors.push(m.text()));
+  // The preview server has no Worker, so the count endpoints (/e, /feedback)
+  // answer 404 here; any other failed request is a finding.
+  page.on("response", (r) => {
+    if (r.status() >= 400 && !/^\/(e|feedback)$/.test(new URL(r.url()).pathname)) errors.push(`${r.status()} ${r.url()}`);
+  });
+  page.on("console", (m) => m.type() === "error" && !/Failed to load resource|TensorFlow Lite|XNNPACK/.test(m.text()) && errors.push(m.text()));
   const shot = async (step) => {
     await page.screenshot({ path: path.join(out, `${name}-${step}.png`), fullPage: true });
     note(`${name}: ${step}`);

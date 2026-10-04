@@ -31,6 +31,8 @@ export { NEUTRAL_CHROMA, SATURATED_CHROMA };
 const isNeutral = (s: BinnedSwatch) => s.C < NEUTRAL_CHROMA;
 const deg = (h: number) => `${Math.round(h)}°`;
 const pct = (v: number) => v.toFixed(2);
+/** Each hue once, in palette order: two swatches of one hue at different lightness are one hue here. */
+const hueList = (cs: BinnedSwatch[]) => [...new Set(cs.map((c) => deg(c.h)))].join(" ");
 
 /** Where a swatch sits, in words a person uses. */
 function place(s: BinnedSwatch, waist: number): string {
@@ -94,7 +96,7 @@ export function harmonyLine(palette: BinnedSwatch[], waist: number): AdviceLine 
   for (const t of TEMPLATES) {
     const fit = fitTemplate(chromatic, t);
     if (fit.cost <= FIT_TOLERANCE) {
-      return { ...base, borderline: nearFit(fit.cost), measured: `${t.id} · ${chromatic.map((c) => deg(c.h)).join(" ")}`, state: "golden", text: `The hues fit the ${t.name} template (${t.gloss}), a classic harmony. Keep any new piece inside it, or neutral.` };
+      return { ...base, borderline: nearFit(fit.cost), measured: `${t.id} · ${hueList(chromatic)}`, state: "golden", text: `The hues fit the ${t.name} template (${t.gloss}), a classic harmony. Keep any new piece inside it, or neutral.` };
     }
   }
   // Nothing fits: find the colour whose removal lets the rest fit best, and name it.
@@ -108,7 +110,7 @@ export function harmonyLine(palette: BinnedSwatch[], waist: number): AdviceLine 
   return {
     ...base,
     borderline: nearFit(closest),
-    measured: chromatic.map((c) => deg(c.h)).join(" "),
+    measured: hueList(chromatic),
     state: "advice",
     text: `The hues fit no classic harmony template. The ${place(worst, waist)} at ${deg(worst.h)} sits outside the scheme the others share; a neutral there, or a hue beside one of the others, would settle it.`,
   };

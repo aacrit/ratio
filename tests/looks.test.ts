@@ -9,6 +9,7 @@ import { applyMove, candidateMoves, normalise, pieces, scoreOf, suggestLooks } f
 import { colourName } from "../web/src/engine/names";
 import type { Swatch } from "../web/src/engine/palette";
 import { type Bins, JUDGING_WORDS, readBins } from "../web/src/engine/rules";
+import { CATEGORY } from "../web/src/engine/measure";
 import { recolour } from "../web/src/tryon/recolour";
 
 const sw = (L: number, C: number, h: number, share: number, y: number): BinnedSwatch => ({ L, C, h, share, y });
@@ -105,15 +106,30 @@ describe("try it: recolour on the photo", () => {
     // Two pixels of one garment (a lit fold and a shadow) and one background pixel.
     const data = new Uint8ClampedArray([180, 90, 60, 255, 120, 60, 40, 255, 10, 200, 10, 255]);
     const pixels = { width: 3, height: 1, data };
-    const owner = Int8Array.from([0, 0, -1]);
+    // The first two pixels are cloth, the third is background.
+    const mask = { width: 3, height: 1, data: Uint8Array.from([CATEGORY.clothes, CATEGORY.clothes, CATEGORY.background]) };
     const lab = srgbToOklab(150, 75, 50);
     const swatches: Swatch[] = [{ lab, share: 1, y: 0.6 }];
-    const out = recolour(pixels, owner, swatches, [{ kind: "recolour", swatch: 0, L: 0.3, C: 0.07, h: 255, title: "", detail: "" }]);
+    const bands = new Map([[0, [0, 0] as const]]);
+    const out = recolour(pixels, mask, { left: 0, right: 2 }, bands, swatches, [{ kind: "recolour", swatch: 0, L: 0.3, C: 0.07, h: 255, title: "", detail: "" }]);
     expect(Array.from(out.data.slice(8))).toEqual([10, 200, 10, 255]);
     const lit = srgbToOklab(out.data[0], out.data[1], out.data[2]);
     const shade = srgbToOklab(out.data[4], out.data[5], out.data[6]);
     const litBefore = srgbToOklab(180, 90, 60), shadeBefore = srgbToOklab(120, 60, 40);
     expect(lit.L - shade.L).toBeCloseTo(litBefore.L - shadeBefore.L, 1);
     expect(Math.atan2(lit.b, lit.a)).toBeLessThan(0);
+  });
+
+  it("recolours only the piece's own band: a white waistcoat stays white when the white breeches change", () => {
+    // Row 0: the waistcoat (upper piece). Row 1: the breeches (lower piece). Same cloth colour.
+    const white = [235, 232, 222, 255];
+    const pixels = { width: 1, height: 2, data: new Uint8ClampedArray([...white, ...white]) };
+    const mask = { width: 1, height: 2, data: Uint8Array.from([CATEGORY.clothes, CATEGORY.clothes]) };
+    const lab = srgbToOklab(235, 232, 222);
+    const swatches: Swatch[] = [{ lab, share: 1, y: 0.7 }];
+    const bands = new Map([[0, [1, 1] as const]]);
+    const out = recolour(pixels, mask, { left: 0, right: 0 }, bands, swatches, [{ kind: "recolour", swatch: 0, L: 0.45, C: 0.06, h: 250, title: "", detail: "" }]);
+    expect(Array.from(out.data.slice(0, 4))).toEqual(white);
+    expect(Array.from(out.data.slice(4, 8))).not.toEqual(white);
   });
 });

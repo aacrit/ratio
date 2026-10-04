@@ -131,8 +131,10 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
   // The palette, each colour as wide as its share.
   y = Math.max(y + 12, top + maxH - 84);
   let px = x;
+  // Binned shares can sum a little over or under 1; the strip always spans the column.
+  const total = c.bins.palette.reduce((t, s) => t + s.share, 0) || 1;
   for (const s of c.bins.palette) {
-    const w = rw * s.share;
+    const w = (rw * s.share) / total;
     ctx.fillStyle = `oklch(${s.L} ${s.C} ${s.h})`;
     ctx.fillRect(px, y, w, 22);
     px += w;

@@ -6,14 +6,13 @@
 // "As worn" puts everything back. Nothing leaves the tab.
 
 import { readingHash } from "../engine/hash";
-import { type Look, suggestLooks } from "../engine/looks";
+import { type Look, pieces, suggestLooks } from "../engine/looks";
 import { colourLabel } from "../engine/names";
-import { assignPixels } from "../engine/palette";
 import { ENGINE_VERSION, type LineState } from "../engine/rules";
 import type { Figure } from "../overlay";
 import type { Read } from "../read";
 import { chalkFigure } from "../tryon/figure";
-import { recolour, showsOnPhoto } from "../tryon/recolour";
+import { type Bands, recolour, showsOnPhoto } from "../tryon/recolour";
 import { STATE_WORDS, paletteStrip, renderRows } from "./rows";
 
 export interface LooksDeps {
@@ -69,9 +68,14 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   }
   if (intro) intro.textContent = `${looks.length === 1 ? "One look" : `${looks.length} looks`} the rules prefer, each judged by the same rulebook that read your outfit. Try one to see it on your photo.`;
 
-  // Which swatch every pixel belongs to: computed once, only when needed.
-  let owner: Int8Array | null = null;
-  const owners = () => (owner ??= assignPixels(read.pixels, read.mask, read.measure, read.palette));
+  // Where each piece may be found on the figure: the upper piece from the
+  // crown to the break, the lower from the break to the ankle, the shoes in
+  // the last few percent; any other swatch anywhere on the figure.
+  const m = read.measure;
+  const h = m.bottom - m.top;
+  const brk = m.breakRow ?? m.waistRow;
+  const role = pieces(read.reading.bins);
+  const bands: Bands = new Map(read.palette.map((_, i) => [i, i === role.upper ? [m.top, brk] : i === role.lower ? [brk, m.bottom - h * 0.04] : i === role.shoes ? [m.bottom - h * 0.08, m.bottom] : [m.top, m.bottom]] as const));
   const before = new Map(read.reading.lines.map((l) => [l.rule, l.state] as const));
   let current: string | null = null;
   const buttons = new Map<string, HTMLButtonElement>();
@@ -106,7 +110,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     // Colour moves show on the photo behind the wipe; a look of proportion
     // moves alone leaves the photo as worn and shows on the chalk figure.
     const onPhoto = showsOnPhoto(look.moves, read.palette);
-    d.figure.setLook(onPhoto ? recolour(read.pixels, owners(), read.palette, look.moves) : null);
+    d.figure.setLook(onPhoto ? recolour(read.pixels, read.mask, m, bands, read.palette, look.moves) : null);
     d.wipe.hidden = !onPhoto;
     // Over the photo the pointer becomes a grip while a look can be compared.
     document.body.dataset.compare = onPhoto ? "on" : "off";
@@ -116,6 +120,10 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     const belt = look.moves.some((m) => m.kind === "break" && m.title.startsWith("Belt"));
     d.trial.replaceChildren(chalkFigure(look.bins, { belt, label: `The chalk figure dressed as the look: ${look.title}` }));
     d.trying.hidden = false;
+    // On a phone the looks sit far below the photo: bring the photo into view.
+    const photo = d.figure.element;
+    const r = photo.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight * 0.5) photo.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
     const title = d.trying.querySelector<HTMLElement>(".trying-title");
     if (title) title.textContent = look.title;
     renderRows(d.rows, look.lines, look.bins, { before });

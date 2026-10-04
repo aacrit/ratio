@@ -63,11 +63,12 @@ export class Figure {
   private tuckAnim: { done: Promise<void>; cancel: () => void } | null = null;
 
   constructor(
-    canvas: HTMLCanvasElement,
+    readonly element: HTMLCanvasElement,
     private pixels: Pixels,
     private m: OutfitMeasure,
     private reading: OutfitReading,
   ) {
+    const canvas = element;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = pixels.width * dpr;
     canvas.height = pixels.height * dpr;

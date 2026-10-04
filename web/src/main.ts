@@ -59,7 +59,8 @@ function setupRead(): void {
   const save = $<HTMLButtonElement>("save-card");
   const sample = $<HTMLButtonElement>("try-sample");
   const camera = $<HTMLInputElement>("camera");
-  if (!wipe || !credit || !save || !sample || !camera) return;
+  const dropAlt = document.querySelector<HTMLElement>(".drop-alt");
+  if (!wipe || !credit || !save || !sample || !camera || !dropAlt) return;
   if (!input || !drop || !status || !loading || !loadFill || !loadLabel || !result || !canvas || !verdict || !rows || !hash || !again || !paletteSlot || !looksSection || !looksList || !trying || !trial) return;
 
   const mb = (n: number) => (n / 1e6).toFixed(1);
@@ -108,6 +109,7 @@ function setupRead(): void {
       }
       status.textContent = "";
       drop.hidden = true;
+      dropAlt.hidden = true;
       result.hidden = false;
       document.body.dataset.state = "read";
       const figure = new Figure(canvas, read.pixels, read.measure, read.reading);
@@ -217,6 +219,7 @@ function setupRead(): void {
     result.hidden = true;
     looksSection.hidden = true;
     drop.hidden = false;
+    dropAlt.hidden = false;
     document.body.dataset.state = "idle";
     input.click();
   });
