@@ -127,6 +127,23 @@ body.app {
   }
 }
 
+@media (max-width: 479px) {
+  .bar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .tabs {
+    margin-left: 2px;
+  }
+  .tab {
+    padding: 0 8px;
+    font-size: 0.9rem;
+  }
+  .bar-actions .btn.small {
+    padding: 0 10px;
+  }
+}
+
 @media (max-width: 419px) {
   .brand-name {
     display: none;
@@ -423,7 +440,7 @@ summary:focus-visible {
 }
 
 .stage-foot {
-  padding: 6px var(--gutter) 12px;
+  padding: 6px var(--gutter) 32px;
   display: grid;
   gap: 6px;
   align-content: end;
