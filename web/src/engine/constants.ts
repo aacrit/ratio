@@ -39,3 +39,40 @@ export const SHARE_EDGES = { column: 0.85, compete: 0.12, near6030: 0.2 } as con
 export function nearEdge(value: number, edges: readonly number[], bin: number): boolean {
   return edges.some((e) => Math.abs(value - e) <= bin / 2 + 1e-9);
 }
+
+/** Colour shares are binned in units of this size. */
+export const SHARE_BIN = 0.05;
+
+/**
+ * Shares binned to SHARE_BIN so they always sum to exactly 1.00: largest
+ * remainder (Hamilton) apportionment of 20 units. Every colour keeps at
+ * least one unit (it passed the palette's speck filter, so it is shown);
+ * units go to the largest remainders first and are taken back from the
+ * most over-served; ties go to the earlier colour. Deterministic.
+ */
+export function binShares(shares: readonly number[]): number[] {
+  const units = Math.round(1 / SHARE_BIN);
+  const n = shares.length;
+  if (!n) return [];
+  const total = shares.reduce((t, s) => t + s, 0);
+  const quota = shares.map((s) => (total > 0 ? (s / total) * units : units / n));
+  const got = quota.map((q) => Math.max(n <= units ? 1 : 0, Math.floor(q + 1e-9)));
+  let left = units - got.reduce((t, u) => t + u, 0);
+  while (left > 0) {
+    let best = 0;
+    for (let i = 1; i < n; i++) if (quota[i] - got[i] > quota[best] - got[best] + 1e-9) best = i;
+    got[best]++;
+    left--;
+  }
+  while (left < 0) {
+    let best = -1;
+    for (let i = 0; i < n; i++) {
+      if (got[i] <= 1) continue;
+      if (best < 0 || got[i] - quota[i] > got[best] - quota[best] + 1e-9) best = i;
+    }
+    if (best < 0) break;
+    got[best]--;
+    left++;
+  }
+  return got.map((u) => Number((u * SHARE_BIN).toFixed(2)));
+}

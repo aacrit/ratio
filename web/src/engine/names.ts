@@ -6,29 +6,33 @@
 
 import { isNeutral } from "./constants";
 
+/** Hue families, for telling two suggestions apart: forest green, olive and bottle green are one idea. */
+export type Family = "red" | "earth" | "green" | "blue" | "violet" | "neutral";
+
 interface Band {
   from: number;
   to: number;
   dark: string;
   mid: string;
   light: string;
+  family: Exclude<Family, "neutral">;
 }
 
 // Hue bands in OKLCH degrees, chosen against common garment colours.
 const BANDS: Band[] = [
-  { from: 0, to: 20, dark: "burgundy", mid: "rose red", light: "pink" },
-  { from: 20, to: 45, dark: "oxblood", mid: "red", light: "coral" },
-  { from: 45, to: 70, dark: "rust", mid: "terracotta", light: "peach" },
-  { from: 70, to: 95, dark: "brown", mid: "camel", light: "sand" },
-  { from: 95, to: 115, dark: "olive brown", mid: "mustard", light: "cream" },
-  { from: 115, to: 140, dark: "olive", mid: "khaki", light: "pale yellow" },
-  { from: 140, to: 165, dark: "forest green", mid: "green", light: "mint" },
-  { from: 165, to: 200, dark: "bottle green", mid: "teal", light: "sea green" },
-  { from: 200, to: 230, dark: "petrol", mid: "steel blue", light: "sky blue" },
-  { from: 230, to: 265, dark: "navy", mid: "blue", light: "powder blue" },
-  { from: 265, to: 300, dark: "indigo", mid: "violet", light: "lavender" },
-  { from: 300, to: 335, dark: "aubergine", mid: "plum", light: "lilac" },
-  { from: 335, to: 360, dark: "wine", mid: "magenta", light: "blush" },
+  { from: 0, to: 20, dark: "burgundy", mid: "rose red", light: "pink", family: "red" },
+  { from: 20, to: 45, dark: "oxblood", mid: "red", light: "coral", family: "red" },
+  { from: 45, to: 70, dark: "rust", mid: "terracotta", light: "peach", family: "earth" },
+  { from: 70, to: 95, dark: "brown", mid: "camel", light: "sand", family: "earth" },
+  { from: 95, to: 115, dark: "olive brown", mid: "mustard", light: "cream", family: "earth" },
+  { from: 115, to: 140, dark: "olive", mid: "khaki", light: "pale yellow", family: "green" },
+  { from: 140, to: 165, dark: "forest green", mid: "green", light: "mint", family: "green" },
+  { from: 165, to: 200, dark: "bottle green", mid: "teal", light: "sea green", family: "green" },
+  { from: 200, to: 230, dark: "petrol", mid: "steel blue", light: "sky blue", family: "blue" },
+  { from: 230, to: 265, dark: "navy", mid: "blue", light: "powder blue", family: "blue" },
+  { from: 265, to: 300, dark: "indigo", mid: "violet", light: "lavender", family: "violet" },
+  { from: 300, to: 335, dark: "aubergine", mid: "plum", light: "lilac", family: "violet" },
+  { from: 335, to: 360, dark: "wine", mid: "magenta", light: "blush", family: "red" },
 ];
 
 export function colourName(L: number, C: number, h: number): string {
@@ -45,8 +49,59 @@ export function colourName(L: number, C: number, h: number): string {
   return L < 0.38 ? band.dark : L > 0.72 ? band.light : band.mid;
 }
 
-/** "navy (255°)" or "black". */
-export function colourLabel(s: { L: number; C: number; h: number }): string {
-  const name = colourName(s.L, s.C, s.h);
+/** The hue family of a colour: one of five bands of the wheel, or neutral. */
+export function familyOf(L: number, C: number, h: number): Family {
+  if (isNeutral({ L, C })) return "neutral";
+  return (BANDS.find((b) => h >= b.from && h < b.to) ?? BANDS[0]).family;
+}
+
+/** "navy (255°)" or "black". A swatch merged by name carries its name. */
+export function colourLabel(s: { L: number; C: number; h: number; name?: string }): string {
+  const name = s.name ?? colourName(s.L, s.C, s.h);
   return isNeutral(s) ? name : `${name} (${Math.round(s.h)}°)`;
+}
+
+const NEUTRAL_NAMES = new Set(["black", "charcoal", "grey", "stone", "white"]);
+
+interface Placed {
+  L: number;
+  C: number;
+  h: number;
+  share: number;
+  y: number;
+}
+
+/**
+ * One name, one entry: the palette as people read it. Swatches that share a
+ * plain name (a grey in light and a grey in shadow) become one entry with
+ * their summed share, the larger one's hue, and the share-weighted lightness
+ * and place (chroma is chosen so the entry keeps its name). Largest share
+ * first; ties keep the palette's order. The colour rules read this view, and every list of
+ * colours on screen and on the card shows it, so the numbers agree.
+ */
+export function byName<T extends Placed>(palette: readonly T[]): (Placed & { name: string })[] {
+  const out: (Placed & { name: string; w: number })[] = [];
+  for (const s of palette) {
+    const name = colourName(s.L, s.C, s.h);
+    const into = out.find((e) => e.name === name);
+    if (!into) {
+      out.push({ L: s.L, C: s.C, h: s.h, share: s.share, y: s.y, name, w: s.share });
+      continue;
+    }
+    const total = into.share + s.share;
+    if (total > 0) {
+      into.L = (into.L * into.share + s.L * s.share) / total;
+      into.y = (into.y * into.share + s.y * s.share) / total;
+    }
+    if (s.share > into.w) { into.h = s.h; into.w = s.share; }
+    // A neutral stays neutral and a colour stays a colour at the merged
+    // lightness: the lower chroma for a neutral, the higher for a colour.
+    into.C = NEUTRAL_NAMES.has(name) ? Math.min(into.C, s.C) : Math.max(into.C, s.C);
+    into.share = total;
+  }
+  const fix = (v: number) => Number(v.toFixed(2));
+  return out
+    .map(({ w: _w, ...e }, i) => ({ e: { ...e, L: fix(e.L), share: fix(e.share), y: fix(e.y) }, i }))
+    .sort((p, q) => q.e.share - p.e.share || p.i - q.i)
+    .map((x) => x.e);
 }

@@ -11,6 +11,7 @@
 // run in the read worker (reader.ts); this thread only draws.
 
 import { Velocity, reducedMotion } from "./motion";
+import { othersCopy } from "./engine/person";
 import { Figure, showPhoto } from "./overlay";
 import type { Pixels } from "./engine/resample";
 import { Reader } from "./reader";
@@ -179,6 +180,13 @@ function setupRead(): void {
       paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
       credit.hidden = sourceCredit === null;
       credit.textContent = sourceCredit ?? "";
+      // Someone else in the photo: say once, plainly, which person was read.
+      const othersNote = $<HTMLElement>("others-note");
+      const othersLine = othersCopy(read);
+      if (othersNote) {
+        othersNote.hidden = othersLine === null;
+        othersNote.textContent = othersLine ?? "";
+      }
 
       // The tuck button belongs to the proportion row of the reading as worn.
       const asWornExtras = () => {

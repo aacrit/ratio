@@ -49,8 +49,68 @@ export function colourTargets(moves: Move[], swatches: Swatch[]): Target[] {
   return targets;
 }
 
-/** True when a look changes anything that can honestly be shown on the photo. */
+/** True when a look changes anything that can be shown on the photo at all (see honesty for whether it should be). */
 export const showsOnPhoto = (moves: Move[], swatches: Swatch[]) => colourTargets(moves, swatches).length > 0;
+
+/**
+ * When a recolour is honest enough to show on the photo. Each colour target
+ * is measured at reading size over its piece's band:
+ * - inside: of the pixels the recolour's colour test picks out in the whole
+ *   photo's mask, the share on the read person. Below `inside`, the cloth it
+ *   would paint is mostly someone else's (Noor, 2026-10-04).
+ * - cover: of the read person's garment pixels in the piece's band, the
+ *   share the recolour would move. Below `cover`, the change would show as a
+ *   patch on a garment that stays its own colour. (Not for "other": an accent
+ *   anywhere on the figure is small by nature.)
+ * - area: the moved pixels against all the person's garment pixels in the
+ *   box. Below `area`, the change is too small to see.
+ */
+export const HONEST = { inside: 0.6, cover: 0.25, area: 0.01 } as const;
+
+export interface Honesty {
+  honest: boolean;
+  targets: { piece: Piece; inside: number; cover: number; area: number }[];
+}
+
+const isGarment = (c: number) => c === CATEGORY.clothes || c === CATEGORY.other;
+/** The colour test both the recolour and its honesty use: same cloth, at any reasonable lightness. */
+const sameCloth = (px: Lab, from: Lab) => Math.hypot(px.a - from.a, px.b - from.b) <= SAME_CLOTH.ab && Math.abs(px.L - from.L) <= SAME_CLOTH.L;
+
+/**
+ * Whether a look's colour moves can be shown honestly on this photo. At
+ * reading size: `full` is the segmenter's mask of everyone, `person` the read
+ * person's (engine/person.ts); box and bands in reading-size pixels.
+ */
+export function honesty(pixels: Pixels, full: Mask, person: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[]): Honesty {
+  const W = pixels.width;
+  const pad = (box.right - box.left) * 0.35;
+  const x0 = Math.max(0, Math.floor(box.left - pad)), x1 = Math.min(W - 1, Math.ceil(box.right + pad));
+  let garment = 0;
+  for (let y = 0; y < pixels.height; y++) for (let x = x0; x <= x1; x++) if (isGarment(person.data[y * W + x])) garment++;
+  const targets = colourTargets(moves, swatches).map(({ swatch, piece }) => {
+    const from = swatches[swatch].lab;
+    const band = bands[piece];
+    const y0 = Math.max(0, Math.floor(band[0])), y1 = Math.min(pixels.height - 1, Math.ceil(band[1]));
+    let all = 0, own = 0, piecePx = 0;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const j = y * W + x;
+        const mine = isGarment(person.data[j]);
+        if (mine) piecePx++;
+        if (!isGarment(full.data[j]) && !mine) continue;
+        const i = j * 4;
+        if (!sameCloth(srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]), from)) continue;
+        all++;
+        if (mine) own++;
+      }
+    return { piece, inside: all ? own / all : 0, cover: piecePx ? own / piecePx : 0, area: garment ? own / garment : 0 };
+  });
+  const honest = targets.length > 0 && targets.every((t) => t.inside >= HONEST.inside && t.area >= HONEST.area && (t.piece === "other" || t.cover >= HONEST.cover));
+  return { honest, targets };
+}
+
+/** What the trying panel says when a look's colour change is shown on the chalk figure only. */
+export const NOT_ON_PHOTO = "This change can't be shown honestly on this photo; the chalk figure shows it.";
 
 /** The box around the figure that pixels are taken from, as the palette was measured. */
 export interface Box {
@@ -59,7 +119,8 @@ export interface Box {
 }
 
 /**
- * A recoloured copy of the photo. Each moved pixel keeps its lightness offset
+ * A recoloured copy of the photo. The mask is the read person's only
+ * (engine/person.ts), so no one else's pixels can change. Each moved pixel keeps its lightness offset
  * in full and its chroma offset scaled to the target's chroma, so a dark fold
  * stays a dark fold in the new colour.
  */
@@ -87,12 +148,11 @@ export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swa
     for (let y = y0; y <= y1; y++) {
       const my = Math.min(mh - 1, Math.floor(y * sy)) * mw;
       for (let x = x0; x <= x1; x++) {
-        const cat = mask.data[my + Math.min(mw - 1, Math.floor(x * sx))];
-        if (cat !== CATEGORY.clothes && cat !== CATEGORY.other) continue;
+        if (!isGarment(mask.data[my + Math.min(mw - 1, Math.floor(x * sx))])) continue;
         const i = (y * W + x) * 4;
         // Read the original photo, never a pixel another move already changed.
         const px = srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
-        if (Math.hypot(px.a - from.a, px.b - from.b) > SAME_CLOTH.ab || Math.abs(px.L - from.L) > SAME_CLOTH.L) continue;
+        if (!sameCloth(px, from)) continue;
         const [r, g, b] = oklabToSrgb({
           L: Math.max(0, Math.min(1, to.L + (px.L - from.L))),
           a: to.a + (px.a - from.a) * k2,

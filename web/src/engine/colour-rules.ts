@@ -56,7 +56,7 @@ export const TEMPLATES: Template[] = [
   { id: "i", name: "monochromatic", gloss: "one hue in several values", sectors: [[0, 18]] },
   { id: "I", name: "complementary", gloss: "two hues across the wheel", sectors: [[0, 18], [180, 18]] },
   { id: "V", name: "analogous", gloss: "neighbouring hues", sectors: [[0, 93.6]] },
-  { id: "L", name: "right-angle", gloss: "a hue and one 90° away", sectors: [[0, 18], [90, 79.2]] },
+  { id: "L", name: "right-angle", gloss: "a hue and one at a right angle to it", sectors: [[0, 18], [90, 79.2]] },
   { id: "Y", name: "analogous with a complementary accent", gloss: "neighbouring hues and one accent from across the wheel", sectors: [[0, 93.6], [180, 18]] },
   { id: "X", name: "double complementary", gloss: "two neighbourhoods across the wheel", sectors: [[0, 93.6], [180, 93.6]] },
   { id: "T", name: "half-wheel", gloss: "all warm or all cool", sectors: [[0, 180]] },
@@ -184,7 +184,7 @@ export function chromaLine(palette: BinnedSwatch[], waist: number): AdviceLine {
     for (let j = i + 1; j < chromatic.length; j++) {
       const p = chromatic[i], q = chromatic[j];
       if (p.C >= 0.1 && q.C >= 0.1 && hueGap(p.h, q.h) >= 150 && Math.abs(p.L - q.L) < 0.08) {
-        return { ...base, state: "advice", text: `The ${place(p, waist)} and the ${place(q, waist)} are near-complements at almost the same lightness (${pct(p.L)} and ${pct(q.L)}). Josef Albers showed such pairs vibrate where they meet. Separate them by value, one clearly lighter, or set a neutral between them. The palette is ${temp}.` };
+        return { ...base, state: "advice", text: `The ${place(p, waist)} and the ${place(q, waist)} are near-complements at almost the same lightness (the value row shows each). Josef Albers showed such pairs vibrate where they meet. Separate them by value, one clearly lighter, or set a neutral between them. The palette is ${temp}.` };
       }
     }
   if (loud.length >= 2 && Math.max(...loud.map((p) => Math.max(...loud.map((q) => hueGap(p.h, q.h))))) > 60) {

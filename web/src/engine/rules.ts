@@ -10,7 +10,8 @@
 
 import { type Lab, labToLch } from "./color";
 import { type BinnedSwatch, NEUTRAL_CHROMA, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
-import { isNeutral } from "./constants";
+import { binShares, isNeutral } from "./constants";
+import { byName } from "./names";
 import { pieces } from "./pieces";
 import type { RuleId } from "./rulebook";
 import { legLine, volumeLine } from "./shape-rules";
@@ -19,7 +20,7 @@ import type { Swatch } from "./palette";
 
 export { NEUTRAL_CHROMA };
 
-export const ENGINE_VERSION = "ratio-engine/0.5.0";
+export const ENGINE_VERSION = "ratio-engine/0.6.0";
 
 export const GOLDEN = 0.382;
 export const PROPORTION_BIN = 0.02;
@@ -83,7 +84,11 @@ const binColour = (c: Lab) => {
   return { L: fix(round(L, 0.02)), C: fix(round(C, 0.01)), h: isNeutral({ L, C }) ? 0 : fix(round(h, 5) % 360, 0) };
 };
 
-const binSwatch = (s: Swatch): BinnedSwatch => ({ ...binColour(s.lab), share: fix(round(s.share, 0.05)), y: fix(round(s.y, 0.05)) });
+/** The palette in bins; shares by largest remainder, so they sum to exactly 1.00. */
+export function binPalette(palette: Swatch[]): BinnedSwatch[] {
+  const shares = binShares(palette.map((s) => s.share));
+  return palette.map((s, i) => ({ ...binColour(s.lab), share: shares[i], y: fix(round(s.y, 0.05)) }));
+}
 
 export function binsOf(m: OutfitMeasure, palette: Swatch[]): Bins {
   const height = m.bottom - m.top;
@@ -92,7 +97,7 @@ export function binsOf(m: OutfitMeasure, palette: Swatch[]): Bins {
     waist: fix(round((m.waistRow - m.top) / height, PROPORTION_BIN)),
     top: binColour(m.topColour),
     bottom: binColour(m.bottomColour),
-    palette: palette.map(binSwatch),
+    palette: binPalette(palette),
     fit: m.fit ? { top: fix(round(m.fit.top, 0.05)), legs: fix(round(m.fit.legs, 0.05)) } : null,
   };
 }
@@ -143,7 +148,9 @@ export function readBins(bins: Bins, rawBreak: number | null = bins.proportion):
   const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
   if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
   if (bins.palette.length) {
-    lines.push(harmonyLine(bins.palette, bins.waist), valueLine(bins.palette, bins.top.L, bins.bottom.L), sharesLine(bins.palette), chromaLine(bins.palette, bins.waist));
+    // The colour rules read the palette as people see it: one name, one entry.
+    const named = byName(bins.palette);
+    lines.push(harmonyLine(named, bins.waist), valueLine(named, bins.top.L, bins.bottom.L), sharesLine(named), chromaLine(named, bins.waist));
   }
   return lines;
 }

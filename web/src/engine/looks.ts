@@ -12,8 +12,8 @@
 // - Only choices change: garment colour, tuck, belt, accent. Never the body.
 
 import type { BinnedSwatch } from "./colour-rules";
-import { colourName } from "./names";
-import { isNeutral } from "./constants";
+import { colourName, familyOf } from "./names";
+import { binShares, isNeutral } from "./constants";
 import { type Piece, pieces as placedPieces } from "./pieces";
 import { type AdviceLine, type Bins, type LineState, readBins } from "./rules";
 
@@ -75,8 +75,9 @@ export function normalise(b: Bins): Bins {
       into.share = fix(into.share + s.share);
     } else merged.push({ ...s });
   }
-  const total = merged.reduce((t, s) => t + s.share, 0) || 1;
-  return { ...b, palette: merged.map((s) => ({ ...s, share: fix(Math.round(s.share / total / 0.05) * 0.05) })).sort((p, q) => q.share - p.share) };
+  // Shares by largest remainder, so a look's palette sums to exactly 1.00 too.
+  const shares = binShares(merged.map((s) => s.share));
+  return { ...b, palette: merged.map((s, i) => ({ ...s, share: shares[i] })).sort((p, q) => q.share - p.share) };
 }
 
 /**
@@ -196,6 +197,10 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   return moves;
 }
 
+/** The ideas a look's colour moves stand for: a piece and a hue family ("lower:green"). */
+export const ideasOf = (moves: Move[]): string[] =>
+  moves.flatMap((m) => (m.kind === "break" ? [] : [`${m.kind === "accent" ? "shoes" : m.piece}:${familyOf(m.L, m.C, m.h)}`]));
+
 const id = (moves: Move[]) =>
   moves.map((m) => (m.kind === "break" ? `b${m.to}` : `${m.kind[0]}${"swatch" in m ? m.swatch : ""}-${m.L}-${m.C}-${m.h}`)).join("+");
 
@@ -234,11 +239,19 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
 
   // Best gain first; fewer moves first at equal gain; then candidate order.
   const ranked = looks.map((l, i) => ({ l, i })).sort((x, y) => y.l.gain - x.l.gain || x.l.moves.length - y.l.moves.length || x.i - y.i).map((x) => x.l);
-  // Variety: no look whose moves contain an already chosen look's moves at no extra gain.
+  // Variety: no look whose moves contain an already chosen look's moves at
+  // no extra gain, and at most one look per hue family per piece (forest
+  // green, olive and bottle green for the lower piece are one idea, Noor,
+  // 2026-10-04). The slots left go to the next best different moves: a
+  // value move, an accent, a tuck or a belt.
   const chosen: Look[] = [];
+  const used = new Set<string>();
   for (const look of ranked) {
     const redundant = chosen.some((c) => c.moves.every((m) => look.moves.includes(m)) && look.gain <= c.gain);
-    if (!redundant) chosen.push(look);
+    const keys = ideasOf(look.moves);
+    if (redundant || keys.some((k) => used.has(k))) continue;
+    chosen.push(look);
+    keys.forEach((k) => used.add(k));
     if (chosen.length === limit) break;
   }
   return chosen;

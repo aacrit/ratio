@@ -92,7 +92,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   shares: {
     title: "Colour shares",
     rule: "Colour by area: one dominant, one secondary, one accent, near 0.60 · 0.30 · 0.10. Equal shares compete for the lead.",
-    maths: "Each colour's share of the garment area, rounded to 0.05.",
+    maths: "Each colour's share of the garment area, in 0.05 units shared out by largest remainder so the shares always sum to 1.00. Colours with the same plain name (two greys) count as one.",
     edges: [
       { name: "one colour reads as a column at", value: SHARE_EDGES.column },
       { name: "two colours compete when within", value: SHARE_EDGES.compete },

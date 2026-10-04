@@ -17,7 +17,8 @@ const post = (message: FromWorker, transfer: Transferable[] = []) => self.postMe
 
 /** The share of a Read that can be posted (typed arrays go as transfers). */
 function pack(read: Read): { read: Read; transfer: Transferable[] } {
-  return { read, transfer: [read.pixels.data.buffer, read.display.data.buffer, read.mask.data.buffer] };
+  // A buffer may be listed once only (the person's mask can be the photo's own when alone).
+  return { read, transfer: [...new Set([read.pixels.data.buffer, read.display.data.buffer, read.mask.data.buffer, read.fullMask.data.buffer])] };
 }
 
 self.onmessage = async (event: MessageEvent<ToWorker>) => {

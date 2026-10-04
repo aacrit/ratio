@@ -15,7 +15,7 @@ import type { Figure } from "../overlay";
 import type { Read } from "../read";
 import type { Reader } from "../reader";
 import { chalkFigure } from "../tryon/figure";
-import { type Bands, showsOnPhoto } from "../tryon/recolour";
+import { type Bands, NOT_ON_PHOTO, honesty, showsOnPhoto } from "../tryon/recolour";
 import { countTo } from "./count";
 import { STATE_WORDS, paletteStrip, renderRows, stateLabel } from "./rows";
 import type { Sheet } from "./sheet";
@@ -93,10 +93,25 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   const m = read.measure;
   const h = m.bottom - m.top;
   const brk = m.breakRow ?? m.waistRow;
+  const bandsAt = (k: number): Bands => {
+    const band = (a: number, b: number): [number, number] => [a * k, b * k];
+    return { upper: band(m.top, brk), lower: band(brk, m.bottom - h * 0.04), shoes: band(m.bottom - h * 0.08, m.bottom), other: band(m.top, m.bottom) };
+  };
   const k = read.display.width / read.pixels.width;
-  const band = (a: number, b: number): [number, number] => [a * k, b * k];
-  const bands: Bands = { upper: band(m.top, brk), lower: band(brk, m.bottom - h * 0.04), shoes: band(m.bottom - h * 0.08, m.bottom), other: band(m.top, m.bottom) };
+  const bands = bandsAt(k);
   const box = { left: m.left * k, right: m.right * k };
+  // Whether each look's colour change can be shown honestly on the photo, judged at reading size.
+  const honestly = new Map<string, boolean>();
+  const honestOnPhoto = (look: Look) => {
+    let ok = honestly.get(look.id);
+    if (ok === undefined) {
+      ok = honesty(read.pixels, read.fullMask, read.mask, { left: m.left, right: m.right }, bandsAt(1), read.palette, look.moves).honest;
+      honestly.set(look.id, ok);
+    }
+    return ok;
+  };
+  const note = d.trying.querySelector<HTMLElement>(".trying-note");
+  const noteAsBuilt = note?.textContent ?? "";
   const before = new Map(read.reading.lines.map((l) => [l.rule, l.state] as const));
   let current: string | null = null;
   const buttons = new Map<string, HTMLButtonElement>();
@@ -145,7 +160,10 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     // The photo: colour moves only. The chalk figure: the whole look.
     // Colour moves show on the photo behind the wipe; a look of proportion
     // moves alone leaves the photo as worn and shows on the chalk figure.
-    const onPhoto = showsOnPhoto(look.moves, read.palette);
+    // A doubtful recolour is never shown, so it can never reach a saved card.
+    const colour = showsOnPhoto(look.moves, read.palette);
+    const onPhoto = colour && honestOnPhoto(look);
+    if (note) note.textContent = colour && !onPhoto ? NOT_ON_PHOTO : noteAsBuilt;
     if (onPhoto) {
       let job = recoloured.get(look.id);
       if (!job) {
