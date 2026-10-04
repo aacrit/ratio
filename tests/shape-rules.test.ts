@@ -100,7 +100,7 @@ describe("user-sim fixes (2026-10-04)", () => {
     const advice = { rule: "shares" as const, title: "", measured: "", text: "", state: "advice" as const, borderline: false };
     const fine = { ...advice, state: "neutral" as const };
     expect(verdictOf([fine], [])).toMatch(/^Works\. /);
-    expect(verdictOf([advice], [])).toBe("Works, with one change worth making. Two colours share the outfit almost equally, so none leads.");
+    expect(verdictOf([advice], [])).toBe("Works, with one change worth making. Two colours share the outfit almost equally, so none leads. The change: one colour taking the lead, near 0.60 of the outfit.");
     expect(verdictOf([advice, advice], [])).toMatch(/^Two changes would help/);
     for (const v of [verdictOf([fine], []), verdictOf([advice, advice, advice], [])]) for (const w of JUDGING_WORDS) expect(v.toLowerCase()).not.toContain(w);
   });

@@ -105,7 +105,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   };
   const k = read.display.width / read.pixels.width;
   const bands = bandsAt(k);
-  const box = { left: m.left * k, right: m.right * k };
+  const box = { left: m.left * k, right: m.right * k, cast: m.cast };
   // Which of each look's colour moves the photo can show honestly, judged
   // once per look in the read worker at reading size, move by move. A failed
   // check refuses them all: the chalk figure still shows the look.
@@ -113,7 +113,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   const planOf = (look: Look) => {
     let plan = plans.get(look.id);
     if (!plan) {
-      plan = d.reader.plan(read.pixels, read.fullMask, read.mask, { left: m.left, right: m.right }, bandsAt(1), read.palette, look.moves).catch(() => refuseAll(look.moves));
+      plan = d.reader.plan(read.pixels, read.fullMask, read.mask, { left: m.left, right: m.right, cast: m.cast }, bandsAt(1), read.palette, look.moves).catch(() => refuseAll(look.moves));
       plans.set(look.id, plan);
     }
     return plan;

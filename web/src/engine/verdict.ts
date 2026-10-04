@@ -15,7 +15,7 @@
 import { type Look, type Move, accentWords } from "./looks";
 import { colourName } from "./names";
 import type { AdviceLine, Bins } from "./rules";
-import { PROPORTION_BANDS } from "./rules";
+import { PROPORTION_BANDS, tuckable } from "./rules";
 import { topFit, legFit } from "./shape-rules";
 
 const PIECE_WORDS = { upper: "the top", lower: "the lower piece", shoes: "shoes", other: "an accent" } as const;
@@ -40,7 +40,7 @@ const byOrder = (lines: AdviceLine[]) => [...lines].sort((a, b) => LEAD_ORDER.in
 const degree = (line: AdviceLine, firm: string) => (line.borderline ? "right at the edge, a near thing" : firm);
 
 /** What a line says about the outfit, in one plain sentence (no degrees, no scores). */
-function leadSentence(line: AdviceLine, bins: Bins | undefined): string | null {
+export function leadSentence(line: AdviceLine, bins: Bins | undefined): string | null {
   switch (line.rule) {
     case "proportion": {
       const r = bins ? bins.proportion : line.measured === "one column" ? null : Number(line.measured.split(" ")[0]);
@@ -53,7 +53,7 @@ function leadSentence(line: AdviceLine, bins: Bins | undefined): string | null {
       return "The break sits high, so the lower block carries the length.";
     }
     case "volume": {
-      if (line.state === "unread" || !bins?.fit) return null;
+      if (line.state === "unread" || !bins?.fit || bins.fit.top === null || bins.fit.legs === null) return null;
       const pair = `${topFit(bins.fit.top)} over ${legFit(bins.fit.legs)}`;
       if (line.state === "advice") return `${cap(pair)}: two full volumes with nothing to anchor them.`;
       if (line.state === "golden") return `${cap(pair)}: one full volume against one fitted, the classic balance.`;
@@ -111,6 +111,30 @@ export function looksIntroOf(lines: AdviceLine[], count: number): string {
   return "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
 }
 
+/** The change a rule's advice asks for, in a few plain words, for a verdict with no look to name. */
+export function changeWords(line: AdviceLine, bins: Bins | undefined): string {
+  switch (line.rule) {
+    case "proportion": {
+      const r = bins?.proportion ?? null;
+      const longTop = r !== null && r >= 0.7;
+      if (bins && !tuckable(bins)) return "a shorter upper piece, ending near the waist";
+      return longTop ? "a belt at the waist" : "a front tuck, if the upper piece tucks";
+    }
+    case "volume":
+      return bins && !tuckable(bins) ? "a narrower leg" : "a tuck, if the upper piece tucks, or a narrower leg";
+    case "harmony":
+      return "a neutral, or a neighbouring hue, for the colour outside the scheme";
+    case "value":
+      return "a darker lower piece or darker shoes";
+    case "chroma":
+      return "one colour at full strength and the others muted";
+    case "shares":
+      return "one colour taking the lead, near 0.60 of the outfit";
+    case "legline":
+      return "shoes nearer the lower piece's value";
+  }
+}
+
 export function verdictOf(lines: AdviceLine[], looks: Look[], bins?: Bins): string {
   const advice = byOrder(lines.filter((l) => l.state === "advice"));
   const changes = advice.length;
@@ -128,6 +152,13 @@ export function verdictOf(lines: AdviceLine[], looks: Look[], bins?: Bins): stri
   }
   const keep = keepSentence(lines, lead, bins);
   const best = looks[0];
-  const tryIt = best ? `${changes === 0 ? "For one more note, try" : "Try"} ${listed(best.moves.map(plainMove))}.` : changes === 0 && !keep ? "Keep it as it is." : null;
+  // With no look to offer, the verdict still names the change the leading advice asks for.
+  const tryIt = best
+    ? `${changes === 0 ? "For one more note, try" : "Try"} ${listed(best.moves.map(plainMove))}.`
+    : changes > 0
+      ? `The change: ${changeWords(advice[0], bins)}.`
+      : !keep
+        ? "Keep it as it is."
+        : null;
   return [opening, sentence, keep, tryIt].filter((x): x is string => !!x).join(" ");
 }

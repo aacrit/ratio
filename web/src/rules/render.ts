@@ -40,7 +40,7 @@ export const LEDE = "Every reading is held against these and nothing else. Drag 
 export const NO_READ_CHIP = "Read a photo and your values appear on each instrument.";
 export const DRILL_SUMMARY = "The maths, the edges, the sources";
 export const UNCALIBRATED = "set by hand, not yet calibrated";
-export const UNCALIBRATED_NOTE = `The edges are set by hand, to be calibrated against labelled photos (docs/RISKS.md R1). Read marks this rule's advice "first estimate" until then, and this line changes to "calibrated" when it is.`;
+export const UNCALIBRATED_NOTE = `The edges are set by hand, to be calibrated against labelled photos. Read marks this rule's advice "first estimate" until then, and this line changes to "calibrated" when it is.`;
 
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export const esc = (s: string | number): string => String(s).replace(/[&<>"']/g, (c) => ESC[c]);

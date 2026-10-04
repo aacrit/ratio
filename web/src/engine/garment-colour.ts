@@ -14,24 +14,32 @@
 //   around a grey never adds up to a colour.
 // - A coloured light (a blue stage, a cyan gym) tints every garment alike.
 //   The photo's neutral cast is the median a/b of the person's near-neutral
-//   garment pixels; it is taken off every garment colour before any rule
-//   reads it, so a uniform tint cannot create a hue (CAST).
+//   garment pixels, accepted only when the upper and the lower garments'
+//   pools agree on it (one light falls on both; a sage suit is not a light).
+//   It is taken off a pixel only when that lowers its chroma, and never off
+//   a pixel already at or under the neutral line, so removing a cast can
+//   never invent a hue on black shoes or a white sneaker (CAST).
 //
 // Pure and deterministic: fixed order, sorts with stable ties, sums in
-// pixel order, Math.sqrt only (no Math.hypot), as person.ts.
+// pixel order. This module's own arithmetic uses Math.sqrt only (no
+// Math.hypot), as person.ts; colour distances elsewhere go through
+// color.ts deltaE, as every engine version has.
 
 import type { Lab } from "./color";
+import { neutralChromaAt } from "./constants";
 
 /** The lightness core a garment's colour is read from, as quantiles of its pixels' lightness: past the deep shadows, short of blown highlights. */
 export const CORE: readonly [number, number] = [0.5, 0.95];
 
 /**
- * The neutral cast. Pixels below `poolChroma` form the near-neutral pool; the
- * cast is the pool's median a and b, when the pool holds at least `minPool`
- * of the garment pixels, and it is never longer than `max` (a stronger tint
- * is a colour, not a light).
+ * The neutral cast. Pixels below `poolChroma` form the near-neutral pool of
+ * a region (the upper garments, the lower); a region's cast is its pool's
+ * median a and b, when the pool holds at least `minPool` of the region's
+ * pixels. The photo's cast is the two regions' mean, only when both have
+ * one and they lie within `agree` of each other, and never longer than
+ * `max` (a stronger tint is a colour, not a light).
  */
-export const CAST = { poolChroma: 0.04, minPool: 0.2, max: 0.03 } as const;
+export const CAST = { poolChroma: 0.03, minPool: 0.2, max: 0.03, agree: 0.01 } as const;
 
 export interface Cast {
   a: number;
@@ -49,19 +57,38 @@ function median(values: number[]): number {
 
 const chroma = (l: Lab) => Math.sqrt(l.a * l.a + l.b * l.b);
 
-/** The photo's neutral cast from a set of garment pixels (OKLab). */
-export function neutralCast(labs: readonly Lab[]): Cast {
+/** One region's cast: the median a/b of its near-neutral pool, or null when the pool is too small. */
+export function regionCast(labs: readonly Lab[]): Cast | null {
   const pool = labs.filter((l) => chroma(l) < CAST.poolChroma);
-  if (!labs.length || pool.length < labs.length * CAST.minPool) return NO_CAST;
-  const a = median(pool.map((l) => l.a));
-  const b = median(pool.map((l) => l.b));
+  if (!labs.length || pool.length < labs.length * CAST.minPool) return null;
+  return { a: median(pool.map((l) => l.a)), b: median(pool.map((l) => l.b)) };
+}
+
+/** The photo's neutral cast from the upper and the lower garments' pixels (OKLab): accepted only when the two agree. */
+export function neutralCast(upper: readonly Lab[], lower: readonly Lab[]): Cast {
+  const u = regionCast(upper), l = regionCast(lower);
+  if (!u || !l) return NO_CAST;
+  const da = u.a - l.a, db = u.b - l.b;
+  if (Math.sqrt(da * da + db * db) > CAST.agree) return NO_CAST;
+  const a = (u.a + l.a) / 2, b = (u.b + l.b) / 2;
   const len = Math.sqrt(a * a + b * b);
   if (len <= CAST.max) return { a, b };
   return { a: (a / len) * CAST.max, b: (b / len) * CAST.max };
 }
 
-/** A pixel with the photo's cast taken off. */
-export const uncast = (l: Lab, cast: Cast): Lab => (cast.a === 0 && cast.b === 0 ? l : { L: l.L, a: l.a - cast.a, b: l.b - cast.b });
+/**
+ * A pixel with the photo's cast taken off, when that is honest: never off a
+ * pixel at or under the neutral line (it stays a neutral), and only when
+ * removing it lowers the pixel's chroma, so uncasting can never raise a
+ * colour's chroma or give a neutral a hue.
+ */
+export function uncast(l: Lab, cast: Cast): Lab {
+  if (cast.a === 0 && cast.b === 0) return l;
+  const c = chroma(l);
+  if (c <= neutralChromaAt(l.L) + 1e-9) return l;
+  const u = { L: l.L, a: l.a - cast.a, b: l.b - cast.b };
+  return chroma(u) < c ? u : l;
+}
 
 /**
  * A garment's colour from its pixels (already uncast): the lightness core's

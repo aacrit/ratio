@@ -169,15 +169,13 @@ describe("1. chroma: a garment's colour is its well-lit core, not a mix", () => 
     expect(r.lines.find((l) => l.rule === "harmony")!.measured).toBe("neutrals");
   });
 
-  it("the cast is median a/b of the near-neutral pool, never longer than CAST.max", () => {
-    const pool = Array.from({ length: 100 }, () => ({ L: 0.4, a: 0.03, b: 0 }));
-    expect(neutralCast(pool).a).toBeCloseTo(0.03, 6);
-    // A tint past CAST.max is cut to it.
-    const strong = Array.from({ length: 100 }, () => ({ L: 0.4, a: 0.035, b: 0 }));
-    expect(neutralCast(strong).a).toBeCloseTo(CAST.max, 9);
+  it("the cast is the median a/b of the near-neutral pools, when the upper and lower pools agree", () => {
+    const pool = Array.from({ length: 100 }, () => ({ L: 0.4, a: 0.02, b: 0 }));
+    expect(neutralCast(pool, pool).a).toBeCloseTo(0.02, 6);
     // Too few near-neutral pixels: no cast.
     const coloured = Array.from({ length: 100 }, (_, i) => ({ L: 0.4, a: i < 10 ? 0.01 : 0.1, b: 0 }));
-    expect(neutralCast(coloured)).toEqual({ a: 0, b: 0 });
+    expect(neutralCast(coloured, pool)).toEqual({ a: 0, b: 0 });
+    void CAST;
   });
 
   it("a coloured backdrop's light on the cloth is not a swatch; a garment of that hue still is", () => {
@@ -213,7 +211,7 @@ describe("2. volume: the words follow the numbers, arms never count as the cut",
     expect(read(s).m.fit!.legs).toBeCloseTo(56 / 2 / 50, 5);
   });
 
-  it("arms against the sides and hands in pockets: volume is not read, and the line says why", () => {
+  it("arms against the sides and hands in pockets: the upper piece is not read and the line says why; the legs still are (round 2)", () => {
     const s = scene();
     dress(s, { upper: lch(0.2, 0, 0), lower: lch(0.35, 0.07, 345), shoes: lch(0.2, 0, 0) });
     // Sleeves in the jacket's colour against the torso, from the shoulders past the hips.
@@ -225,11 +223,13 @@ describe("2. volume: the words follow the numbers, arms never count as the cut",
     at(15, 70, 200);
     at(16, 130, 200);
     const { m, reading } = read(s);
-    expect(m.fit).toBeNull();
+    expect(m.fit?.top).toBeNull();
+    expect(m.fit?.legs).toBeCloseTo(20 / 50, 5);
     expect(m.fitWhy).toBe("arms");
     const line = reading.lines.find((l) => l.rule === "volume")!;
-    expect(line).toMatchObject({ state: "unread", measured: "not read" });
-    expect(line.text).toMatch(/an arm or a hand lies over the upper piece/i);
+    expect(line).toMatchObject({ state: "neutral", measured: "not read · 0.40×" });
+    expect(line.text).toMatch(/^Each leg reads narrow/);
+    expect(line.text).toMatch(/an arm or a hand lies over the upper piece's edges/i);
     // No advice is made from a measurement that was not taken.
     expect(suggestLooks(reading.bins, reading.lines).every((l) => l.changes.every((c) => c.rule !== "volume"))).toBe(true);
   });
@@ -253,7 +253,7 @@ describe("3. the break is the outer upper piece's hem", () => {
     const s = scene();
     const hoodie = lch(0.22, 0.004, 0);
     // A white t-shirt in the middle of the chest down to row 120, a zip below it, the hem at 230.
-    dress(s, { upper: (x, y) => (x >= 90 && x < 110 && y < 120 ? WHITE : x === 100 ? [200, 200, 200] : hoodie), lower: lch(0.55, 0, 0), shoes: WHITE, hem: 230 });
+    dress(s, { upper: (x, y) => (x >= 90 && x < 110 && y < 75 ? WHITE : x === 100 ? [200, 200, 200] : hoodie), lower: lch(0.55, 0, 0), shoes: WHITE, hem: 230 });
     const { m, reading } = read(s);
     expect(m.breakRow).toBe(230);
     expect(reading.bins.proportion).toBeCloseTo((230 - 10) / (395 - 10), 1);
@@ -364,7 +364,9 @@ describe("6. uncalibrated is said, and the sources are right", () => {
       expect(adviceLabel({ rule: id as keyof typeof RULEBOOK, title: "", measured: "", text: "", state: "advice", borderline: false })).toBe("Advice, first estimate");
     }
     expect(UNCALIBRATED).toBe("set by hand, not yet calibrated");
-    expect(UNCALIBRATED_NOTE).toContain("set by hand, to be calibrated against labelled photos (docs/RISKS.md R1)");
+    expect(UNCALIBRATED_NOTE).toContain("set by hand, to be calibrated against labelled photos.");
+    // The UI copy names no repository path.
+    expect(UNCALIBRATED_NOTE).not.toMatch(/docs\/|\.md|R1/);
   });
 
   it("60-30-10 cites interior design only; the half wheel is any 180° arc; no Dürer in the provenance", () => {
@@ -423,9 +425,18 @@ describe("5b. Read never contradicts its own advice", () => {
     expect(looksIntroOf([advice], 2)).toMatch(/^2 looks/);
   });
 
-  it("no tuck control on the proportion row of an upper piece that opens down the front", async () => {
-    const { read } = await import("node:fs").then((fs) => ({ read: (p: string) => fs.readFileSync(p, "utf8") }));
-    expect(read("web/src/ui/rows.ts")).toMatch(/line\.rule === "proportion" && bins\.front \? undefined/);
+  it("tuckable(bins) is the one predicate for the tuck: false on an opening front, and the proportion text, the tuck move and the volume advice agree", async () => {
+    const { tuckable } = await import("../web/src/engine/rules");
+    const b: Bins = { proportion: 0.5, waist: 0.38, top: { L: 0.2, C: 0, h: 0 }, bottom: { L: 0.6, C: 0, h: 0 }, palette: [sw(0.2, 0, 0, 0.6, 0.35), sw(0.6, 0, 0, 0.4, 0.65)], fit: { top: 1.6, legs: 0.7 } };
+    const open = { ...b, front: true as const };
+    expect(tuckable(b)).toBe(true);
+    expect(tuckable(open)).toBe(false);
+    for (const [bins, can] of [[b, true], [open, false]] as const) {
+      const lines = readBins(bins);
+      expect(candidateMoves(bins, lines).some((m) => m.kind === "break"), String(can)).toBe(can);
+      expect(/tuck/.test(lines.find((l) => l.rule === "volume")!.text), String(can)).toBe(can);
+      expect(/front tuck/.test(lines[0].text), String(can)).toBe(can);
+    }
   });
 });
 

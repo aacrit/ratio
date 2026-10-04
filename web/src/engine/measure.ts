@@ -6,19 +6,23 @@
 // - Garment colours are each piece's well-lit core with the photo's
 //   neutral cast taken off (garment-colour.ts), never a mean of shadow,
 //   highlight and neighbouring cloth.
-// - The break is the outer upper piece's hem: it is read on the flanks of
-//   the body column (a zip, an open front or a t-shirt under a hoodie shows
-//   in the middle, never on both flanks) and searched only from the middle
-//   of the torso down, so a colour change inside the upper piece is not a
-//   break.
-// - The upper piece's width is read only on rows no arm or hand crosses
-//   (the pose's elbows and wrists); when every row is crossed, volume is not
-//   read and the read says why. Each leg is read on its own at its knee.
+// - The break is the outer upper piece's hem: row colours are read on each
+//   flank of the body column (a zip, an open front or a t-shirt under a
+//   hoodie shows in the middle, or on one side, never on both), each
+//   candidate break is scored against the colour of the rows above it, so a
+//   crop top's high hem is found as readily as a long coat's, and a hem is
+//   where both flanks change.
+// - The upper piece's width is read on rows where no arm or hand lies on
+//   the edge it would widen (the pose's elbows and wrists); with one clean
+//   edge it is read on that side and marked borderline; when no row is
+//   clean, volume is not read and the read says why. Each leg is read on
+//   its own at its knee, and the legs are said even when the upper piece
+//   is not read.
 // - The shoes are read from boxes round each foot (ankle, heel, toe), the
 //   one shoe detection the leg line, the palette and "try it" share.
 
-import { type Lab, deltaE, srgbToOklab } from "./color";
-import { type Cast, NO_CAST, neutralCast, pieceColour, uncast } from "./garment-colour";
+import { type Lab, deltaE, hueGap, srgbToOklab } from "./color";
+import { type Cast, neutralCast, pieceColour, uncast } from "./garment-colour";
 import type { Pixels } from "./resample";
 
 /** The multiclass selfie segmenter's categories. */
@@ -86,12 +90,15 @@ export interface OutfitMeasure {
   topColour: Lab;
   bottomColour: Lab;
   /**
-   * Volume: the upper piece's fabric width on rows no arm crosses, and each
-   * leg's at its knee, over the shoulder distance. Null when not read.
+   * Volume: the upper piece's fabric width on rows no arm spoils, and each
+   * leg's at its knee, over the shoulder distance. Either may be null on its
+   * own; null when neither was read.
    */
-  fit: { top: number; legs: number } | null;
-  /** Why volume was not read: every torso row is crossed by an arm or a hand. */
+  fit: { top: number | null; legs: number | null } | null;
+  /** Why the upper piece's width was not read: an arm or a hand lay on its edges on every row. */
   fitWhy?: "arms";
+  /** The upper piece's width was read from one clean edge only (doubled about the centre line): borderline. */
+  fitOneSide?: true;
   /** The photo's neutral cast, taken off every garment colour. */
   cast?: Cast;
   /** The backdrop's colour round the person (OKLab a, b), when it is a strongly coloured light or wall (LIGHT_CHROMA or more). */
@@ -115,18 +122,38 @@ const VISIBLE = 0.5;
 export const ONE_COLUMN_DELTA = 0.04;
 /** Where the natural waist sits between the shoulder line and the hip joints. */
 export const WAIST_FRACTION = 0.6;
-/** The break is searched from here down (a fraction of shoulders to hips): above it, a change is inside the upper piece. */
-export const BREAK_FROM = 0.5;
-/** The upper piece's reference colour is read between these fractions of shoulders to hips, on the flanks. */
-export const TOP_REF: readonly [number, number] = [0.3, 0.5];
+/** A break needs at least this share of the shoulders-to-hips distance of upper piece above it (the collar's rows are not a garment). */
+export const BREAK_MIN_ROWS = 0.15;
+/**
+ * The distance a hem is read in: hue and chroma count 2.5 times, lightness
+ * half. Light falling off a dark jacket changes lightness row by row; a hem
+ * changes the cloth (black jacket over plum, p1 of UX pass 2).
+ */
+export function hemDistance(p: Lab, q: Lab): number {
+  const dL = (p.L - q.L) * 0.5, da = (p.a - q.a) * 2.5, db = (p.b - q.b) * 2.5;
+  return Math.sqrt(dL * dL + da * da + db * db);
+}
+/** A hem is an edge: the rows within this share of the figure's height above and below it must differ. */
+export const EDGE_WINDOW = 0.03;
+/** Row colours above the hips are read on each flank of the body column, between these shares of its width in from the edge. */
+export const FLANK: readonly [number, number] = [0.05, 0.35];
 /** The torso rows the upper piece's width may be read on (fractions of shoulders to hips). */
 export const TORSO_ROWS: readonly [number, number] = [0.25, 0.75];
 /** An arm's half-width, as a share of the shoulder distance. */
 export const ARM_HALF = 0.12;
 /** At least this share of the torso rows must be clear of the arms for the width to be read. */
 export const MIN_CLEAR = 0.15;
-/** A front opening: a middle column in contrast with the flanks on at least this share of the upper piece's rows. */
-export const FRONT = { delta: 0.1, rows: 0.6, half: 0.2 } as const;
+/**
+ * A front opening: on the rows whose flanks are one even colour (spread
+ * under `delta`), a narrow line (at most `line` of the width) within `half`
+ * of the centre that differs from the flanks by more than `delta`, running
+ * on through at least `rows` of the upper piece's height (drifting at most
+ * `drift` of the width, hidden for at most `gap` of the figure's height). Stripes, checks and prints have uneven flanks and
+ * are never read as an opening.
+ */
+export const FRONT = { delta: 0.1, rows: 0.6, half: 0.2, line: 0.08, drift: 0.03, gap: 0.04 } as const;
+/** How near a cloth's hue must sit to a coloured backdrop's to count as its light. */
+export const LIGHT_HUE = 30;
 /** A backdrop at least this chromatic (OKLCH chroma) is a coloured light or wall: its hue on the cloth is the light's. */
 export const LIGHT_CHROMA = 0.08;
 /** The shoe box starts this far from the ankle to the sole: above it, a trouser hem often bunches over the shoe. */
@@ -146,16 +173,6 @@ function medianLab(rows: Lab[]): Lab {
   return { L: median(rows.map((r) => r.L)), a: median(rows.map((r) => r.a)), b: median(rows.map((r) => r.b)) };
 }
 
-function meanLab(labs: Lab[]): Lab {
-  let L = 0, a = 0, b = 0;
-  for (const l of labs) {
-    L += l.L;
-    a += l.a;
-    b += l.b;
-  }
-  const n = labs.length || 1;
-  return { L: L / n, a: a / n, b: b / n };
-}
 
 /** The contiguous run of garment pixels in a row through x (or the nearest garment pixel within `slack`), or null. */
 export function runAt(mask: Mask, y: number, x: number, slack: number): { x0: number; x1: number } | null {
@@ -239,13 +256,14 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
     return lab;
   };
 
-  // The photo's neutral cast, from the person's garment pixels in the figure's box.
+  // The photo's neutral cast, from the person's garment pixels in the
+  // figure's box: the upper garments (above the hips) and the lower must agree.
   const pad = (bodyX1 - bodyX0) * 0.35;
   const bx0 = Math.max(0, Math.floor(bodyX0 - pad)), bx1 = Math.min(W - 1, Math.ceil(bodyX1 + pad));
-  const all: Lab[] = [];
+  const upperPx: Lab[] = [], lowerPx: Lab[] = [];
   for (let y = Math.max(0, top); y <= Math.min(H - 1, bottom); y++)
-    for (let x = bx0; x <= bx1; x++) if (isGarment(mask.data[y * W + x])) all.push(labAt(x, y));
-  const cast = all.length ? neutralCast(all) : NO_CAST;
+    for (let x = bx0; x <= bx1; x++) if (isGarment(mask.data[y * W + x])) (y < hipY ? upperPx : lowerPx).push(labAt(x, y));
+  const cast = neutralCast(upperPx, lowerPx);
   // The backdrop round the person: a coloured stage or wall tints the cloth
   // that faces it (palette.ts drops a swatch of that hue that is not a piece).
   const bgA: number[] = [], bgB: number[] = [];
@@ -258,6 +276,13 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
       }
   const bg = { a: median(bgA), b: median(bgB) };
   const light = bgA.length && Math.sqrt(bg.a * bg.a + bg.b * bg.b) >= LIGHT_CHROMA ? bg : undefined;
+  // A coloured backdrop lights the cloth facing it (a blue stage on a black
+  // hoodie's shoulders). While such pixels are the smaller part of the
+  // person's garments, they are left out of every row and piece colour, so
+  // the light can neither make a hem nor colour a piece.
+  const lightH = light ? (Math.atan2(light.b, light.a) * 180) / Math.PI : 0;
+  const isLit = (l: Lab) => !!light && Math.sqrt(l.a * l.a + l.b * l.b) >= 0.04 && hueGap((Math.atan2(l.b, l.a) * 180) / Math.PI, lightH) <= LIGHT_HUE;
+  const dropLit = !!light && [...upperPx, ...lowerPx].filter(isLit).length < (upperPx.length + lowerPx.length) / 2;
   const lab = (x: number, y: number) => uncast(labAt(x, y), cast);
 
   // The body column at a row: the flank lines from the shoulders to the
@@ -271,101 +296,179 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
     return (l + r) / 2;
   };
 
-  // Per-row garment colour. Above the hips, the two flanks of the body
-  // column (5% to 35% in from each edge): the outer layer, never the middle,
-  // where a zip, an open front or a t-shirt under a hoodie shows. Below the
-  // hips, the hips' column widened 20% for the legs.
+  // Per-row garment colour, on each flank of the body column separately
+  // (FLANK of its width in from each edge above the hips): the outer layer,
+  // never the middle, where a zip, an open front or a t-shirt under a
+  // hoodie shows. Below the hips, the hips' column widened 20% for the legs,
+  // as one. Each row's colour is the median of its pixels, so a drawstring
+  // or a stray thread cannot move it.
   const widenH = (hx1 - hx0) * 0.2;
   const y0 = Math.ceil(shoulderY);
   const y1 = Math.min(H - 1, Math.floor(ankleY));
-  const rowPixels = (y: number): Lab[] => {
-    const out: Lab[] = [];
-    const take = (a: number, b: number) => {
-      for (let x = Math.max(0, Math.floor(a)); x <= Math.min(W - 1, Math.ceil(b)); x++) if (mask.data[y * W + x] === CATEGORY.clothes) out.push(lab(x, y));
-    };
+  const take = (y: number, a: number, b: number, out: Lab[]) => {
+    for (let x = Math.max(0, Math.floor(a)); x <= Math.min(W - 1, Math.ceil(b)); x++) {
+      if (mask.data[y * W + x] !== CATEGORY.clothes) continue;
+      const l = lab(x, y);
+      if (!dropLit || !isLit(l)) out.push(l);
+    }
+  };
+  const sidePx: [Lab[], Lab[]][] = [];
+  for (let y = y0; y <= y1; y++) {
+    const left: Lab[] = [], right: Lab[] = [];
     if (y < hipY) {
       const [l, r] = column(y);
       const w = r - l;
-      take(l + w * 0.05, l + w * 0.35);
-      take(r - w * 0.35, r - w * 0.05);
-      return out.length >= Math.max(3, w * 0.6 * 0.25) ? out : [];
+      take(y, l + w * FLANK[0], l + w * FLANK[1], left);
+      take(y, r - w * FLANK[1], r - w * FLANK[0], right);
+      const enough = Math.max(2, w * (FLANK[1] - FLANK[0]) * 0.25);
+      sidePx.push([left.length >= enough ? left : [], right.length >= enough ? right : []]);
+    } else {
+      take(y, hx0 - widenH, hx1 + widenH, left);
+      const ok = left.length >= Math.max(3, (hx1 - hx0 + 2 * widenH) * 0.25);
+      sidePx.push([ok ? left : [], ok ? left : []]);
     }
-    take(hx0 - widenH, hx1 + widenH);
-    return out.length >= Math.max(3, (hx1 - hx0 + 2 * widenH) * 0.25) ? out : [];
-  };
-  const rowPx: Lab[][] = [];
-  for (let y = y0; y <= y1; y++) rowPx.push(rowPixels(y));
-  const rows: (Lab | null)[] = rowPx.map((p) => (p.length ? meanLab(p) : null));
+  }
+  const rowPx: Lab[][] = sidePx.map(([l, r]) => (l === r ? l : [...l, ...r]));
+  const rows: (Lab | null)[] = rowPx.map((p) => (p.length ? medianLab(p) : null));
+  const sideRows: (Lab | null)[][] = [0, 1].map((k) => sidePx.map((p) => (p[k].length ? medianLab(p[k]) : null)));
   const idx = (y: number) => Math.round(y) - y0;
   const rowsIn = (from: number, to: number) => rows.slice(Math.max(0, idx(from)), Math.max(0, idx(to)) + 1).filter((r): r is Lab => r !== null);
 
-  // Reference colours: the upper piece on the flanks between TOP_REF of the
-  // torso; the lower piece over the middle half of the rows from hips to ankles.
-  const topRef = rowsIn(shoulderY + torso * TOP_REF[0], shoulderY + torso * TOP_REF[1]);
+  // The lower piece's reference: the middle half of the rows from the hips
+  // to the ankles.
   const lower = rowsIn(hipY, ankleY);
   const bottomRows = lower.slice(Math.floor(lower.length * 0.25), Math.ceil(lower.length * 0.75));
-  if (!topRef.length || !bottomRows.length) return "no_clothes";
-  const topR = medianLab(topRef);
+  if (!rows.some((r) => r !== null) || !bottomRows.length) return "no_clothes";
   const bottomR = medianLab(bottomRows);
   const waistRow = shoulderY + torso * WAIST_FRACTION;
 
+  // The break: one change point, the row that best splits each flank's rows
+  // into "the colour of that flank's rows above it" and "the lower piece's
+  // colour", searched from BREAK_MIN_ROWS below the shoulders to the knee.
+  // Each candidate's upper colour is the median of the rows above it, so a
+  // crop top's hem high on the figure is found as readily as a coat's. A
+  // break is a hem only when both flanks change there: a t-shirt showing on
+  // one side of an open hoodie (p2 of UX pass 2) is not a hem. When either
+  // flank's upper colour at the best split sits within ONE_COLUMN_DELTA of
+  // the lower piece's, the outfit is one column. Ties go to the higher row.
+  const first = rows.findIndex((r) => r !== null);
+  const lo = Math.max(first + 1, idx(shoulderY + torso * BREAK_MIN_ROWS));
+  const hi = Math.min(idx(kneeY), rows.length - 1);
+  const sides = sideRows.map((sr) => {
+    const errBottom = sr.map((r) => (r ? hemDistance(r, bottomR) : 0));
+    const tail: number[] = new Array(sr.length + 1).fill(0);
+    for (let i = sr.length - 1; i >= 0; i--) tail[i] = tail[i + 1] + errBottom[i];
+    return { sr, tail };
+  });
+  // A hem is an edge: on both flanks the rows just above a candidate and
+  // the rows just below it must differ by ONE_COLUMN_DELTA, so the light
+  // falling off a dark jacket's shoulders (p1) is never a hem, however the
+  // costs fall.
+  const win = Math.max(3, Math.round((bottom - top) * EDGE_WINDOW));
+  // The nearest `win` rows with a colour on each side of k (skin between a
+  // crop top and its trousers has none, and is stepped over).
+  const near = (sr: (Lab | null)[], k: number, step: 1 | -1) => {
+    const out: Lab[] = [];
+    for (let i = step > 0 ? k : k - 1; i >= 0 && i < sr.length && out.length < win; i += step) {
+      const r = sr[i];
+      if (r) out.push(r);
+    }
+    return out;
+  };
+  const edgeAt = (k: number) =>
+    sideRows.every((sr) => {
+      const up = near(sr, k, -1), down = near(sr, k, 1);
+      return up.length > 0 && down.length > 0 && hemDistance(medianLab(up), medianLab(down)) >= ONE_COLUMN_DELTA;
+    });
   let breakRow: number | null = null;
-  if (deltaE(topR, bottomR) >= ONE_COLUMN_DELTA) {
-    // One change point: the row that best splits the rows from the upper
-    // reference down into "upper colour" above and "lower colour" below,
-    // searched from the middle of the torso to the knee. Ties go to the higher row.
-    const from = Math.max(0, idx(shoulderY + torso * TOP_REF[0]));
-    const lo = Math.max(1, idx(shoulderY + torso * BREAK_FROM));
-    const hi = Math.min(idx(kneeY), rows.length - 1);
-    let best = Infinity;
-    for (let k = lo; k <= hi; k++) {
-      let cost = 0;
-      for (let i = from; i < rows.length; i++) {
-        const row = rows[i];
-        if (row) cost += deltaE(row, i < k ? topR : bottomR);
-      }
-      if (cost < best) { best = cost; breakRow = y0 + k; }
+  let refs: Lab[] = [];
+  let best = Infinity;
+  for (let k = lo; k <= hi; k++) {
+    if (!edgeAt(k)) continue;
+    let cost = 0;
+    const ks: Lab[] = [];
+    for (const { sr, tail } of sides) {
+      const above = sr.slice(first, k).filter((r): r is Lab => r !== null);
+      if (!above.length) continue;
+      const ref = medianLab(above);
+      ks.push(ref);
+      cost += tail[k];
+      for (const r of above) cost += hemDistance(r, ref);
+    }
+    if (ks.length && cost < best - 1e-12) {
+      best = cost;
+      breakRow = y0 + k;
+      refs = ks;
     }
   }
+  if (breakRow !== null && (refs.length < 2 || refs.some((r) => hemDistance(r, bottomR) < ONE_COLUMN_DELTA))) breakRow = null;
+  const topR = breakRow !== null ? medianLab(rowsIn(shoulderY, breakRow - 1)) : medianLab(rows.filter((r): r is Lab => r !== null));
 
-  // The garments' colours: the well-lit core of every flank pixel of the
-  // upper piece (from the upper reference to its hem), and of the lower
-  // piece's middle rows.
+  // The garments' colours: the well-lit core of every edge pixel of the
+  // upper piece (from the shoulders to its hem), and of the lower piece's
+  // middle rows.
   const hem = breakRow ?? hipY;
-  const topPx = rowPx.slice(Math.max(0, idx(shoulderY + torso * TOP_REF[0])), Math.max(0, idx(hem))).flat();
+  const topPx = rowPx.slice(Math.max(0, first), Math.max(0, idx(hem))).flat();
   const lowerFrom = Math.max(hem, hipY);
   const lowerRows = rowPx.slice(Math.max(0, idx(lowerFrom)), Math.max(0, idx(ankleY)) + 1).filter((r) => r.length);
   const bottomPx = lowerRows.slice(Math.floor(lowerRows.length * 0.25), Math.ceil(lowerRows.length * 0.75)).flat();
   const topColour = topPx.length ? pieceColour(topPx) : topR;
   const bottomColour = bottomPx.length ? pieceColour(bottomPx) : bottomR;
 
-  // A front opening: in the upper piece's rows (from the upper reference to
-  // the hem, or the hips), a column within FRONT.half of the width either
-  // side of the centre that differs from that row's flanks on most rows.
+  // A front opening (FRONT): a narrow line down the middle of the upper
+  // piece, in contrast with even flanks, continuous from row to row.
   let front = false;
   {
-    const fy0 = Math.ceil(shoulderY + torso * TOP_REF[0]);
-    const fy1 = Math.floor(Math.min(hem, hipY));
-    const buckets = new Map<number, number>();
-    let n = 0;
+    const fy0 = y0 + Math.max(0, first);
+    const fy1 = Math.floor(Math.min(hem, hipY)) - 1;
+    // For each row: the narrow contrasting runs' centres, relative to the width.
+    const lines: { y: number; at: number[] }[] = [];
     for (let y = fy0; y <= fy1; y++) {
       const ref = rows[idx(y)];
-      if (!ref) continue;
-      n++;
-      const [l, r] = column(y);
-      const w = r - l, c = centreAt(y);
-      const marked = new Set<number>();
-      for (let x = Math.max(0, Math.floor(c - w * FRONT.half)); x <= Math.min(W - 1, Math.ceil(c + w * FRONT.half)); x++) {
-        const cat = mask.data[y * W + x];
-        const contrast = cat === CATEGORY.clothes ? deltaE(lab(x, y), ref) > FRONT.delta : cat !== CATEGORY.other;
-        if (contrast) marked.add(Math.round(((x - c) / (w || 1)) * 40));
+      const edges = rowPx[idx(y)];
+      if (!ref || !edges?.length) continue;
+      // Flanks one even cloth: the 90th percentile of their spread, read as a
+      // hem is (shading counts half, a change of cloth in full), under FRONT.delta.
+      const spread = edges.map((l) => hemDistance(l, ref)).sort((a, b) => a - b);
+      if (spread[Math.floor((spread.length - 1) * 0.9)] >= FRONT.delta) continue;
+      // The body column from the pose: a neighbour's sleeve touching the run
+      // must not move the centre the line is looked for round.
+      const [cl, cr] = column(y);
+      const w = cr - cl, c = (cl + cr) / 2;
+      const found: number[] = [];
+      let startX = -1;
+      const x0 = Math.max(0, Math.floor(c - w * FRONT.half)), x1 = Math.min(W - 1, Math.ceil(c + w * FRONT.half));
+      for (let x = x0; x <= x1 + 1; x++) {
+        const marked = x <= x1 && (mask.data[y * W + x] === CATEGORY.clothes ? deltaE(lab(x, y), ref) > FRONT.delta : mask.data[y * W + x] !== CATEGORY.other);
+        if (marked && startX < 0) startX = x;
+        if (!marked && startX >= 0) {
+          // A line whose colour also shows in the flanks is a pattern (a pinstripe), not an opening.
+          const narrow = x - startX <= Math.max(3, w * FRONT.line) && startX > x0 && x <= x1;
+          const lineLab = narrow && mask.data[y * W + startX] === CATEGORY.clothes ? lab(startX, y) : null;
+          const inFlanks = lineLab ? edges.filter((l) => deltaE(l, lineLab) < FRONT.delta).length > edges.length * 0.03 : false;
+          if (narrow && !inFlanks) found.push((startX + x - 1) / 2 / w - c / w);
+          startX = -1;
+        }
       }
-      // A line one or two pixels wide may fall between buckets: count a bucket's neighbours.
-      const near = new Set<number>();
-      for (const b of marked) for (const d of [-1, 0, 1]) near.add(b + d);
-      for (const b of near) buckets.set(b, (buckets.get(b) ?? 0) + 1);
+      lines.push({ y, at: found });
     }
-    for (const count of buckets.values()) if (n >= 4 && count >= n * FRONT.rows) front = true;
+    // The longest chain of lines down the rows: each within FRONT.drift (per
+    // row apart) of a line at most `gap` rows above it, so a hand or a fold
+    // may hide it for a while. A front opening runs through FRONT.rows of
+    // the upper piece's height, and shows on at least a third of its rows.
+    const gap = Math.max(3, Math.round((bottom - top) * FRONT.gap));
+    const nodes: { y: number; at: number; len: number; from: number }[] = [];
+    let best = { len: 0, span: 0 };
+    for (const row of lines)
+      for (const at of row.at) {
+        let link: (typeof nodes)[number] | null = null;
+        for (const n of nodes) if (row.y - n.y <= gap && row.y > n.y && Math.abs(n.at - at) <= FRONT.drift * (1 + (row.y - n.y) / 4) && (!link || n.len > link.len)) link = n;
+        const node = { y: row.y, at, len: (link?.len ?? 0) + 1, from: link?.from ?? row.y };
+        nodes.push(node);
+        if (node.len > best.len) best = { len: node.len, span: row.y - node.from + 1 };
+      }
+    const height = Math.max(1, fy1 - fy0 + 1);
+    front = lines.length >= 4 && best.span >= height * FRONT.rows && best.len >= lines.length / 3;
   }
 
   // Volume. The upper piece: on each torso row, the run of garment pixels
@@ -382,19 +485,34 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
     arms.push([el, wr], [wr, { x: wr.x + (wr.x - el.x) * 0.35, y: wr.y + (wr.y - el.y) * 0.35 }]);
   }
   const armHalf = shoulderW * ARM_HALF;
-  const clear: number[] = [];
+  // An arm spoils only the edge on its side: an arm whose line (the pose's
+  // shoulder, elbow, wrist and hand) crosses the row anywhere from 2 armHalf
+  // outside an edge to the centre line spoils that edge. A sleeve against
+  // the side widens the run by its own width (the landmark sits near its
+  // middle), and an arm inside the run means the run's edge beyond it is
+  // not the torso's (a neighbour's sleeve, a bag, the hand in a pocket:
+  // p1 of UX pass 2). With both edges clean the width is the
+  // run; with one, twice its distance from the centre line (borderline).
+  const both: number[] = [];
+  const oneSide: number[] = [];
   let candidates = 0;
+  let spoiled = 0;
   for (let y = Math.ceil(shoulderY + torso * TORSO_ROWS[0]); y <= Math.floor(shoulderY + torso * TORSO_ROWS[1]); y++) {
     candidates++;
     const run = runAt(mask, y, centreAt(y), Math.max(2, Math.round(shoulderW * 0.15)));
     if (!run) continue;
-    const crossed = arms.some(([a, b]) => {
-      const x = crossAt(a, b, y);
-      return x !== null && x >= run.x0 - armHalf && x <= run.x1 + armHalf;
-    });
-    if (!crossed) clear.push(run.x1 - run.x0 + 1);
+    const xs = arms.map(([a, b]) => crossAt(a, b, y)).filter((x): x is number => x !== null);
+    const c = centreAt(y);
+    const leftBad = xs.some((x) => x >= run.x0 - 2 * armHalf && x <= c);
+    const rightBad = xs.some((x) => x >= c && x <= run.x1 + 2 * armHalf);
+    if (leftBad || rightBad) spoiled++;
+    if (!leftBad && !rightBad) both.push(run.x1 - run.x0 + 1);
+    else if (!leftBad) oneSide.push(2 * Math.abs(centreAt(y) - run.x0) + 1);
+    else if (!rightBad) oneSide.push(2 * Math.abs(run.x1 - centreAt(y)) + 1);
   }
-  const topW = clear.length >= Math.max(3, candidates * MIN_CLEAR) ? median(clear) : null;
+  const need = Math.max(3, candidates * MIN_CLEAR);
+  const topW = both.length >= need ? median(both) : both.length + oneSide.length >= need ? median([...both, ...oneSide]) : null;
+  const fitOneSide = topW !== null && both.length < need;
   // Each leg at its own knee: the run of garment pixels through the knee,
   // the median over a few rows. When both knees fall in one run (a skirt, a
   // dress, legs together), each leg is half of it.
@@ -414,8 +532,11 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
     const joint = rs.length === 2 && rs[0].x0 <= rs[1].x1 && rs[1].x0 <= rs[0].x1;
     legW = joint ? (Math.max(rs[0].x1, rs[1].x1) - Math.min(rs[0].x0, rs[1].x0) + 1) / 2 : rs.reduce((t, r) => t + (r.x1 - r.x0 + 1), 0) / rs.length;
   }
-  const fit = shoulderW > 4 && topW !== null && topW > shoulderW * 0.4 && legW !== null && legW > 0 ? { top: topW / shoulderW, legs: legW / shoulderW } : null;
-  const fitWhy = !fit && topW === null && shoulderW > 4 && candidates > 0 ? ("arms" as const) : undefined;
+  const fitTop = shoulderW > 4 && topW !== null && topW > shoulderW * 0.4 ? topW / shoulderW : null;
+  const fitLegs = shoulderW > 4 && legW !== null && legW > 0 ? legW / shoulderW : null;
+  const fit = fitTop !== null || fitLegs !== null ? { top: fitTop, legs: fitLegs } : null;
+  // Said only when an arm really spoiled the rows that would have been read.
+  const fitWhy = fitTop === null && spoiled > 0 && spoiled >= candidates - need ? ("arms" as const) : undefined;
 
   // The shoes: a box round each visible foot, from SHOE_FROM of the way from the ankle
   // to the figure's lowest row, as wide as the foot's landmarks (ankle,
@@ -439,7 +560,8 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
   for (const f of feet) for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) if (isGarment(mask.data[y * W + x])) shoePx++;
   // A figure that runs to the frame's foot has its shoes cut off: whatever
   // lies in the boxes then may be a trouser leg, so the shoes are not read.
-  const cutOff = bottom >= H - 2 || !seen(aL) || !seen(aR);
+  // With one ankle out of sight the visible foot is read.
+  const cutOff = bottom >= H - 2 || (!seen(aL) && !seen(aR));
   const shoesRead = !cutOff && shoePx >= Math.max(6, shoulderW * shoulderW * 0.01);
   const shoesWhy = shoesRead ? undefined : cutOff ? ("cut_off" as const) : ("floor" as const);
 
@@ -455,6 +577,7 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
     bottomColour,
     fit,
     ...(fitWhy ? { fitWhy } : {}),
+    ...(fitOneSide && fitTop !== null ? { fitOneSide: true as const } : {}),
     cast,
     ...(light ? { light } : {}),
     feet: shoesRead ? feet : [],

@@ -68,6 +68,24 @@ describe("web/privacy.html, claim by claim", () => {
     expect(Object.keys(stored).sort()).toEqual(["bins", "day", "engine", "hash", "lines", "look", "source", "v"]);
     expect(Object.keys(stored.lines[0]).sort()).toEqual(["borderline", "measured", "rule", "state"]);
     expect(Object.keys(stored.bins).sort()).toEqual(["bottom", "fit", "palette", "proportion", "top", "waist"]);
+    // With a look tried, what is stored is the look plus the outfit as worn
+    // beside it (the page says "measurements and results beside them"): the
+    // as-worn reading's hash, bins and line labels, nothing more.
+    const { withWorn } = await import("../web/src/rules/handoff");
+    const reasons = { ...bins, fit: { top: null, legs: 0.4 }, fitWhy: "arms" as const, fitOneSide: true as const, shoesWhy: "floor" as const, front: true as const };
+    const line = { rule: "proportion" as const, title: "Proportion", measured: "0.50 : 0.50", text: "advice prose", state: "advice" as const, borderline: false };
+    const worn = lastReadOf({ engine: "ratio-engine/0.7.0", hash: "abcdef012345", source: "photo", look: null, bins: reasons, lines: [line] });
+    const look = lastReadOf({ engine: "ratio-engine/0.7.0", hash: "0123456789ab", source: "photo", look: "A front tuck, if it tucks", bins: reasons, lines: [line] });
+    const both = withWorn(look, worn);
+    expect(Object.keys(both).sort()).toEqual(["bins", "day", "engine", "hash", "lines", "look", "source", "v", "worn"]);
+    expect(Object.keys(both.worn!).sort()).toEqual(["bins", "hash", "lines"]);
+    expect(Object.keys(both.worn!.lines[0]).sort()).toEqual(["borderline", "measured", "rule", "state"]);
+    // Every bins key the browser may keep: numbers, colours and short reasons, never prose or pixels.
+    const allowed = ["bottom", "fit", "fitOneSide", "fitWhy", "front", "palette", "proportion", "shoesWhy", "top", "waist"];
+    for (const b of [both.bins, both.worn!.bins]) for (const k of Object.keys(b)) expect(allowed, k).toContain(k);
+    expect(Object.keys(both.worn!.bins).sort()).toEqual(allowed);
+    // And the one writer stores exactly that: saveLastRead keeps the as-worn reading beside a look.
+    expect(src).toMatch(/sessionStorage\.setItem\(LAST_READ_KEY, JSON\.stringify\(withWorn\(/);
   });
 
   it("counts as daily totals: /e takes exactly one field and only increments a day count", () => {

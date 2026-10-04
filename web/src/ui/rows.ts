@@ -9,6 +9,7 @@ import { shownColour } from "../engine/constants";
 import { byName, colourLabel } from "../engine/names";
 import { measuredCopy } from "../engine/measured";
 import { RULEBOOK } from "../engine/rulebook";
+import { tuckable } from "../engine/rules";
 import { countTo } from "./count";
 
 // The rule each line is held against, said once, from the rulebook.
@@ -60,7 +61,7 @@ export interface RowOptions {
 }
 
 /** Advice from a rule whose edges are set by hand says so beside it (RULEBOOK calibrated: false). */
-export const adviceLabel = (line: AdviceLine): string => (RULEBOOK[line.rule].calibrated ? "Advice" : "Advice, first estimate");
+export const adviceLabel = (line: AdviceLine): string => (line.state === "unread" ? "Why" : RULEBOOK[line.rule].calibrated ? "Advice" : "Advice, first estimate");
 
 /** The state word for a row, with borderline said. */
 export const stateLabel = (line: AdviceLine): string => (line.borderline ? `${STATE_WORDS[line.state]}, borderline` : STATE_WORDS[line.state]);
@@ -115,7 +116,7 @@ export function renderRows(list: HTMLOListElement, lines: AdviceLine[], bins: Bi
         body.append(note);
       }
       // An upper piece that opens down the front does not tuck: its row shows no tuck control.
-      const extra = line.rule === "proportion" && bins.front ? undefined : opts.extra?.[line.rule];
+      const extra = line.rule === "proportion" && !tuckable(bins) ? undefined : opts.extra?.[line.rule];
       if (extra) body.append(extra);
       li.append(head, body);
       return li;

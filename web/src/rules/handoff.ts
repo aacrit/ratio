@@ -96,13 +96,20 @@ function bins(x: unknown): Bins | null {
   }
   let fit: Bins["fit"] = null;
   if (x.fit !== null) {
-    if (!isObj(x.fit) || !num(x.fit.top, 0, 5) || !num(x.fit.legs, 0, 5)) return null;
-    fit = { top: x.fit.top, legs: x.fit.legs };
+    const part = (v: unknown) => (v === null ? null : num(v, 0, 5) ? v : undefined);
+    if (!isObj(x.fit)) return null;
+    const top = part(x.fit.top), legs = part(x.fit.legs);
+    if (top === undefined || legs === undefined || (top === null && legs === null)) return null;
+    fit = { top, legs };
   }
   const out: Bins = { proportion, waist: x.waist, top, bottom, palette, fit };
   if (x.fitWhy !== undefined) {
     if (x.fitWhy !== "arms") return null;
     out.fitWhy = "arms";
+  }
+  if (x.fitOneSide !== undefined) {
+    if (x.fitOneSide !== true) return null;
+    out.fitOneSide = true;
   }
   if (x.shoesWhy !== undefined) {
     if (x.shoesWhy !== "cut_off" && x.shoesWhy !== "floor") return null;

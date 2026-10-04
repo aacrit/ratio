@@ -17,7 +17,7 @@ import { type Lab, deltaE, hueGap, srgbToOklab } from "./color";
 import { type Cast, NO_CAST, cluster, coreColour, uncast } from "./garment-colour";
 
 export { CHROMA_WEIGHT, cluster } from "./garment-colour";
-import { CATEGORY, type FootBox, type Mask } from "./measure";
+import { CATEGORY, type FootBox, LIGHT_HUE, type Mask } from "./measure";
 import { SHOES_Y } from "./pieces";
 import type { Pixels } from "./resample";
 
@@ -104,8 +104,7 @@ export const REGION_COLOURS = 3;
  */
 export const SHADE = { colour: 0.04, tint: 0.008, hue: 30, neutralL: 0.12 } as const;
 
-/** How near a swatch's hue must sit to a coloured backdrop's to count as its light. */
-export const LIGHT_HUE = 30;
+
 
 /**
  * The shoes' colour from their pixels: of two clusters, the one with more

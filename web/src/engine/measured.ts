@@ -28,10 +28,15 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
   const each = (value: (s: (typeof named)[number]) => number) => named.map((s) => `${colourLabel(s)} ${two(value(s))}`).join(", ");
   switch (line.rule) {
     case "volume": {
-      if (!bins.fit) return bins.fitWhy === "arms" ? "Not read: an arm or a hand lies over every row Ratio reads the upper piece on." : "Volume was not measured.";
+      if (!bins.fit) return bins.fitWhy === "arms" ? "Not read: an arm or a hand lies over the upper piece's edges on every row Ratio reads it on." : "Volume was not measured.";
       // The words come from the same function the rule uses (shape-rules.ts volumeWords).
       const w = volumeWords(bins.fit);
-      return `Upper piece ${two(bins.fit.top)}× the shoulder width on the torso rows no arm crosses, ${w.top}; each leg ${two(bins.fit.legs)}× at the knee, ${w.legs}.`;
+      const upper =
+        bins.fit.top === null
+          ? "Upper piece not read: an arm or a hand lies over its edges on every row"
+          : `Upper piece ${two(bins.fit.top)}× the shoulder width${bins.fitOneSide ? ", read on one side," : ""} on the torso rows no arm spoils, ${w.top}`;
+      const legs = bins.fit.legs === null ? "the legs not read" : `each leg ${two(bins.fit.legs)}× at the knee, ${w.legs}`;
+      return `${upper}; ${legs}.`;
     }
     case "legline": {
       const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });

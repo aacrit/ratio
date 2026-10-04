@@ -21,7 +21,7 @@ import type { BinnedSwatch } from "./colour-rules";
 import { colourName, familyOf } from "./names";
 import { binShares, isNeutral } from "./constants";
 import { type Piece, pieces as placedPieces } from "./pieces";
-import { type AdviceLine, type Bins, type LineState, readBins } from "./rules";
+import { type AdviceLine, type Bins, type LineState, readBins, tuckable } from "./rules";
 
 export type Move =
   | { kind: "break"; to: number; title: string; detail: string }
@@ -175,7 +175,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
 
   // Proportion: move the break to the waist, unless the upper piece opens
   // down the front (it hangs to its hem; the line suggests a shorter piece).
-  if (b.proportion !== null && state("proportion") === "advice" && !b.front) {
+  if (b.proportion !== null && state("proportion") === "advice" && tuckable(b)) {
     const tuck = b.proportion < 0.66;
     moves.push({
       kind: "break",
@@ -220,13 +220,18 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     if (!sameColour(s, o)) moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: "A darker value below grounds the figure." });
   }
 
-  // Chroma: step the second loud colour down to a muted version of itself.
+  // Chroma: step one loud colour down to a muted version of itself: the
+  // second by area, or, when the outfit has an accent that stays at full
+  // strength, the loudest colour that is not the accent.
   const loud = chromatic.filter((s) => s.C >= SATURATED);
-  if (state("chroma") === "advice" && loud.length >= 2) {
-    const s = loud[1];
+  const others = loud.filter((s) => b.palette.indexOf(s) !== accent);
+  const mute = accent >= 0 ? others.reduce<BinnedSwatch | undefined>((m, s) => (!m || s.C > m.C ? s : m), undefined) : loud[1];
+  if (state("chroma") === "advice" && loud.length >= 2 && mute) {
+    const s = mute;
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
-    if (i !== accent && !sameColour(s, o)) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
+    // A muted red is still called red: only a real step down in chroma counts here.
+    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
   }
 
   // Accent: a tenth of the area. The complement of the lead hue when the lead

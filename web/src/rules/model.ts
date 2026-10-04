@@ -224,8 +224,8 @@ export function yoursValues(b: Bins): YoursValues {
   const fix = (v: number) => Number(v.toFixed(2));
   return {
     proportion: b.proportion,
-    volumeTop: b.fit ? b.fit.top : null,
-    volumeLegs: b.fit ? b.fit.legs : null,
+    volumeTop: b.fit?.top ?? null,
+    volumeLegs: b.fit?.legs ?? null,
     legline: p.lower >= 0 && p.shoes >= 0 ? { lower: b.palette[p.lower].L, shoes: b.palette[p.shoes].L, gap: fix(Math.abs(b.palette[p.lower].L - b.palette[p.shoes].L)) } : null,
     value: ls.length ? { ls, range: fix(Math.max(...ls) - Math.min(...ls)) } : null,
     shares: named.map(({ share, L, C, h }) => ({ share, L, C, h })),

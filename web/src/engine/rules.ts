@@ -14,7 +14,7 @@ import { binShares, isNeutral } from "./constants";
 import { byName } from "./names";
 import { pieces } from "./pieces";
 import type { RuleId } from "./rulebook";
-import { legLine, legUnread, volumeLine, volumeUnread } from "./shape-rules";
+import { type Fit, legLine, legUnread, volumeLine, volumeUnread } from "./shape-rules";
 import type { OutfitMeasure, ShoesWhy } from "./measure";
 import type { Swatch } from "./palette";
 
@@ -65,10 +65,12 @@ export interface Bins {
   bottom: { L: number; C: number; h: number };
   /** The outfit's palette, largest share first. */
   palette: BinnedSwatch[];
-  /** Volume: the upper piece's and each leg's fabric width over the shoulder distance, binned to 0.05; null when unmeasured. */
-  fit: { top: number; legs: number } | null;
-  /** Why volume was not read: an arm or a hand crosses every torso row. */
+  /** Volume: the upper piece's and each leg's fabric width over the shoulder distance, binned to 0.05; either may be null on its own, and the whole is null when neither was read. */
+  fit: Fit | null;
+  /** Why the upper piece's width was not read: an arm or a hand lay on its edges on every row. */
   fitWhy?: "arms";
+  /** The upper piece's width was read on one side only: borderline. */
+  fitOneSide?: true;
   /** Why the shoes were not read: cut off by the frame, or not told apart from the floor. */
   shoesWhy?: ShoesWhy;
   /** The upper piece opens or zips down the front, so it does not tuck. */
@@ -112,12 +114,20 @@ export function binsOf(m: OutfitMeasure, palette: Swatch[]): Bins {
     top: binColour(m.topColour),
     bottom: binColour(m.bottomColour),
     palette: binPalette(palette),
-    fit: m.fit ? { top: fix(round(m.fit.top, 0.05)), legs: fix(round(m.fit.legs, 0.05)) } : null,
-    ...(m.fit === null && m.fitWhy ? { fitWhy: m.fitWhy } : {}),
+    fit: m.fit ? { top: m.fit.top === null ? null : fix(round(m.fit.top, 0.05)), legs: m.fit.legs === null ? null : fix(round(m.fit.legs, 0.05)) } : null,
+    ...(m.fitWhy && (m.fit === null || m.fit.top === null) ? { fitWhy: m.fitWhy } : {}),
+    ...(m.fitOneSide ? { fitOneSide: true as const } : {}),
     ...(m.shoesWhy ? { shoesWhy: m.shoesWhy } : {}),
     ...(m.front ? { front: true as const } : {}),
   };
 }
+
+/**
+ * Whether a tuck may be offered for this reading: the upper piece does not
+ * open down the front. Read's "Show the tuck" control, the looks' tuck move
+ * and the proportion advice all ask this one predicate.
+ */
+export const tuckable = (b: Pick<Bins, "front">): boolean => !b.front;
 
 /** A ratio pair as one unit, thin spaces round the colon (design/BRAND.md). */
 export const ratioText = (r: number) => `${r.toFixed(2)} : ${(1 - r).toFixed(2)}`;
@@ -147,14 +157,14 @@ function proportionLine(b: Bins, rawBreak: number | null): AdviceLine {
     "short-top": { text: `The break sits high, near ${r.toFixed(2)}, so the lower block carries the length. Keep the bottom's line unbroken to the shoe and the effect holds.`, state: "neutral" },
     golden: { text: `The break sits near ${nearestDivision(r)}. The eye reads a short upper block over a long lower one, the classic division. Keep it.`, state: "golden" },
     halves: {
-      text: b.front
+      text: !tuckable(b)
         ? `Near-equal halves read as boxy. The upper piece opens down the front, so it hangs to its hem rather than tucking. ${shorter}`
         : `Near-equal halves read as boxy. If the upper piece tucks, a front tuck moves the break to the waist, about ${tuck}, near the golden section, and shows the rise of what you wear below.`,
       state: "advice",
     },
     "golden-long": { text: `The break sits near ${nearestDivision(1 - r)} from below: a long upper piece over a short lower one. It is the second classical division. Keep the lower block narrow.`, state: "golden" },
     "long-top": {
-      text: b.front
+      text: !tuckable(b)
         ? `The upper piece covers most of the figure, so the break has little to divide. It opens down the front, so a belt would sit under it. ${shorter}`
         : `The upper piece covers most of the figure, so the break has little to divide. Belt it at the waist, about ${tuck}, to give the eye a division near the golden section.`,
       state: "advice",
@@ -176,7 +186,7 @@ export interface OutfitReading {
  */
 export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
   const lines = [proportionLine(bins, rawBreak)];
-  if (bins.fit) lines.push(volumeLine(bins.fit));
+  if (bins.fit) lines.push(volumeLine(bins.fit, { oneSide: bins.fitOneSide, front: bins.front }));
   else if (bins.fitWhy) lines.push(volumeUnread(bins.fitWhy));
   const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
   if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
