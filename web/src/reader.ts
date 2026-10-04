@@ -22,7 +22,7 @@ export type FromWorker =
   | { type: "load_failed"; message: string }
   | { type: "photo"; id: number; display: Pixels }
   | { type: "read"; id: number; read: Read }
-  | { type: "failed"; id: number; failure: ReadFailure; copy: string }
+  | { type: "failed"; id: number; failure: ReadFailure; copy: string | null }
   | { type: "recoloured"; id: number; pixels: Pixels };
 
 export type Progress = (loaded: number, total: number) => void;
@@ -44,6 +44,13 @@ export class Reader {
     if (this.worker) return this.worker;
     const w = new ReadWorker();
     w.onmessage = (e: MessageEvent<FromWorker>) => this.receive(e.data);
+    // A worker that cannot start or throws is a failed load for whoever is waiting; the next read starts a new one.
+    w.onerror = (e: ErrorEvent) => {
+      this.receive({ type: "load_failed", message: e.message || "the read worker failed" });
+      for (const [id] of this.waiting) this.receive({ type: "failed", id, failure: "models_failed", copy: null });
+      w.terminate();
+      this.worker = null;
+    };
     this.worker = w;
     return w;
   }

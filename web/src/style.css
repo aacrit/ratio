@@ -349,8 +349,10 @@ input:focus-visible + .btn,
   left: var(--gutter);
   right: var(--gutter);
   bottom: calc(var(--sheet-peek) + var(--stage-foot) + 8px);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
   transform-origin: 50% 0;
   will-change: transform;
 }
@@ -366,10 +368,12 @@ input:focus-visible + .btn,
 
 .figure {
   display: block;
+  flex: 0 1 auto;
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
+  min-height: 0;
   border-radius: 4px;
   box-shadow: var(--shadow-photo);
   touch-action: pan-y;
@@ -831,7 +835,7 @@ body[data-compare="on"] .figure {
 
 .trying {
   display: grid;
-  grid-template-columns: 64px 1fr;
+  grid-template-columns: 84px 1fr;
   gap: 14px;
   align-items: start;
   padding: 12px;

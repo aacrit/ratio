@@ -93,11 +93,13 @@ function setupRead(): void {
       return;
     }
     const stageTop = stage.getBoundingClientRect().top;
-    const footBottom = stageTop + foot.offsetTop + foot.offsetHeight;
-    const lift = Math.max(0, footBottom + 8 - top);
+    const footH = foot.offsetHeight;
+    const footBottomAtRest = stageTop + foot.offsetTop + footH;
+    const footBottom = Math.min(footBottomAtRest, top - 8);
+    const lift = footBottomAtRest - footBottom;
     foot.style.transform = lift > 0 ? `translate3d(0, ${(-lift).toFixed(1)}px, 0)` : "";
     const wellTop = stageTop + well.offsetTop;
-    const room = top - lift - wellTop - 10;
+    const room = footBottom - footH - 8 - wellTop;
     const k = Math.max(0.3, Math.min(1, room / Math.max(1, well.offsetHeight)));
     well.style.transform = k < 1 ? `scale(${k.toFixed(4)})` : "";
   });
