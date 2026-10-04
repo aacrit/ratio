@@ -1,11 +1,13 @@
 // The reading as an argument (design/BRAND.md): each rule is a row with what
 // was measured, the rule it was held against, and the advice. The measured
 // and rule lines are never folded away. A row can also say how a tried look
-// changed it ("was advice, now on the mark").
+// changed it ("was advice, now on the mark"). Rows arrive in order (the
+// `argument` stagger) and their numerals count up as they land.
 
 import type { Bins, AdviceLine, LineState } from "../engine/rules";
 import { colourLabel } from "../engine/names";
 import { RULEBOOK } from "../engine/rulebook";
+import { countTo } from "./count";
 
 // The rule each line is held against, said once, from the rulebook.
 export const RULE_COPY = Object.fromEntries(Object.entries(RULEBOOK).map(([id, e]) => [id, e.rule])) as Record<AdviceLine["rule"], string>;
@@ -62,16 +64,27 @@ export function paletteStrip(bins: Bins, label = "The outfit's palette"): HTMLEl
 export interface RowOptions {
   /** The state each rule had before a tried look, to mark what changed. */
   before?: Map<AdviceLine["rule"], LineState>;
+  /** The measurement each rule showed before, so a changed numeral counts from it. */
+  beforeMeasured?: Map<AdviceLine["rule"], string>;
   /** Extra controls for a row (the tuck button), by rule. */
   extra?: Partial<Record<AdviceLine["rule"], HTMLElement>>;
 }
 
-export function renderRows(list: HTMLOListElement, lines: AdviceLine[], bins: Bins, opts: RowOptions = {}): void {
+/** The state word for a row, with borderline said. */
+export const stateLabel = (line: AdviceLine): string => (line.borderline ? `${STATE_WORDS[line.state]}, borderline` : STATE_WORDS[line.state]);
+
+/**
+ * Renders the rows. The numerals count up once the rows are shown
+ * (`list.classList.add("in")` by the caller); call `land()` for that.
+ */
+export function renderRows(list: HTMLOListElement, lines: AdviceLine[], bins: Bins, opts: RowOptions = {}): { land: () => void } {
   list.classList.remove("in");
+  const counts: (() => void)[] = [];
   list.replaceChildren(
-    ...lines.map((line) => {
+    ...lines.map((line, i) => {
       const li = document.createElement("li");
       li.className = "row";
+      li.style.setProperty("--i", String(i));
       li.dataset.state = line.borderline ? "borderline" : line.state;
       const was = opts.before?.get(line.rule);
       if (was && was !== line.state) li.dataset.changed = "";
@@ -80,11 +93,21 @@ export function renderRows(list: HTMLOListElement, lines: AdviceLine[], bins: Bi
       const title = document.createElement("span");
       title.className = "row-t";
       title.textContent = line.title;
+      const state = document.createElement("span");
+      state.className = "row-s";
+      state.textContent = stateLabel(line);
       const measured = document.createElement("span");
       measured.className = "row-n";
       measured.dataset.ratio = "";
       measured.textContent = line.measured;
-      head.append(title, measured);
+      const wasMeasured = opts.beforeMeasured?.get(line.rule);
+      // Count from the old value when a look changed it; from zero on a fresh read; not at all when unchanged.
+      if (opts.beforeMeasured === undefined) counts.push(() => countTo(measured, line.measured));
+      else if (wasMeasured !== undefined && wasMeasured !== line.measured) counts.push(() => countTo(measured, line.measured, wasMeasured));
+      const titles = document.createElement("span");
+      titles.className = "row-tt";
+      titles.append(title, state);
+      head.append(titles, measured);
       const body = document.createElement("div");
       body.className = "row-b";
       if (was && was !== line.state) {
@@ -105,4 +128,10 @@ export function renderRows(list: HTMLOListElement, lines: AdviceLine[], bins: Bi
       return li;
     }),
   );
+  return {
+    land: () => {
+      list.classList.add("in");
+      counts.forEach((c) => c());
+    },
+  };
 }

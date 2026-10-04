@@ -5,6 +5,10 @@ import { defineConfig } from "vite";
 // the repo root's dist/, matching wrangler.jsonc's assets.directory.
 export default defineConfig({
   publicDir: "public",
+  // The read worker (src/read.worker.ts) is a module worker in dev and in
+  // the build alike, so MediaPipe loads the same module runtime both ways
+  // (one numeric path, the determinism law).
+  worker: { format: "es" },
   build: {
     outDir: "../dist",
     emptyOutDir: true,

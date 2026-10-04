@@ -18,6 +18,8 @@ describe("CSP policy", () => {
     expect(CSP).toContain("script-src 'self'");
     expect(CSP).toContain("style-src 'self';");
     expect(CSP).toContain("font-src 'self';");
+    // The read worker is this origin's script and nothing else may spawn a worker.
+    expect(CSP).toContain("worker-src 'self';");
     // 'wasm-unsafe-eval' lets this origin's WASM compile (the vision
     // runtime); JavaScript eval stays blocked.
     expect(CSP).not.toMatch(/https?:|unsafe-inline|(?<!wasm-)unsafe-eval|\*/);

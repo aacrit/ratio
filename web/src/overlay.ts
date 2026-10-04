@@ -4,13 +4,19 @@
 // break line draws across, then the numeral lands. "Show the tuck" glides
 // the break mark to the waist. Every stroke and numeral sits on the halo.
 // While a look is tried, a chalk wipe splits the photo: as worn on the left,
-// the look on the right; drag it (or use the range control) to compare.
+// the look on the right; drag it (and let it go: it carries) or use the
+// range control to compare.
+//
+// The canvas holds the photo at display size (read.ts, DISPLAY_SIZE) while
+// every measurement is in reading-size coordinates: one scale transform
+// maps the two, so the overlay is drawn once, in the units it was measured
+// in, and stays sharp on a large stage.
 // Colours come from design/tokens.css; this file holds no colour literal.
 
 import { GOLDEN, type OutfitReading, ratioText } from "./engine/rules";
 import type { OutfitMeasure } from "./engine/measure";
 import type { Pixels } from "./engine/resample";
-import { chalkMs, numberToken, spring, springToken, tween } from "./motion";
+import { type Animation, chalkMs, numberToken, project, spring, springToken, tween } from "./motion";
 
 /**
  * Resolves colour tokens to concrete colours a canvas understands. The
@@ -38,6 +44,21 @@ function colours(): Record<"chalk" | "muted" | "tape" | "section" | "halo" | "gl
   return out;
 }
 
+/** Draws display pixels into an offscreen canvas (putImageData ignores transforms; drawImage honours them). */
+function sheet(pixels: Pixels): OffscreenCanvas {
+  const c = new OffscreenCanvas(pixels.width, pixels.height);
+  c.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
+  return c;
+}
+
+/** Shows a photo on the stage canvas before its reading exists (the models are still at work). */
+export function showPhoto(canvas: HTMLCanvasElement, display: Pixels): void {
+  canvas.width = display.width;
+  canvas.height = display.height;
+  canvas.style.aspectRatio = `${display.width} / ${display.height}`;
+  canvas.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(display.data), display.width, display.height), 0, 0);
+}
+
 interface Scene {
   plumbDeg: number;
   plumbAlpha: number;
@@ -57,30 +78,34 @@ export class Figure {
   private look: OffscreenCanvas | null = null;
   /** Where the look begins, as a fraction of the width (0 = all look, 1 = all as worn). */
   private wipe = 1;
-  private wipeAnim: { done: Promise<void>; cancel: () => void } | null = null;
+  private wipeAnim: Animation | null = null;
   private scene: Scene;
   private c = colours();
-  private tuckAnim: { done: Promise<void>; cancel: () => void } | null = null;
+  private tuckAnim: Animation | null = null;
+  /** Display pixels per reading pixel. */
+  private scale: number;
+  private rw: number;
+  private rh: number;
+  private frame = 0;
 
   constructor(
     readonly element: HTMLCanvasElement,
-    private pixels: Pixels,
+    display: Pixels,
+    read: { width: number; height: number },
     private m: OutfitMeasure,
     private reading: OutfitReading,
   ) {
     const canvas = element;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = pixels.width * dpr;
-    canvas.height = pixels.height * dpr;
-    canvas.style.aspectRatio = `${pixels.width} / ${pixels.height}`;
+    canvas.width = display.width;
+    canvas.height = display.height;
+    canvas.style.aspectRatio = `${display.width} / ${display.height}`;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no 2d context");
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx = ctx;
-    // putImageData ignores the transform, so the photo goes through an
-    // offscreen copy and drawImage, which honours it.
-    this.photo = new OffscreenCanvas(pixels.width, pixels.height);
-    this.photo.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
+    this.rw = read.width;
+    this.rh = read.height;
+    this.scale = display.width / read.width;
+    this.photo = sheet(display);
     this.scene = { plumbDeg: 0, plumbAlpha: 0, tape: 0, across: 0, breakRow: m.breakRow, label: null, glow: 0, ghostRow: null, near: false };
     this.draw();
   }
@@ -105,23 +130,33 @@ export class Figure {
     ctx.stroke();
   }
 
+  /** Draws at most once per frame, however many springs ask. */
+  private draw(): void {
+    if (this.frame) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
+      this.paint();
+    });
+  }
+
   /**
-   * Draws the scene. On screen by default; into another context (the saved
+   * Paints the scene. On screen by default; into another context (the saved
    * card) with `still`, which draws the look whole and no wipe.
    */
-  draw(target: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D = this.ctx, still = false): void {
+  paint(target: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D = this.ctx, still = false): void {
     const ctx = target;
-    const { pixels, m, scene: s, c } = this;
-    const unit = Math.max(1, pixels.width / 340);
-    ctx.clearRect(0, 0, pixels.width, pixels.height);
-    ctx.drawImage(still && this.look ? this.look : this.photo, 0, 0);
+    const { m, scene: s, c, rw, rh } = this;
+    const unit = Math.max(1, rw / 340);
+    ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    ctx.clearRect(0, 0, rw, rh);
+    ctx.drawImage(still && this.look ? this.look : this.photo, 0, 0, rw, rh);
     if (!still && this.look && this.wipe < 1) {
-      const x0 = Math.round(pixels.width * this.wipe);
+      const x0 = rw * this.wipe;
       ctx.save();
       ctx.beginPath();
-      ctx.rect(x0, 0, pixels.width - x0, pixels.height);
+      ctx.rect(x0, 0, rw - x0, rh);
       ctx.clip();
-      ctx.drawImage(this.look, 0, 0);
+      ctx.drawImage(this.look, 0, 0, rw, rh);
       ctx.restore();
     }
 
@@ -181,7 +216,7 @@ export class Figure {
       ctx.font = `500 ${Math.round(10 * unit)}px "JetBrains Mono", ui-monospace, monospace`;
       const w = ctx.measureText(text).width + 10 * unit;
       const bh = 16 * unit;
-      const bx = Math.min(pixels.width - w - 4, m.right + 18 * unit);
+      const bx = Math.min(rw - w - 4, m.right + 18 * unit);
       const by = s.breakRow - bh / 2;
       ctx.fillStyle = c.halo;
       ctx.beginPath();
@@ -194,26 +229,30 @@ export class Figure {
         ctx.globalAlpha = 1;
       }
       ctx.fillStyle = c.tape;
+      ctx.textAlign = "left";
       ctx.textBaseline = "middle";
       ctx.fillText(text, bx + 5 * unit, s.breakRow + 0.5);
     }
 
     // The wipe: a chalk line with a grip, and the two sides named.
     if (!still && this.look && this.wipe > 0 && this.wipe < 1) {
-      const wx = pixels.width * this.wipe;
-      this.line(ctx, wx, 0, wx, pixels.height, c.chalk, 1.4 * unit);
+      const wx = rw * this.wipe;
+      this.line(ctx, wx, 0, wx, rh, c.chalk, 1.4 * unit);
       ctx.fillStyle = c.halo;
       ctx.beginPath();
-      ctx.arc(wx, pixels.height / 2, 9 * unit, 0, Math.PI * 2);
+      ctx.arc(wx, rh / 2, 9 * unit, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = c.chalk;
       ctx.lineWidth = 1.4 * unit;
       ctx.stroke();
+      // The grip's two ticks, a chalk mark that says "slide".
+      this.line(ctx, wx - 3.5 * unit, rh / 2 - 3 * unit, wx - 3.5 * unit, rh / 2 + 3 * unit, c.chalk, 1 * unit);
+      this.line(ctx, wx + 3.5 * unit, rh / 2 - 3 * unit, wx + 3.5 * unit, rh / 2 + 3 * unit, c.chalk, 1 * unit);
       ctx.font = `500 ${Math.round(9 * unit)}px "JetBrains Mono", ui-monospace, monospace`;
       ctx.textBaseline = "middle";
-      for (const [label, x, align] of [["AS WORN", wx - 8 * unit, "right"], ["THE LOOK", wx + 8 * unit, "left"]] as const) {
+      for (const [label, lx0, align] of [["AS WORN", wx - 8 * unit, "right"], ["THE LOOK", wx + 8 * unit, "left"]] as const) {
         const w = ctx.measureText(label).width + 8 * unit;
-        const lx = align === "right" ? x - w : x;
+        const lx = align === "right" ? lx0 - w : lx0;
         ctx.fillStyle = c.halo;
         ctx.beginPath();
         ctx.roundRect(lx, 8 * unit, w, 14 * unit, 3 * unit);
@@ -226,8 +265,9 @@ export class Figure {
   }
 
   /**
-   * Shows a tried look's recoloured photo behind the wipe, which glides to
-   * the middle so both sides are in view; null returns to the outfit as worn.
+   * Shows a tried look's recoloured photo (display size) behind the wipe,
+   * which glides to the middle so both sides are in view; null returns to
+   * the outfit as worn.
    */
   setLook(pixels: Pixels | null): void {
     this.wipeAnim?.cancel();
@@ -243,9 +283,7 @@ export class Figure {
       });
       return;
     }
-    const next = new OffscreenCanvas(pixels.width, pixels.height);
-    next.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
-    this.look = next;
+    this.look = sheet(pixels);
     const from = this.wipe;
     this.wipeAnim = spring(springToken("glide"), from, 0.5, (w) => {
       this.wipe = w;
@@ -260,15 +298,37 @@ export class Figure {
     this.draw();
   }
 
+  /** The wipe let go at `velocity` (fractions of the width per second): it carries on and settles where it would stop. */
+  flingWipe(velocity: number, onMove?: (w: number) => void): void {
+    this.wipeAnim?.cancel();
+    const to = Math.max(0.02, Math.min(0.98, project(this.wipe, velocity)));
+    this.wipeAnim = spring(
+      springToken("fling"),
+      this.wipe,
+      to,
+      (w) => {
+        this.wipe = Math.max(0, Math.min(1, w));
+        this.draw();
+        onMove?.(this.wipe);
+      },
+      velocity,
+      1,
+    );
+  }
+
+  get wipeAt(): number {
+    return this.wipe;
+  }
+
   get hasLook(): boolean {
     return this.look !== null;
   }
 
   /** The photo with its overlay at rest, the look whole when one is tried: for the saved card. */
   still(): OffscreenCanvas {
-    const out = new OffscreenCanvas(this.pixels.width, this.pixels.height);
+    const out = new OffscreenCanvas(this.element.width, this.element.height);
     const ctx = out.getContext("2d");
-    if (ctx) this.draw(ctx, true);
+    if (ctx) this.paint(ctx, true);
     return out;
   }
 
@@ -342,28 +402,5 @@ export class Figure {
   /** Shows the tuck the proportion advice describes (on), or the outfit as worn. */
   showTuck(on: boolean): void {
     this.showBreakAt(on ? this.reading.bins.waist : null);
-  }
-
-  /**
-   * Cross-fades the photo to another version of itself (a tried look's
-   * recolour, or the photo as worn). Same size, same overlay on top.
-   */
-  async setPhoto(pixels: Pixels): Promise<void> {
-    const next = new OffscreenCanvas(pixels.width, pixels.height);
-    next.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
-    const prev = this.photo;
-    const mix = new OffscreenCanvas(pixels.width, pixels.height);
-    const c = mix.getContext("2d");
-    await tween(numberToken("--dur-morph") || 360, (t) => {
-      if (!c) return;
-      c.globalAlpha = 1;
-      c.drawImage(prev, 0, 0);
-      c.globalAlpha = t;
-      c.drawImage(next, 0, 0);
-      this.photo = mix;
-      this.draw();
-    });
-    this.photo = next;
-    this.draw();
   }
 }

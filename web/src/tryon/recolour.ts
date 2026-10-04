@@ -67,24 +67,29 @@ export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swa
   const targets = colourTargets(moves, swatches);
   const data = new Uint8ClampedArray(pixels.data);
   if (!targets.length) return { width: pixels.width, height: pixels.height, data };
-  const W = mask.width;
+  // The photo may be larger than the mask (the display size against the
+  // reading size): the mask is sampled nearest-neighbour. Box and bands are
+  // in the photo's own pixels.
+  const W = pixels.width;
+  const mw = mask.width, mh = mask.height;
+  const sx = mw / pixels.width, sy = mh / pixels.height;
   const pad = (box.right - box.left) * 0.35;
   const x0 = Math.max(0, Math.floor(box.left - pad)), x1 = Math.min(W - 1, Math.ceil(box.right + pad));
   for (const { swatch, piece, to } of targets) {
     const from = swatches[swatch].lab;
     const band = bands[piece];
-    const y0 = Math.max(0, Math.floor(band[0])), y1 = Math.min(mask.height - 1, Math.ceil(band[1]));
+    const y0 = Math.max(0, Math.floor(band[0])), y1 = Math.min(pixels.height - 1, Math.ceil(band[1]));
     const fromC = Math.hypot(from.a, from.b);
     const toC = Math.hypot(to.a, to.b);
     // Texture in chroma scales with the new colour's strength; a neutral
     // target loses the old hue's tint entirely.
     const k2 = fromC > 0.01 ? Math.min(1.5, toC / fromC) : toC > 0.01 ? 1 : 0;
-    for (let y = y0; y <= y1; y++)
+    for (let y = y0; y <= y1; y++) {
+      const my = Math.min(mh - 1, Math.floor(y * sy)) * mw;
       for (let x = x0; x <= x1; x++) {
-        const p = y * W + x;
-        const cat = mask.data[p];
+        const cat = mask.data[my + Math.min(mw - 1, Math.floor(x * sx))];
         if (cat !== CATEGORY.clothes && cat !== CATEGORY.other) continue;
-        const i = p * 4;
+        const i = (y * W + x) * 4;
         // Read the original photo, never a pixel another move already changed.
         const px = srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
         if (Math.hypot(px.a - from.a, px.b - from.b) > SAME_CLOTH.ab || Math.abs(px.L - from.L) > SAME_CLOTH.L) continue;
@@ -97,6 +102,7 @@ export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swa
         data[i + 1] = g;
         data[i + 2] = b;
       }
+    }
   }
   return { width: pixels.width, height: pixels.height, data };
 }

@@ -1,13 +1,18 @@
 // The measuring models, loaded from this origin (/mp, staged by
-// scripts/fetch-models.mjs) and run on the processor in this tab. The photo
-// is never sent anywhere. The CPU delegate is on purpose: one numeric path,
-// so a photo reads the same on every device (the determinism risk in the
-// brief); a graphics chip would be faster and less repeatable.
+// scripts/fetch-models.mjs) and run on the processor, inside the read
+// worker (read.worker.ts) so the page never stutters while a photo is
+// measured. The photo is never sent anywhere. The CPU delegate is on
+// purpose: one numeric path, so a photo reads the same on every device (the
+// determinism risk in the brief); a graphics chip would be faster and less
+// repeatable.
 //
 // The files are fetched here, not by MediaPipe, so the page can show the
 // real download in MB (design/BRAND.md: waiting shows its work). The models
 // go to MediaPipe as buffers; the runtime's .wasm is fetched first so
-// MediaPipe's own request for it is answered from the browser cache.
+// MediaPipe's own request for it is answered from the browser cache. The
+// runtime is the module build (vision_wasm_module_internal), the one a
+// module worker can import; the fileset resolver's second argument asks for
+// it.
 
 import { FilesetResolver, ImageSegmenter, PoseLandmarker } from "@mediapipe/tasks-vision";
 import type { Landmark, Mask } from "./engine/measure";
@@ -20,7 +25,7 @@ export interface Seen {
 
 export type Progress = (loaded: number, total: number) => void;
 
-const FILES = ["/mp/wasm/vision_wasm_internal.wasm", "/mp/pose_landmarker_lite.task", "/mp/selfie_multiclass_256x256.tflite"] as const;
+const FILES = ["/mp/wasm/vision_wasm_module_internal.wasm", "/mp/pose_landmarker_lite.task", "/mp/selfie_multiclass_256x256.tflite"] as const;
 
 type Models = { pose: PoseLandmarker; seg: ImageSegmenter };
 let models: Promise<Models> | null = null;
@@ -66,7 +71,7 @@ export function loadModels(onProgress?: Progress): Promise<Models> {
   if (onProgress) listeners.add(onProgress);
   models ??= (async () => {
     const [, poseModel, segModel] = await fetchAll();
-    const fileset = await FilesetResolver.forVisionTasks("/mp/wasm");
+    const fileset = await FilesetResolver.forVisionTasks("/mp/wasm", true);
     const [pose, seg] = await Promise.all([
       PoseLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetBuffer: poseModel, delegate: "CPU" },

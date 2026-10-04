@@ -58,6 +58,10 @@
  *   borderline on halo over white (stroke)   3.72  3.0
  *   So over the photo only tape and chalk may be text; section and
  *   borderline are strokes there, and their words live in the reading panel.
+ *
+ *   SHEET AND PANEL: --color-sheet is the lining at 97% over the worsted
+ *   (paper's fresh sheet at 97% by day), within 0.01 of the surface in
+ *   lightness, so every "on surface" pair above holds on the sheet.
  */
 
 /* Faces are self-hosted (design/fonts.css); never a font CDN (V3). */
@@ -93,6 +97,14 @@
   --color-borderline-glow: oklch(from var(--color-borderline) l c h / 0.16);
   --color-scrim: oklch(from var(--color-bg) l c h / 0.72); /* behind sheets and dialogs */
   --color-halo: oklch(from var(--hex-worsted) l c h / 0.85); /* under every overlay stroke and numeral; fixed in both themes */
+  /* Depth and light: the sheet rides over the stage, the photo sits on the
+     cloth, a lamp falls on the table. One light, from above and slightly
+     forward; shadows are the worsted's own dark, never grey. */
+  --color-sheet: oklch(from var(--hex-lining) l c h / 0.97); /* the sheet and the side panel */
+  --edge-sheet: oklch(from var(--hex-chalk) l c h / 0.1); /* the lit top edge of the sheet */
+  --light-stage-tone: oklch(from var(--hex-lining) calc(l + 0.04) c h); /* the lamp's pool on the cloth */
+  --shadow-photo: 0 2px 6px rgb(0 0 0 / 0.45), 0 28px 64px rgb(6 8 12 / 0.6);
+  --shadow-sheet: 0 -20px 56px rgb(6 8 12 / 0.5);
   /* Over the photo the overlay keeps the Cloth colours in both themes. */
   --overlay-muted: oklch(from var(--hex-chalk) l c h / 0.64);
   --overlay-tape-glow: oklch(from var(--hex-tape) l c h / 0.16);
@@ -124,6 +136,7 @@
   /* Radii and shadows. Cards are squarer than Hearth's 14px: a drafting
      sheet, not a lamplit card. */
   --radius-card: 10px;
+  --radius-sheet: 20px;
   --radius-control: 6px;
   --radius-pill: 999px;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(6 8 12 / 0.4);
@@ -140,7 +153,13 @@
   --phi: 0.618;
   --phi-minor: 0.382;
   --third: 0.333;
-  --split-photo: 38.2%; /* the read screen's photo column at 1280: the layout itself sits on the section */
+  --split-panel: 38.2%; /* the reading panel from 1024 up; the stage keeps the major section (0.618): the layout itself sits on the section it teaches */
+
+  /* The app frame: a bar, a stage, a sheet (design/BRAND.md, Stage and sheet) */
+  --bar-h: 52px;
+  --gutter: 16px;
+  --sheet-peek: 128px; /* the sheet's resting height at peek; the sheet measures its head and overrides this */
+  --stage-foot: 52px; /* room under the photo for the loading tape, a status line or the compare control */
 
   /* Motion: family duration tiers */
   --dur-instant: 80ms;
@@ -195,6 +214,22 @@
   --dur-argument: 200ms;
   --dur-breathe: 3000ms;
   --dur-hard-cut: 0ms;
+  /* sheet      the sheet moves to a resting place (peek, half, full): a
+                finger's release velocity carries into it, so a fling lands
+                where it was sent. Just under critical damping (zeta 0.93):
+                it arrives, it never bounces.
+     fling      the wipe let go mid drag: it carries on and settles where
+                friction would stop it (zeta 0.95).
+     arrive     a card or a sheet section settles into place (zeta 0.69, one
+                small overshoot): something has been put down on the table. */
+  --spring-sheet: 420 38 1;
+  --dur-sheet: 380ms;
+  --ease-sheet: linear(0, 0.048 4.2%, 0.155 8.3%, 0.251 12.5%, 0.382 16.7%, 0.505 20.8%, 0.612 25%, 0.702 29.2%, 0.759 33.3%, 0.82 37.5%, 0.868 41.7%, 0.905 45.8%, 0.933 50%, 0.949 54.2%, 0.965 58.3%, 0.976 62.5%, 0.984 66.7%, 0.989 70.8%, 0.993 75%, 0.996 79.2%, 0.998 83.3%, 0.999 87.5%, 1 91.7%, 1 95.8%, 1);
+  --spring-fling: 160 24 1;
+  --dur-fling: 640ms;
+  --spring-arrive: 300 24 1;
+  --dur-arrive: 640ms;
+  --ease-arrive: linear(0, 0.077 4.2%, 0.28 8.3%, 0.478 12.5%, 0.687 16.7%, 0.827 20.8%, 0.941 25%, 1.001 29.2%, 1.034 33.3%, 1.048 37.5%, 1.047 41.7%, 1.039 45.8%, 1.029 50%, 1.02 54.2%, 1.011 58.3%, 1.005 62.5%, 1.001 66.7%, 0.999 70.8%, 0.998 75%, 0.998 79.2%, 0.998 83.3%, 0.998 87.5%, 0.999 91.7%, 0.999 95.8%, 1);
 }
 
 /* ---- Paper: the geometer's notebook by day ---------------------------------
@@ -222,6 +257,11 @@
     --texture-weave-opacity: 0.035;
     --shadow-card: 0 1px 2px rgb(20 25 34 / 0.08), 0 8px 24px rgb(20 25 34 / 0.08);
     --shadow-hover: 0 2px 4px rgb(20 25 34 / 0.1), 0 16px 40px rgb(20 25 34 / 0.12);
+    --color-sheet: oklch(from var(--hex-chalk) calc(l + 0.06) calc(c * 0.3) h / 0.97);
+    --edge-sheet: oklch(from var(--hex-worsted) l c h / 0.1);
+    --light-stage-tone: oklch(from var(--hex-chalk) calc(l + 0.08) calc(c * 0.25) h);
+    --shadow-photo: 0 2px 6px rgb(20 25 34 / 0.12), 0 28px 64px rgb(20 25 34 / 0.2);
+    --shadow-sheet: 0 -20px 56px rgb(20 25 34 / 0.14);
   }
 }
 
@@ -244,6 +284,11 @@
   --texture-weave-opacity: 0.035;
   --shadow-card: 0 1px 2px rgb(20 25 34 / 0.08), 0 8px 24px rgb(20 25 34 / 0.08);
   --shadow-hover: 0 2px 4px rgb(20 25 34 / 0.1), 0 16px 40px rgb(20 25 34 / 0.12);
+  --color-sheet: oklch(from var(--hex-chalk) calc(l + 0.06) calc(c * 0.3) h / 0.97);
+  --edge-sheet: oklch(from var(--hex-worsted) l c h / 0.1);
+  --light-stage-tone: oklch(from var(--hex-chalk) calc(l + 0.08) calc(c * 0.25) h);
+  --shadow-photo: 0 2px 6px rgb(20 25 34 / 0.12), 0 28px 64px rgb(20 25 34 / 0.2);
+  --shadow-sheet: 0 -20px 56px rgb(20 25 34 / 0.14);
 }
 
 /* The Style Card prints on paper whatever the screen theme. */
@@ -260,6 +305,8 @@
     --texture-weave: none;
     --shadow-card: none;
     --shadow-hover: none;
+    --shadow-photo: none;
+    --shadow-sheet: none;
   }
 }
 
