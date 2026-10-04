@@ -8,6 +8,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='20' rx='2' fill='none' stroke='%23888' stroke-width='2'/%3E%3Ccircle cx='12' cy='14.4' r='2.6' fill='%23888'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="../design/tokens.css" />
     <link rel="stylesheet" href="./src/style.css" />
+    <link rel="stylesheet" href="./src/rules.css" />
     <title>Ratio</title>
   </head>
   <body class="app" data-state="idle" data-compare="off">
@@ -24,15 +25,29 @@
         <span class="brand-eyebrow">reason and proportion</span>
       </a>
       <nav class="tabs" aria-label="Surfaces">
-        <a class="tab" href="/" aria-current="page">Read</a>
+        <a id="read-tab" class="tab" href="/" aria-current="page">Read</a>
         <button class="tab" type="button" data-soon="face">Face</button>
-        <a class="tab" href="/rules">Rules</a>
+        <a id="rules-tab" class="tab" href="/rules">Rules</a>
         <button class="tab" type="button" data-soon="card">Card</button>
       </nav>
       <div class="bar-actions">
-        <button id="read-another" class="btn ghost small" type="button" hidden>Read another</button>
+        <button id="read-another" class="btn ghost small" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="read-menu">Read my outfit</button>
       </div>
     </header>
+
+    <div id="read-menu" class="read-menu" role="menu" aria-label="Read a photo" hidden>
+      <button type="button" class="read-menu-item" role="menuitem" data-action="choose">Choose a photo</button>
+      <button type="button" class="read-menu-item" role="menuitem" data-action="camera" hidden>Use the camera</button>
+      <button type="button" class="read-menu-item" role="menuitem" data-action="sample">Try the sample</button>
+    </div>
+
+    <div id="shortcuts-sheet" class="shortcuts-sheet" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" hidden>
+      <div class="shortcuts-card">
+        <h2 id="shortcuts-title">Shortcuts</h2>
+        <dl id="shortcuts-list" class="shortcuts-list"></dl>
+        <button id="shortcuts-close" class="btn ghost small" type="button">Close</button>
+      </div>
+    </div>
 
     <main class="stage" id="stage" aria-label="The stage">
       <div class="stage-light" aria-hidden="true"></div>
@@ -43,7 +58,7 @@
         <p class="drop-note">One person, standing, head to feet, facing the camera. Adults only. Ratio reads the outfit: proportion and colour.</p>
         <div class="drop-actions">
           <input id="photo" class="file-input" type="file" accept="image/jpeg,image/png,image/webp" />
-          <label class="btn" for="photo">Read a photo</label>
+          <label class="btn" for="photo">Read my outfit</label>
           <button id="try-sample" class="btn ghost" type="button">Try the sample</button>
           <input id="camera" class="file-input" type="file" accept="image/*" capture="environment" />
           <label id="camera-btn" class="btn ghost camera-btn" for="camera">Take a photo</label>
@@ -54,6 +69,14 @@
 
       <div class="photo-well" id="photo-well" hidden>
         <canvas id="figure" class="figure" role="img" aria-label="Your photo with the tape, the break line and the golden-section mark drawn over it"></canvas>
+      </div>
+
+      <!-- The photo is never stored (founder, T3): a reload has nothing to
+           redraw it from, only the last reading's numbers (sessionStorage's
+           hand-off). This stands in for the photo well in that one case. -->
+      <div class="chalk-restore" id="chalk-restore" hidden>
+        <div id="chalk-restore-figure" class="chalk-restore-figure"></div>
+        <p class="chalk-restore-note">Read the photo again to see it on the photo.</p>
       </div>
 
       <div class="stage-foot">
@@ -82,12 +105,23 @@
 
         <section class="reading" id="result" aria-labelledby="hero-eyebrow" hidden>
           <header class="sheet-head" id="sheet-head">
-            <div class="hero-row" data-peek>
-              <p class="hero"><span id="hero-n" class="hero-n" data-ratio></span></p>
-              <p id="hero-eyebrow" class="eyebrow hero-eyebrow"></p>
+            <div class="peek-cluster" data-peek>
+              <div id="session-strip" class="session-strip" hidden aria-label="This session's reads"></div>
+              <p id="verdict" class="verdict"></p>
+              <div class="ratio-row">
+                <span id="hero-n" class="hero-n" data-ratio></span>
+                <p id="hero-eyebrow" class="eyebrow hero-eyebrow"></p>
+              </div>
             </div>
-            <p id="verdict" class="verdict"></p>
+            <div class="verdict-actions">
+              <button id="save-card-top" class="btn ghost small" type="button">Download this read (free)</button>
+              <p id="save-note" class="muted small" role="status" aria-live="polite"></p>
+            </div>
             <p id="others-note" class="credit" hidden></p>
+            <!-- Outside #trying, which hides exactly when "Showing the outfit
+                 as worn." needs announcing: an aria-live region inside a
+                 container that just became hidden is never read out. -->
+            <p id="trying-announce" class="trying-announce" role="status" aria-live="polite"></p>
             <div id="palette-slot" class="palette-slot"></div>
             <div id="trying" class="trying" hidden>
               <div id="trial" class="trial"></div>
@@ -95,7 +129,7 @@
                 <p class="eyebrow">Trying a look</p>
                 <p class="trying-title"></p>
                 <p class="trying-note">Colour changes show on the photo, in the tab. A tuck or a belt shows on the chalk figure and by the break mark, never painted onto the photo.</p>
-                <button class="btn ghost small trying-back" type="button">As worn</button>
+                <button class="btn ghost small trying-back" type="button">Show original</button>
               </div>
             </div>
           </header>
@@ -107,14 +141,18 @@
           </section>
 
           <section class="argument" aria-labelledby="reading-title">
-            <h2 id="reading-title" class="eyebrow section-title">The reading</h2>
+            <div class="argument-head">
+              <h2 id="reading-title" class="eyebrow section-title">The reading</h2>
+              <button id="compact-toggle" class="btn ghost small" type="button" aria-pressed="false">Compact</button>
+            </div>
             <ol id="advice" class="rows"></ol>
+            <div id="borderline-slot"></div>
           </section>
 
           <p id="credit" class="credit" hidden></p>
           <div class="hashline">
             <p id="reading-hash" class="reading-hash" data-numeral></p>
-            <button id="save-card" class="btn ghost small" type="button">Save as card</button>
+            <button id="save-card" class="btn ghost small" type="button">Download this read (free)</button>
           </div>
         </section>
 
@@ -132,9 +170,16 @@
         <footer class="sheet-foot">
           <span>A voidvision production</span>
           <a href="./privacy.html">Privacy</a>
+          <button id="shortcuts-help" class="btn ghost small" type="button" aria-haspopup="dialog">Shortcuts (?)</button>
         </footer>
       </div>
     </aside>
+
+    <!-- Rules opens in-app, no page load (founder, T3): main.ts renders the
+         Rulebook from rules/render.ts into here and wires it with
+         rules.ts's setupRulebook, the same function rules.html uses
+         standalone for a direct visit or a reload. -->
+    <main id="rulebook-view" class="rulebook" aria-label="The rulebook" hidden></main>
 
     <script type="module" src="./src/main.ts"></script>
   </body>

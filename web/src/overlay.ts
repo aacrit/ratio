@@ -16,7 +16,8 @@
 import { GOLDEN, type OutfitReading, ratioText } from "./engine/rules";
 import type { OutfitMeasure } from "./engine/measure";
 import type { Pixels } from "./engine/resample";
-import { type Animation, chalkMs, numberToken, project, spring, springToken, tween } from "./motion";
+import { type Animation, chalkMs, numberToken, project, reducedMotion, spring, springToken, tween } from "./motion";
+import { labelAtRest } from "./ui/reveal";
 
 /**
  * Resolves colour tokens to concrete colours a canvas understands. The
@@ -332,10 +333,47 @@ export class Figure {
     return out;
   }
 
-  /** The read sequence: plumb, chalk, lands. Resolves when the numeral has landed; the plumb keeps settling after. */
-  async play(): Promise<void> {
+  /** A key or tap during the signature (play's full sequence) jumps straight to the rested end state. */
+  private revealSkip = false;
+  skipReveal(): void {
+    this.revealSkip = true;
+  }
+
+  /** Every reveal element at its rested, fully measured state at once: never a number mid-count. */
+  private settleNow(withPulse: boolean): void {
     const s = this.scene;
     const target = this.reading.bins.proportion;
+    s.near = this.reading.lines[0].state === "golden";
+    s.plumbAlpha = 0.25;
+    s.plumbDeg = 0;
+    s.tape = 1;
+    s.across = 1;
+    if (s.breakRow !== null) s.breakRow = this.m.breakRow;
+    s.label = labelAtRest(true, target);
+    s.glow = withPulse ? 1 : 0;
+    this.draw();
+  }
+
+  /**
+   * The read sequence: plumb, chalk, lands (design/BRAND.md). `quick` plays a
+   * brief settle instead (T3: only the first read of a session gets the full
+   * signature; later reads appear settled). The tape label and the hero
+   * numeral never show a value that was not measured, so the label is held
+   * back (labelAtRest) until the sequence has actually arrived.
+   */
+  async play(opts: { quick?: boolean } = {}): Promise<void> {
+    const s = this.scene;
+    const target = this.reading.bins.proportion;
+    this.revealSkip = false;
+    if (opts.quick || reducedMotion()) {
+      this.settleNow(!reducedMotion());
+      if (!reducedMotion())
+        await tween(430, (t) => {
+          s.glow = 1 - t;
+          this.draw();
+        });
+      return;
+    }
     s.near = this.reading.lines[0].state === "golden";
     s.plumbAlpha = 0.75;
     const swing = numberToken("--plumb-swing") || 14;
@@ -344,20 +382,23 @@ export class Figure {
       this.draw();
     });
     await Promise.race([plumb.done, new Promise((r) => setTimeout(r, 700))]);
+    if (this.revealSkip) return this.settleNow(false);
     await tween(chalkMs(this.h), (t) => {
       s.tape = t;
       this.draw();
     });
+    if (this.revealSkip) return this.settleNow(false);
     if (s.breakRow !== null && target !== null) {
       await tween(chalkMs(this.m.right - this.tapeX), (t) => {
         s.across = t;
         this.draw();
       });
+      if (this.revealSkip) return this.settleNow(false);
       s.glow = 1;
-      await spring(springToken("lands"), 0, target, (v) => {
-        s.label = v;
-        this.draw();
-      }).done;
+      await spring(springToken("lands"), 0, target, () => this.draw()).done;
+      if (this.revealSkip) return this.settleNow(false);
+      s.label = labelAtRest(true, target);
+      this.draw();
       void tween(600, (t) => {
         s.glow = 1 - t;
         this.draw();
@@ -386,15 +427,16 @@ export class Figure {
     s.ghostRow = ratio === null ? null : this.m.breakRow;
     s.near = false;
     const toRatio = ratio ?? this.reading.bins.proportion ?? 0;
-    const fromRatio = s.label ?? toRatio;
+    // The line glides; its numeral is never shown mid-glide (labelAtRest), only once it lands.
+    s.label = labelAtRest(false, toRatio);
     this.tuckAnim = spring(springToken("glide"), 0, 1, (t) => {
       s.breakRow = from + (to - from) * t;
-      s.label = fromRatio + (toRatio - fromRatio) * t;
       this.draw();
     });
     const anim = this.tuckAnim;
     void anim.done.then(() => {
       s.near = Math.abs(toRatio - GOLDEN) <= 0.02;
+      s.label = labelAtRest(true, toRatio);
       this.draw();
     });
   }

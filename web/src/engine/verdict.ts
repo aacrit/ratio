@@ -30,8 +30,11 @@ export function plainMove(m: Move): string {
   return m.piece === "shoes" ? `${name} shoes` : `${name} for ${PIECE_WORDS[m.piece]}`;
 }
 
-const listed = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
+export const listed = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** A look in everyday words, for a button's accessible name or a live announcement: "navy for the lower piece", "a front tuck and oxblood shoes". */
+export const lookPhrase = (moves: Move[]): string => listed(moves.map(plainMove));
 
 /** The rules in the order they lead a verdict: shape first, then colour, the leg line last. */
 const LEAD_ORDER: readonly AdviceLine["rule"][] = ["proportion", "volume", "harmony", "value", "chroma", "shares", "legline"];

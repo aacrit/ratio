@@ -214,6 +214,10 @@ async function run(name, viewport) {
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
   await download.saveAs(path.join(out, `${name}-5-card.png`));
   note(`${name}: card saved (${download.suggestedFilename()})`);
+  await page.waitForTimeout(1700); // the button's text (and the note) resets 1.6 s after
+  const saveNoteText = await page.textContent("#save-note");
+  note(`${name}: #save-note after a download: "${saveNoteText}"`);
+  if (!saveNoteText?.includes(download.suggestedFilename())) errors.push(`#save-note did not confirm the download (was "${saveNoteText}")`);
 
   // A look the photo does not show (a tuck, or a recolour refused as
   // doubtful): the chalk figure alone, and its saved card says the photo is
@@ -240,6 +244,145 @@ async function run(name, viewport) {
     note(`${name}: card saved after a chalk-only look (${chalkCard.suggestedFilename()})`);
   }
   if (!chalkOnly) note(`${name}: every look changes the photo, so no chalk-only card`);
+
+  // Back to the outfit as worn before the next checks, so they read the
+  // baseline reading's hand-off to the Rulebook, not whatever look was last tried.
+  if (await page.isVisible(".trying-back")) {
+    await page.click(".trying-back");
+    await page.waitForTimeout(600);
+  }
+
+  // T3 founder decision (the photo is never stored): Rules opens in-app, no
+  // page load, so Read -> Rules -> Read restores with no re-measure because
+  // nothing ever unloads. The tab, not a goto.
+  const hashBefore = (await page.textContent("#reading-hash"))?.trim();
+  const verdictBefore = (await page.textContent("#verdict"))?.trim();
+  const navsDuringRulesSwitch = [];
+  const onNav = (f) => f.parentFrame() === null && navsDuringRulesSwitch.push(f.url());
+  page.on("framenavigated", onNav);
+  await page.click("#rules-tab");
+  await page.waitForTimeout(500);
+  page.off("framenavigated", onNav);
+  const inAppPath = await page.evaluate(() => location.pathname);
+  const backVisible = await page.isVisible("#back-to-read");
+  note(`${name}: in-app Rules: path ${inAppPath}, no navigation: ${navsDuringRulesSwitch.length === 0}, "Back to your reading" visible: ${backVisible}`);
+  if (inAppPath !== "/rules") errors.push(`clicking the Rules tab did not reach /rules in-app (path: ${inAppPath})`);
+  if (navsDuringRulesSwitch.length) errors.push(`Rules tab caused a real navigation: ${navsDuringRulesSwitch.join(", ")}`);
+  if (!backVisible) errors.push('"Back to your reading" did not appear on Rules after a read');
+  await page.click("#back-to-read");
+  await page.waitForTimeout(500);
+  const resultHidden = await page.isHidden("#result");
+  const hashAfter = (await page.textContent("#reading-hash"))?.trim();
+  const verdictAfter = (await page.textContent("#verdict"))?.trim();
+  note(`${name}: Read -> Rules -> Read (in-app): result hidden ${resultHidden}, hash ${hashBefore} -> ${hashAfter}`);
+  if (resultHidden || hashAfter !== hashBefore || verdictAfter !== verdictBefore) errors.push("Read -> Rules -> Read did not restore the same read with no re-measure");
+
+  // Back/forward between Read and Rules, and between reads, work through popstate.
+  await page.click("#rules-tab");
+  await page.waitForTimeout(400);
+  await page.goBack();
+  await page.waitForTimeout(400);
+  const afterBack = await page.evaluate(() => location.pathname);
+  const readVisibleAfterBack = await page.isHidden("#rulebook-view");
+  await page.goForward();
+  await page.waitForTimeout(400);
+  const afterForward = await page.evaluate(() => location.pathname);
+  note(`${name}: back/forward Read <-> Rules: back -> ${afterBack} (Rulebook hidden: ${readVisibleAfterBack}), forward -> ${afterForward}`);
+  if (afterBack !== "/" || !readVisibleAfterBack) errors.push("back from Rules did not restore Read in-app");
+  if (afterForward !== "/rules") errors.push("forward did not return to Rules");
+  await page.goBack();
+  await page.waitForTimeout(400);
+
+  // The read menu: the bar's one action opens a small popover (Choose a
+  // photo, Use the camera, Try the sample) instead of the picker directly,
+  // so the sample and the camera stay reachable after the first read too.
+  await page.click("#read-another");
+  await page.waitForSelector("#read-menu:not([hidden])", { timeout: 5_000 });
+  const menuOpened = await page.isVisible("#read-menu");
+  note(`${name}: read menu opens from the bar's action: ${menuOpened}`);
+  if (!menuOpened) errors.push("the read menu did not open from the bar's action");
+  // Arrow keys move within it.
+  const firstFocused = await page.evaluate(() => document.activeElement?.textContent?.trim());
+  await page.keyboard.press("ArrowDown");
+  const secondFocused = await page.evaluate(() => document.activeElement?.textContent?.trim());
+  note(`${name}: read menu: opens focused on "${firstFocused}", ArrowDown moves to "${secondFocused}"`);
+  if (firstFocused !== "Choose a photo") errors.push(`the read menu did not open focused on "Choose a photo" (was "${firstFocused}")`);
+  if (secondFocused === firstFocused) errors.push("ArrowDown did not move focus within the read menu");
+  // Escape closes it and returns focus to the trigger.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  const menuClosedByEscape = await page.isHidden("#read-menu");
+  const focusBackOnTrigger = await page.evaluate(() => document.activeElement?.id === "read-another");
+  note(`${name}: Escape closes the read menu: ${menuClosedByEscape}, focus back on the trigger: ${focusBackOnTrigger}`);
+  if (!menuClosedByEscape || !focusBackOnTrigger) errors.push("Escape did not close the read menu and return focus to its trigger");
+
+  // A cancelled file picker keeps the read: the menu's "Choose a photo"
+  // only opens the picker; nothing clears unless a file actually arrives.
+  await page.click("#read-another");
+  await page.waitForSelector("#read-menu:not([hidden])", { timeout: 5_000 });
+  await page.click('#read-menu [data-action="choose"]');
+  await page.waitForTimeout(500);
+  const resultHiddenAfterCancel = await page.isHidden("#result");
+  const hashAfterCancel = (await page.textContent("#reading-hash"))?.trim();
+  note(`${name}: a cancelled picker: result hidden ${resultHiddenAfterCancel}, hash unchanged: ${hashAfterCancel === hashAfter}`);
+  if (resultHiddenAfterCancel || hashAfterCancel !== hashAfter) errors.push("cancelling the file picker did not keep the current read");
+
+  // The second read of a session appears settled at once, skipping the full
+  // plumb/chalk/count signature. Measuring itself (CPU inference) takes real,
+  // variable time regardless of this, so only the reveal (document.body's
+  // data-revealing window, set around Figure.play) is timed, not the whole
+  // read. Reached through the actual UI this time: open the menu, "Try the
+  // sample". It reads.
+  await page.click("#read-another");
+  await page.waitForSelector("#read-menu:not([hidden])", { timeout: 5_000 });
+  await page.click('#read-menu [data-action="sample"]');
+  await page.waitForFunction(() => document.body.dataset.revealing !== undefined, { timeout: 120_000 });
+  const tReveal = Date.now();
+  await page.waitForFunction(() => document.body.dataset.revealing === undefined, { timeout: 10_000 });
+  const revealMs = Date.now() - tReveal;
+  note(`${name}: second read (via the read menu's "Try the sample") reveal took ${revealMs} ms (a settle, not the full signature)`);
+  if (revealMs > 1500) errors.push(`second read's reveal took ${revealMs} ms: the full signature should not replay after the first read of a session`);
+  await page.waitForTimeout(1000);
+
+  // Keyboard: 1 tries the first look, Escape returns to the original.
+  await page.click("body");
+  await page.keyboard.press("1");
+  await page.waitForTimeout(1200);
+  const pressedAfter1 = await page.getAttribute(".look .btn", "aria-pressed");
+  note(`${name}: keyboard "1": first look pressed = ${pressedAfter1}`);
+  if (pressedAfter1 !== "true") errors.push('keyboard "1" did not try the first look');
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(600);
+  const pressedAfterEscape = await page.getAttribute(".look .btn", "aria-pressed");
+  note(`${name}: keyboard Escape: first look pressed = ${pressedAfterEscape}`);
+  if (pressedAfterEscape !== "false") errors.push("keyboard Escape did not return to the original after trying a look");
+
+  // Compact: rows collapse to name, band and the numeral; a row opens on tap or Enter.
+  const firstRowOpenBefore = await page.evaluate(() => getComputedStyle(document.querySelector(".row .row-b")).display);
+  await page.click("#compact-toggle");
+  await page.waitForTimeout(200);
+  const compactOn = await page.evaluate(() => document.body.dataset.compact !== undefined);
+  const firstRowOpenAfterCompact = await page.evaluate(() => getComputedStyle(document.querySelector(".row .row-b")).display);
+  await page.click(".row .row-h");
+  await page.waitForTimeout(200);
+  const firstRowOpenAfterTap = await page.evaluate(() => getComputedStyle(document.querySelector(".row .row-b")).display);
+  note(`${name}: Compact: on ${compactOn}; a row's body display before ${firstRowOpenBefore}, right after toggling ${firstRowOpenAfterCompact}, after tapping it open ${firstRowOpenAfterTap}`);
+  if (!compactOn) errors.push("Compact toggle did not set body[data-compact]");
+  if (firstRowOpenAfterCompact !== "none") errors.push("Compact did not collapse a row's body");
+  if (firstRowOpenAfterTap === "none") errors.push("tapping a row's head in Compact did not open it");
+  await page.click("#compact-toggle"); // back off, so the rest of this run reads the rows as usual
+  await page.waitForTimeout(200);
+
+  // The Card tab, with a read on screen, previews this read instead of "not built yet".
+  await page.click('.tabs [data-soon="card"]');
+  await page.waitForSelector(".card-preview, #soon-title", { timeout: 5_000 });
+  const cardTabTitle = (await page.textContent("#soon-title").catch(() => null)) ?? (await page.textContent(".card-preview h1").catch(() => null));
+  const cardPreviewImg = await page.isVisible(".card-preview-img");
+  note(`${name}: Card tab with a read on screen: "${cardTabTitle?.trim()}", preview image shown: ${cardPreviewImg}`);
+  if (cardTabTitle?.trim() !== "This read, as a card.") errors.push(`Card tab did not preview this read (showed "${cardTabTitle}")`);
+  if (!cardPreviewImg) errors.push("Card tab's preview image did not render");
+  await page.click('.tabs [data-soon="card"]'); // close it
+  await page.waitForTimeout(300);
 
   // The Rulebook after the read: the last read in this tab marked on each instrument.
   // rule_opened is counted from the moment the page loads: none on load, one per rule opened.
@@ -288,12 +431,67 @@ async function run(name, viewport) {
   // The UX pass 2 photos, read as worn (T4: the reading matches the photo).
   for (const id of Object.keys(PHOTOS)) await readPhotoShot(page, name, id, snap, phone, errors);
 
+  // The photo is never stored (founder, T3): a real reload has nothing in
+  // memory. This tab's own goto(rulesUrl) above was already one, so Read
+  // here has no in-memory session; only the hand-off survives, as the
+  // chalk figure. (A plain page.reload() of Read itself is exercised too.)
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.waitForTimeout(600);
+  const chalkVisible = await page.isVisible("#chalk-restore");
+  const photoWellVisible = await page.isVisible("#photo-well");
+  const chalkNote = await page.textContent(".chalk-restore-note");
+  const chalkHash = (await page.textContent("#reading-hash"))?.trim();
+  note(`${name}: reload with no in-memory session: chalk restore shown ${chalkVisible}, photo well shown ${photoWellVisible}, note "${chalkNote?.trim()}", hash ${chalkHash}`);
+  if (!chalkVisible || photoWellVisible) errors.push("a reload with no in-memory session did not fall back to the chalk-figure restore");
+  if (!chalkNote?.includes("Read the photo again")) errors.push("the chalk restore's explanatory line is missing");
+  await page.screenshot({ path: path.join(out, `${name}-9-chalk-restore.png`), fullPage: true });
+  note(`${name}: 9-chalk-restore`);
+  // A look can still be tried, on the chalk figure only.
+  const chalkLookBtn = await page.$(".look .btn");
+  if (chalkLookBtn) {
+    await chalkLookBtn.click();
+    await page.waitForTimeout(400);
+    const triedOnChalk = (await page.textContent("#verdict"))?.trim();
+    note(`${name}: trying a look on the chalk restore: verdict "${triedOnChalk}"`);
+    if (!triedOnChalk?.startsWith("Trying")) errors.push("trying a look on the chalk restore did not prefix the verdict");
+  }
+  // A plain page.reload() of Read itself: the same fallback, not a crash.
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(600);
+  note(`${name}: page.reload(): chalk restore shown ${await page.isVisible("#chalk-restore")}`);
+
   if (errors.length) note(`${name}: page errors:\n  ${errors.join("\n  ")}`);
   await browser.close();
   return errors.length;
 }
 
-const failures = (await run("phone", { width: 375, height: 812 })) + (await run("desktop", { width: 1280, height: 900 }));
+/** prefers-reduced-motion: reduce. The signature is always a settle under
+ * it, even on a session's first read (web/src/ui/reveal.ts's revealKind),
+ * and the hero numeral shows the final value at once, never a count. */
+async function runReducedMotion() {
+  const errors = [];
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce", colorScheme: "dark" });
+  const page = await context.newPage();
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.goto(base, { waitUntil: "networkidle" });
+  const t0 = Date.now();
+  await page.click("#try-sample");
+  await page.waitForSelector("#reading-hash:not(:empty)", { timeout: 120_000 });
+  await page.waitForFunction(() => document.body.dataset.revealing === undefined, { timeout: 10_000 });
+  const ms = Date.now() - t0;
+  const hero = await page.textContent("#hero-n");
+  note(`reduced-motion: first read's reveal settled in ${ms} ms (measuring itself included; no multi-second signature to wait out), hero "${hero}"`);
+  // Generous: this still includes the model/measuring time, not only the
+  // reveal: it only needs to rule out the ~2-3 s signature being added on top.
+  if (ms > 15_000) errors.push(`reduced motion still took ${ms} ms: the signature should not play at all`);
+  if (!hero || hero.includes("NaN")) errors.push(`reduced motion left the hero numeral as "${hero}"`);
+  if (errors.length) note(`reduced-motion: page errors:\n  ${errors.join("\n  ")}`);
+  await browser.close();
+  return errors.length;
+}
+
+const failures = (await run("phone", { width: 375, height: 812 })) + (await run("desktop", { width: 1280, height: 900 })) + (await runReducedMotion());
 writeFileSync(path.join(out, "log.txt"), log.join("\n") + "\n");
 // A page error is a finding to review, never a silent pass; the job fails so it shows.
 process.exit(failures ? 1 : 0);

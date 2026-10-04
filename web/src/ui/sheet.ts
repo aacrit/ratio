@@ -39,7 +39,11 @@ export class Sheet {
       this.snap(this._snap === "peek" ? "half" : this._snap === "half" ? "full" : "peek");
     });
     element.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this._snap !== "peek") this.snap("peek");
+      if (e.key !== "Escape" || this._snap === "peek") return;
+      // Esc does one thing: claim it here so the page's shortcuts (also
+      // bound to Escape, for "back to the original") do not also fire.
+      e.preventDefault();
+      this.snap("peek");
     });
     element.addEventListener("pointerdown", (e) => this.down(e));
     element.addEventListener("pointermove", (e) => this.move(e));

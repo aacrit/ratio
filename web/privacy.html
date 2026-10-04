@@ -17,22 +17,44 @@
       <section class="card">
         <h2>Your photo</h2>
         <p>
-          Your photo never leaves your browser. The measuring models download
+          Your photo never leaves your browser, and it is never stored:
+          not in a file, not in a database on this site, not anywhere in
+          your browser, not even in this tab. The measuring models download
           once from this site and run in the tab; the photo is decoded,
           measured and read there, and is gone when you close or reload the
           page. Suggested looks are worked out the same way, and trying one
-          recolours your photo inside the tab. Nothing about the photo or a
-          look is sent or counted, except that a reading took place and that
-          a look was tried, and nothing is kept except as below.
+          recolours your photo inside the tab, in memory only. Nothing about
+          the photo or a look is sent or counted, except that a reading took
+          place and that a look was tried, and nothing is kept except as
+          below.
         </p>
         <p>
-          So that the Rulebook page can mark your last reading on its
-          instruments, the browser keeps that reading's rounded measurements,
-          its results and, if you tried a look, the look's title, measurements
-          and results beside them, in session storage: numbers and short labels, never the photo or any of its
-          pixels. It is kept for this tab's session (a browser that restores
-          or duplicates the tab keeps it too); Clear on the Rulebook page
-          removes it. It is never sent anywhere.
+          While the tab stays open, the outfits you read are kept in memory
+          so that moving from Read to the Rulebook and back, or switching
+          between a few reads with the strip, does not make you read the
+          same photo again. This includes the photo, in memory only: closing
+          the tab, or reloading the page, clears it, exactly as above.
+        </p>
+        <p>
+          So that the Rulebook can mark your last reading on its instruments,
+          and so that a reload can still show the numbers it found (as the
+          chalk figure, since the photo itself is gone), the browser keeps
+          that reading's rounded measurements, its results and, if you tried
+          a look, the look's title, measurements and results beside them, in
+          session storage: numbers and short labels, never the photo or any
+          of its pixels. It is kept for this tab's session (a browser that
+          restores or duplicates the tab keeps it too); Clear on the Rulebook
+          page removes it. It is never sent anywhere.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Compact mode</h2>
+        <p>
+          The Compact toggle on the Read page is remembered on this device,
+          in localStorage, so it does not need choosing again next time. It
+          holds nothing about you beyond that one on/off choice, and nothing
+          is sent anywhere.
         </p>
       </section>
 
@@ -42,8 +64,8 @@
           Ratio counts how many times a small set of named events happen
           each day, such as a page view or a completed action, as totals. It
           does not record who did what, when a specific visit happened, or
-          anything else that could identify you. There is no anonymous id, no
-          cookie, no local storage, and no third-party analytics script.
+          anything else that could identify you. This counting uses no
+          anonymous id, no cookie, and no third-party analytics script.
         </p>
         <p>
           The feedback form sends the text you type and the page you sent it

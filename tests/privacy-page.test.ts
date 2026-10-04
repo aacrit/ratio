@@ -22,21 +22,41 @@ const tsFiles = (dir: string) =>
     .filter((f) => f.endsWith(".ts"))
     .map((f) => `${dir}/${f.replace(/\\/g, "/")}`);
 const HANDOFF = "web/src/rules/handoff.ts";
+// Compact mode (ui/compact.ts: localStorage) is the one remaining browser
+// storage, paired with its own claim on the privacy page below. Nothing
+// else, anywhere in the codebase, may touch indexedDB: the founder decision
+// of 2026-10-04 ("the photo is never stored, not even in this browser")
+// removed it entirely; this session's reads (web/src/session.ts) are an
+// in-memory array now, not a store.
+const COMPACT = "web/src/ui/compact.ts";
 const workerFiles = () => readdirSync(path.join(root, "worker/src")).filter((f) => f.endsWith(".ts"));
 
 describe("web/privacy.html, claim by claim", () => {
-  it("no anonymous id, cookie or local storage: no client or Worker code sets one", () => {
-    expect(text).toContain("There is no anonymous id, no cookie, no local storage, and no third-party analytics script");
+  it("no anonymous id or cookie, and every other browser-storage use is named and paired with its own claim", () => {
+    expect(text).toContain("This counting uses no anonymous id, no cookie, and no third-party analytics script");
     for (const dir of ["web/src", "worker/src"]) {
       for (const f of tsFiles(dir)) {
-        // The one exception, the tab's hand-off to the Rulebook, is paired with its own claim below.
-        const src = f === HANDOFF ? read(f).replace(/\bsessionStorage\./g, "") : read(f);
+        // Each exception below is paired with its own claim, checked in its own test.
+        const strip = f === HANDOFF ? /\bsessionStorage\./g : f === COMPACT ? /\blocalStorage\./g : null;
+        const src = strip ? read(f).replace(strip, "") : read(f);
         expect(src, f).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\.|document\.cookie|set-cookie/i);
       }
     }
     for (const page of readdirSync(path.join(root, "web")).filter((p) => p.endsWith(".html"))) {
       expect(read(`web/${page}`), page).not.toMatch(/googletagmanager|google-analytics|cloudflareinsights|plausible|posthog/i);
     }
+  });
+
+  it("the photo is never stored, not even in this browser: no code path anywhere calls indexedDB", () => {
+    expect(text).toContain("it is never stored: not in a file, not in a database on this site, not anywhere in your browser, not even in this tab");
+    expect(text).toContain("closing the tab, or reloading the page, clears it, exactly as above");
+    expect(text).not.toMatch(/IndexedDB/i);
+    for (const dir of ["web/src", "worker/src"]) {
+      for (const f of tsFiles(dir)) expect(read(f), f).not.toMatch(/\bindexedDB\b/);
+    }
+    // This session's reads are a plain in-memory array: no storage API of any kind.
+    const session = read("web/src/session.ts");
+    expect(session).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\.|fetch\(|XMLHttpRequest|sendBeacon/);
   });
 
   it("the last reading is kept in session storage, numbers and labels only, never the photo; Clear removes it; only handoff.ts touches it", async () => {
@@ -86,6 +106,19 @@ describe("web/privacy.html, claim by claim", () => {
     expect(Object.keys(both.worn!.bins).sort()).toEqual(allowed);
     // And the one writer stores exactly that: saveLastRead keeps the as-worn reading beside a look.
     expect(src).toMatch(/sessionStorage\.setItem\(LAST_READ_KEY, JSON\.stringify\(withWorn\(/);
+  });
+
+  it("this session's reads, the photo included, are kept in memory only while the tab stays open", () => {
+    expect(text).toContain("the outfits you read are kept in memory so that moving from Read to the Rulebook and back, or switching between a few reads with the strip, does not make you read the same photo again");
+    expect(text).toContain("This includes the photo, in memory only");
+  });
+
+  it("Compact mode is remembered per device in localStorage, nothing else, and only ui/compact.ts touches it", () => {
+    expect(text).toContain("The Compact toggle on the Read page is remembered on this device, in localStorage");
+    expect(text).toContain("It holds nothing about you beyond that one on/off choice");
+    const src = read(COMPACT);
+    expect(src).not.toMatch(/\b(sessionStorage|indexedDB)\.|fetch\(|XMLHttpRequest|sendBeacon/);
+    expect(src.match(/\blocalStorage\.\w+/g)?.sort()).toEqual(["localStorage.getItem", "localStorage.removeItem", "localStorage.setItem"]);
   });
 
   it("counts as daily totals: /e takes exactly one field and only increments a day count", () => {

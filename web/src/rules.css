@@ -86,6 +86,12 @@ body.rules-page .bar {
   font-size: 0.8rem;
 }
 
+/* "Back to your reading": a sibling of the chip, never wiped when the chip
+   rebuilds its own content (it is replaced wholesale on every read change). */
+.back-to-read-row {
+  margin: 0;
+}
+
 /* A rule card: the instrument beside the words (above them on a phone). */
 .rule {
   display: grid;

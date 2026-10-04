@@ -37,6 +37,8 @@ import {
 export const PROVENANCE =
   "The canons cited here (Euclid's section, the golden ratio, Matsuda's templates) are European and Japanese traditions, one lineage among many; the rulebook names its sources so you can weigh them.";
 export const LEDE = "Every reading is held against these and nothing else. Drag an instrument to see where a band ends. Your last read in this tab is marked on each one.";
+export const PLAIN_LEDE = "In plain words: each card below is one rule, shown as something you can hold. The instrument on it works exactly like the reading does, so you can see the maths and the edges for yourself instead of taking our word for it.";
+export const BACK_TO_READING = "Back to your reading";
 export const NO_READ_CHIP = "Read a photo and your values appear on each instrument.";
 export const DRILL_SUMMARY = "The maths, the edges, the sources";
 export const UNCALIBRATED = "set by hand, not yet calibrated";
@@ -222,9 +224,11 @@ export function renderRulebook(): string {
   return `<header class="page-head">
 <p class="eyebrow">The rulebook · <span data-numeral>${esc(ENGINE_VERSION)}</span></p>
 <h1>${esc(countWord(ids.length))} rules, each with its maths, its edges and its source.</h1>
+<p class="lede plain">${esc(PLAIN_LEDE)}</p>
 <p class="lede">${esc(LEDE)}</p>
 <p class="lede provenance">${esc(PROVENANCE)}</p>
 <p class="yours-chip" id="yours-chip" aria-live="polite"><span class="chip-text">${esc(NO_READ_CHIP)}</span><a class="btn ghost small" href="/">Read a photo</a></p>
+<p class="back-to-read-row"><a class="btn ghost small" id="back-to-read" href="/" hidden>${esc(BACK_TO_READING)}</a></p>
 </header>
 ${ids.map(renderCard).join("\n")}
 <footer class="sheet-foot rules-foot"><span>A voidvision production</span><a href="/privacy">Privacy</a><span data-numeral>${esc(ENGINE_VERSION)}</span></footer>`;
