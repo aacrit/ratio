@@ -120,7 +120,7 @@ describe("outfit read", () => {
     const shares = reading.bins.palette.map((p) => p.share);
     expect(reading.bins.palette.length).toBe(3);
     expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 1);
-    expect(reading.lines.map((l) => l.rule)).toEqual(["proportion", "harmony", "value", "shares", "chroma"]);
+    expect(reading.lines.map((l) => l.rule)).toEqual(["proportion", "volume", "legline", "harmony", "value", "shares", "chroma"]);
   });
 
   it("gives the same reading and the same hash every time", async () => {
@@ -199,7 +199,7 @@ describe("copy law (V4, design lint)", () => {
       for (const top of colours)
         for (const bottom of colours) {
           const palette = [top, bottom, ...colours.filter((c) => c !== top && c !== bottom)].slice(0, 3).map((c, i, all) => ({ lab: toLab(c), share: i === 0 ? 0.6 : 0.4 / (all.length - 1), y: c.y }));
-          const r = readOutfit({ top: 0, bottom: 1000, breakRow: proportion === null ? null : proportion * 1000, waistRow: 360, left: 0, right: 0, centerX: 0, topColour: toLab(top), bottomColour: toLab(bottom) }, palette);
+          const r = readOutfit({ top: 0, bottom: 1000, breakRow: proportion === null ? null : proportion * 1000, waistRow: 360, left: 0, right: 0, centerX: 0, topColour: toLab(top), bottomColour: toLab(bottom), fit: { top: proportion === null ? 1.0 : 1.5, legs: proportion === 0.5 ? 0.9 : 0.5 } }, palette);
           out.push(...r.lines.map((l) => l.text));
         }
     return out;

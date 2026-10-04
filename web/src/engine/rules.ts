@@ -9,25 +9,34 @@
 // words in JUDGING_WORDS.
 
 import { type Lab, labToLch } from "./color";
-import { type BinnedSwatch, NEUTRAL_CHROMA, type ColourRule, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
+import { type BinnedSwatch, NEUTRAL_CHROMA, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
+import { isNeutral } from "./constants";
+import { pieces } from "./pieces";
+import type { RuleId } from "./rulebook";
+import { legLine, volumeLine } from "./shape-rules";
 import type { OutfitMeasure } from "./measure";
 import type { Swatch } from "./palette";
 
 export { NEUTRAL_CHROMA };
 
-export const ENGINE_VERSION = "ratio-engine/0.2.1";
+export const ENGINE_VERSION = "ratio-engine/0.5.0";
 
 export const GOLDEN = 0.382;
 export const PROPORTION_BIN = 0.02;
 
 /** Proportion bands on the break's position from the top of the head (0) to the feet (1). */
+// "golden" covers a third (0.333) and the golden section (0.382), the two
+// composed divisions; "golden-long" their mirrors from below (0.618, 0.667).
 export const PROPORTION_BANDS = [
-  { id: "short-top", from: 0, to: 0.34 },
-  { id: "golden", from: 0.34, to: 0.44 },
+  { id: "short-top", from: 0, to: 0.3 },
+  { id: "golden", from: 0.3, to: 0.44 },
   { id: "halves", from: 0.44, to: 0.56 },
-  { id: "golden-long", from: 0.56, to: 0.66 },
-  { id: "long-top", from: 0.66, to: 1.01 },
+  { id: "golden-long", from: 0.56, to: 0.7 },
+  { id: "long-top", from: 0.7, to: 1.01 },
 ] as const;
+
+/** The nearer of the two composed divisions, named. */
+const nearestDivision = (r: number) => (Math.abs(r - 1 / 3) < Math.abs(r - GOLDEN) ? "a third (0.333)" : `the golden section (${GOLDEN})`);
 export type ProportionBand = (typeof PROPORTION_BANDS)[number]["id"];
 
 export const JUDGING_WORDS = ["flaw", "flatter", "slim", "fat", "ugly", "unflattering", "hide", "problem area", "beautiful", "attractive", "should be ashamed", "wrong body"];
@@ -37,7 +46,7 @@ export const JUDGING_WORDS = ["flaw", "flatter", "slim", "fat", "ugly", "unflatt
 export type LineState = "golden" | "advice" | "neutral";
 
 export interface AdviceLine {
-  rule: "proportion" | ColourRule;
+  rule: RuleId;
   title: string;
   /** The measurement, as shown on screen, e.g. "0.50 : 0.50" (thin spaces). */
   measured: string;
@@ -54,6 +63,8 @@ export interface Bins {
   bottom: { L: number; C: number; h: number };
   /** The outfit's palette, largest share first. */
   palette: BinnedSwatch[];
+  /** Volume: upper piece and legs fabric width over shoulder distance, binned to 0.05; null when unmeasured. */
+  fit: { top: number; legs: number } | null;
 }
 
 const round = (v: number, step: number) => Math.round(v / step) * step;
@@ -69,7 +80,7 @@ function borderlineIn(bands: readonly { from: number; to: number }[], raw: numbe
 
 const binColour = (c: Lab) => {
   const { L, C, h } = labToLch(c);
-  return { L: fix(round(L, 0.02)), C: fix(round(C, 0.01)), h: C < NEUTRAL_CHROMA ? 0 : fix(round(h, 5) % 360, 0) };
+  return { L: fix(round(L, 0.02)), C: fix(round(C, 0.01)), h: isNeutral({ L, C }) ? 0 : fix(round(h, 5) % 360, 0) };
 };
 
 const binSwatch = (s: Swatch): BinnedSwatch => ({ ...binColour(s.lab), share: fix(round(s.share, 0.05)), y: fix(round(s.y, 0.05)) });
@@ -82,6 +93,7 @@ export function binsOf(m: OutfitMeasure, palette: Swatch[]): Bins {
     top: binColour(m.topColour),
     bottom: binColour(m.bottomColour),
     palette: palette.map(binSwatch),
+    fit: m.fit ? { top: fix(round(m.fit.top, 0.05)), legs: fix(round(m.fit.legs, 0.05)) } : null,
   };
 }
 
@@ -106,9 +118,9 @@ function proportionLine(b: Bins, rawBreak: number | null): AdviceLine {
   const tuck = ratioText(b.waist);
   const texts: Record<ProportionBand, { text: string; state: LineState }> = {
     "short-top": { text: `The break sits high, near ${r.toFixed(2)}, so the lower block carries the length. Keep the bottom's line unbroken to the shoe and the effect holds.`, state: "neutral" },
-    golden: { text: `The break sits near the golden section (${GOLDEN}). The eye reads a short upper block over a long lower one, the classic division. Keep it.`, state: "golden" },
+    golden: { text: `The break sits near ${nearestDivision(r)}. The eye reads a short upper block over a long lower one, the classic division. Keep it.`, state: "golden" },
     halves: { text: `Near-equal halves read as boxy. A front tuck moves the break to your waist, about ${tuck}, near the golden section, and shows the rise of what you wear below.`, state: "advice" },
-    "golden-long": { text: `The break sits near the golden section from below (${(1 - GOLDEN).toFixed(3)}): a long upper piece over a short lower one. It is the second classical division. Keep the lower block narrow.`, state: "golden" },
+    "golden-long": { text: `The break sits near ${nearestDivision(1 - r)} from below: a long upper piece over a short lower one. It is the second classical division. Keep the lower block narrow.`, state: "golden" },
     "long-top": { text: `The upper piece covers most of the figure, so the break has little to divide. Belt it at the waist, about ${tuck}, to give the eye a division near the golden section.`, state: "advice" },
   };
   return { rule: "proportion", title: "Proportion", measured, ...texts[id], borderline };
@@ -120,12 +132,24 @@ export interface OutfitReading {
   lines: AdviceLine[];
 }
 
-export function readOutfit(m: OutfitMeasure, palette: Swatch[]): OutfitReading {
-  const bins = binsOf(m, palette);
-  const rawBreak = m.breakRow === null ? null : (m.breakRow - m.top) / (m.bottom - m.top);
+/**
+ * Applies the whole rulebook to a set of bins. The read of a photo and every
+ * suggested look (looks.ts) go through here, so a suggestion is judged by
+ * exactly the rules that judged the outfit.
+ */
+export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
   const lines = [proportionLine(bins, rawBreak)];
+  if (bins.fit) lines.push(volumeLine(bins.fit));
+  const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
+  if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
   if (bins.palette.length) {
     lines.push(harmonyLine(bins.palette, bins.waist), valueLine(bins.palette, bins.top.L, bins.bottom.L), sharesLine(bins.palette), chromaLine(bins.palette, bins.waist));
   }
-  return { engine: ENGINE_VERSION, bins, lines };
+  return lines;
+}
+
+export function readOutfit(m: OutfitMeasure, palette: Swatch[]): OutfitReading {
+  const bins = binsOf(m, palette);
+  const rawBreak = m.breakRow === null ? null : (m.breakRow - m.top) / (m.bottom - m.top);
+  return { engine: ENGINE_VERSION, bins, lines: readBins(bins, rawBreak) };
 }

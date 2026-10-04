@@ -10,6 +10,7 @@
 export const ALLOWED_EVENTS = [
   "page_view",
   "reading_completed",
+  "look_tried",
   // Server-only (see SERVER_ONLY_EVENTS): each is counted only by the
   // Worker code that does the thing being counted.
   "feedback_received",

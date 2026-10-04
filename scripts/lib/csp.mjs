@@ -17,6 +17,10 @@
 //   page (V3, privacy by construction).
 // - Images: this origin and data: (the favicon is a data: SVG).
 // - Fetches: this origin only (/e, /feedback, /api).
+// - Workers: only this origin's scripts. The read worker (web/src/
+//   read.worker.ts) runs the models off the page's thread; its own
+//   responses carry this same policy (dist/_headers), so its WASM compiles
+//   under the same 'wasm-unsafe-eval' and nothing else.
 
 export const CSP = [
   "default-src 'self'",
@@ -25,6 +29,7 @@ export const CSP = [
   "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
+  "worker-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

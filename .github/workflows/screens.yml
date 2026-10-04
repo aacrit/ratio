@@ -1,0 +1,45 @@
+name: screens
+
+# Real-browser screenshots of every pull request: the sample read, a tried
+# look, the wipe and a saved card, at 375 and 1280 px, plus a Lighthouse
+# run on the first screen (mobile: performance and accessibility at least
+# 95, or this job fails). Advisory evidence for review, not the merge gate:
+# the gate workflow decides merges. The images and the Lighthouse report are
+# uploaded as an artifact; the Chief of Staff brings them into Claude.
+
+on:
+  pull_request:
+
+jobs:
+  screens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npm run build
+      # One install for both, since a second --no-save install would prune the first.
+      - run: npm install --no-save playwright@1.63.0 lighthouse@13.5.0
+      - run: npx playwright install --with-deps chromium
+      - name: Screenshots
+        run: |
+          (cd web && npx vite preview --outDir ../dist --port 4173 --strictPort > ../preview.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf http://localhost:4173/ > /dev/null && break; sleep 1; done
+          node scripts/screens.mjs http://localhost:4173
+      - name: Lighthouse (mobile, performance and accessibility at least 95)
+        run: |
+          export CHROME_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          node scripts/lighthouse.mjs http://localhost:4173/
+      # The G2 design mocks (design/mocks/*.html) at the three charter widths;
+      # the script serves the repo root itself.
+      - name: Mock screenshots (375, 768, 1280)
+        run: node scripts/mock-shots.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens
+          path: screens/
+          retention-days: 14

@@ -1,17 +1,29 @@
-// One read, start to finish: decode the photo in the tab, reduce it with our
-// own resampler, let the models see it, measure, apply the rulebook, hash.
-// Nothing here touches the network except the models' first load from this
-// origin; the photo itself never leaves the tab.
+// One read, start to finish, inside the read worker: decode the photo,
+// reduce it with our own resampler, let the models see it, measure, apply
+// the rulebook, hash. Nothing here touches the network except the models'
+// first load from this origin; the photo itself never leaves the tab.
+//
+// Two sizes of the photo come out: the reading size (512 on the long side,
+// what the models and the rules see, the determinism law) and a display
+// size for the stage, so the hero photo stays sharp on a large screen.
 
 import { readingHash } from "./engine/hash";
-import { type MeasureFailure, type OutfitMeasure, measureOutfit } from "./engine/measure";
+import { type Mask, type MeasureFailure, type OutfitMeasure, measureOutfit } from "./engine/measure";
 import { extractPalette, type Swatch } from "./engine/palette";
 import { downsample, type Pixels } from "./engine/resample";
 import { type OutfitReading, readOutfit } from "./engine/rules";
 import { decode, see } from "./vision";
 
+/** The long side the photo is shown at: three times the reading size, enough for a 1280 stage at 2x. */
+export const DISPLAY_SIZE = 1536;
+
 export interface Read {
+  /** The photo at reading size (the models' and the rules' input). */
   pixels: Pixels;
+  /** The photo at display size, for the stage and the card. */
+  display: Pixels;
+  /** The segmenter's categories, kept in the tab for "try it" (never sent anywhere). */
+  mask: Mask;
   measure: OutfitMeasure;
   palette: Swatch[];
   reading: OutfitReading;
@@ -28,13 +40,20 @@ export const FAILURE_COPY: Record<ReadFailure, string> = {
   models_failed: "The measuring models did not load. Check the connection and try again; they download once, then stay in the browser.",
 };
 
-export async function readPhoto(file: Blob): Promise<Read | ReadFailure> {
+export interface ReadHooks {
+  /** Called as soon as the photo is decoded, before the models see it: the stage can show it at once. */
+  onPhoto?: (display: Pixels) => void;
+}
+
+export async function readPhoto(file: Blob, hooks: ReadHooks = {}): Promise<Read | ReadFailure> {
   let full: Pixels;
   try {
     full = await decode(file);
   } catch {
     return "not_an_image";
   }
+  const display = downsample(full, DISPLAY_SIZE);
+  hooks.onPhoto?.(display);
   const pixels = downsample(full);
   let seen;
   try {
@@ -48,5 +67,5 @@ export async function readPhoto(file: Blob): Promise<Read | ReadFailure> {
   const palette = extractPalette(pixels, seen.mask, measure);
   const reading = readOutfit(measure, palette);
   const hash = await readingHash({ engine: reading.engine, bins: reading.bins });
-  return { pixels, measure, palette, reading, hash };
+  return { pixels, display, mask: seen.mask, measure, palette, reading, hash };
 }
