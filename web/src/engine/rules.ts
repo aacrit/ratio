@@ -9,7 +9,10 @@
 // words in JUDGING_WORDS.
 
 import { type Lab, labToLch } from "./color";
-import { type BinnedSwatch, NEUTRAL_CHROMA, type ColourRule, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
+import { type BinnedSwatch, NEUTRAL_CHROMA, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
+import { pieces } from "./pieces";
+import type { RuleId } from "./rulebook";
+import { legLine, volumeLine } from "./shape-rules";
 import type { OutfitMeasure } from "./measure";
 import type { Swatch } from "./palette";
 
@@ -37,7 +40,7 @@ export const JUDGING_WORDS = ["flaw", "flatter", "slim", "fat", "ugly", "unflatt
 export type LineState = "golden" | "advice" | "neutral";
 
 export interface AdviceLine {
-  rule: "proportion" | ColourRule;
+  rule: RuleId;
   title: string;
   /** The measurement, as shown on screen, e.g. "0.50 : 0.50" (thin spaces). */
   measured: string;
@@ -54,6 +57,8 @@ export interface Bins {
   bottom: { L: number; C: number; h: number };
   /** The outfit's palette, largest share first. */
   palette: BinnedSwatch[];
+  /** Volume: upper piece and legs fabric width over shoulder distance, binned to 0.05; null when unmeasured. */
+  fit: { top: number; legs: number } | null;
 }
 
 const round = (v: number, step: number) => Math.round(v / step) * step;
@@ -82,6 +87,7 @@ export function binsOf(m: OutfitMeasure, palette: Swatch[]): Bins {
     top: binColour(m.topColour),
     bottom: binColour(m.bottomColour),
     palette: palette.map(binSwatch),
+    fit: m.fit ? { top: fix(round(m.fit.top, 0.05)), legs: fix(round(m.fit.legs, 0.05)) } : null,
   };
 }
 
@@ -127,6 +133,9 @@ export interface OutfitReading {
  */
 export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
   const lines = [proportionLine(bins, rawBreak)];
+  if (bins.fit) lines.push(volumeLine(bins.fit));
+  const p = pieces(bins.palette, bins.waist);
+  if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
   if (bins.palette.length) {
     lines.push(harmonyLine(bins.palette, bins.waist), valueLine(bins.palette, bins.top.L, bins.bottom.L), sharesLine(bins.palette), chromaLine(bins.palette, bins.waist));
   }

@@ -199,7 +199,7 @@ function setupDropFigure(): void {
   const slot = document.getElementById("drop-figure");
   if (!slot) return;
   const rest = { L: 0.5, C: 0, h: 0 };
-  slot.replaceChildren(chalkFigure({ proportion: null, waist: 0.38, top: rest, bottom: rest, palette: [] }, { outline: true, label: "A chalk figure with the tape beside it, waiting for a photo" }));
+  slot.replaceChildren(chalkFigure({ proportion: null, waist: 0.38, top: rest, bottom: rest, palette: [], fit: null }, { outline: true, label: "A chalk figure with the tape beside it, waiting for a photo" }));
 }
 
 sendEvent("page_view");

@@ -16,7 +16,7 @@ const sw = (L: number, C: number, h: number, share: number, y: number): BinnedSw
 /** The founder's example: a sand tee untucked over a teal-ish lower piece that clashes, white shoes. */
 function example(): Bins {
   const palette = [sw(0.8, 0.05, 80, 0.5, 0.3), sw(0.45, 0.1, 150, 0.4, 0.65), sw(0.95, 0, 0, 0.1, 0.95)];
-  return { proportion: 0.5, waist: 0.38, top: { L: 0.8, C: 0.05, h: 80 }, bottom: { L: 0.45, C: 0.1, h: 150 }, palette };
+  return { proportion: 0.5, waist: 0.38, top: { L: 0.8, C: 0.05, h: 80 }, bottom: { L: 0.45, C: 0.1, h: 150 }, palette, fit: null };
 }
 
 describe("colour space round trip", () => {
@@ -78,7 +78,7 @@ describe("suggested looks", () => {
   });
 
   it("suggests nothing when every reading is already fine", () => {
-    const b: Bins = { proportion: 0.38, waist: 0.38, top: { L: 0.8, C: 0, h: 0 }, bottom: { L: 0.25, C: 0, h: 0 }, palette: [sw(0.25, 0, 0, 0.6, 0.65), sw(0.8, 0, 0, 0.3, 0.3), sw(0.5, 0.12, 30, 0.1, 0.95)] };
+    const b: Bins = { proportion: 0.38, waist: 0.38, top: { L: 0.8, C: 0, h: 0 }, bottom: { L: 0.25, C: 0, h: 0 }, palette: [sw(0.25, 0, 0, 0.6, 0.65), sw(0.8, 0, 0, 0.3, 0.3), sw(0.5, 0.12, 30, 0.1, 0.95)], fit: null };
     const lines = readBins(b);
     if (lines.every((l) => l.state !== "advice")) expect(suggestLooks(b, lines).every((l) => l.gain > 0)).toBe(true);
   });

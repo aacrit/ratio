@@ -13,6 +13,7 @@
 
 import type { BinnedSwatch } from "./colour-rules";
 import { colourLabel } from "./names";
+import { pieces as placedPieces } from "./pieces";
 import { type AdviceLine, type Bins, type LineState, readBins } from "./rules";
 
 export type Move =
@@ -42,18 +43,7 @@ export const scoreOf = (lines: AdviceLine[]) => lines.reduce((s, l) => s + SCORE
 
 /** The pieces of the outfit, by where their colour sits on the figure. */
 export function pieces(b: Bins): { upper: number; lower: number; shoes: number } {
-  const pick = (test: (s: BinnedSwatch) => boolean) => {
-    let best = -1;
-    b.palette.forEach((s, i) => {
-      if (test(s) && (best < 0 || s.share > b.palette[best].share)) best = i;
-    });
-    return best;
-  };
-  return {
-    upper: pick((s) => s.y < b.waist),
-    lower: pick((s) => s.y >= b.waist && s.y < 0.9),
-    shoes: pick((s) => s.y >= 0.9),
-  };
+  return placedPieces(b.palette, b.waist);
 }
 
 const lchToLab = ({ L, C, h }: { L: number; C: number; h: number }) => ({ L, a: C * Math.cos((h * Math.PI) / 180), b: C * Math.sin((h * Math.PI) / 180) });

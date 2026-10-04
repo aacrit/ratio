@@ -40,6 +40,12 @@ export interface OutfitMeasure {
   /** Mean colour of the top and bottom garments, OKLab. */
   topColour: Lab;
   bottomColour: Lab;
+  /**
+   * Volume, as fabric widths (garment pixels counted across one row, so a
+   * wide stance or arms held out never reads as width). Null when the row
+   * holds too little garment to measure.
+   */
+  fit: { top: number; legs: number } | null;
 }
 
 export type MeasureFailure = "no_figure" | "feet_not_in_frame" | "no_clothes";
@@ -64,6 +70,26 @@ function median(values: number[]): number {
 
 function medianLab(rows: Lab[]): Lab {
   return { L: median(rows.map((r) => r.L)), a: median(rows.map((r) => r.a)), b: median(rows.map((r) => r.b)) };
+}
+
+/** Garment pixels in row y between x0 and x1: the fabric's width at that height. */
+function fabricWidth(mask: Mask, y: number, x0: number, x1: number): number {
+  const W = mask.width;
+  const row = Math.round(y);
+  if (row < 0 || row >= mask.height) return 0;
+  let n = 0;
+  for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(W - 1, Math.ceil(x1)); x++) {
+    const c = mask.data[row * W + x];
+    if (c === CATEGORY.clothes || c === CATEGORY.other) n++;
+  }
+  return n;
+}
+
+/** The median fabric width over a few rows around y, so one stray row cannot decide it. */
+function fabricAround(mask: Mask, y: number, x0: number, x1: number, span: number): number {
+  const ws: number[] = [];
+  for (let d = -span; d <= span; d++) ws.push(fabricWidth(mask, y + d, x0, x1));
+  return median(ws);
 }
 
 export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): OutfitMeasure | MeasureFailure {
@@ -150,5 +176,16 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
       if (cost < best) { best = cost; breakRow = y0 + k; }
     }
   }
-  return { top, bottom, breakRow, waistRow, left: bodyX0, right: bodyX1, centerX: (px(sL) + px(sR) + px(hL) + px(hR)) / 4, topColour, bottomColour };
+  // Volume. The upper piece is read halfway between the shoulders and the
+  // hips, within the shoulder span widened a quarter each side; it is
+  // compared with the shoulder landmarks' distance. The legs are read at the
+  // knee, both legs' fabric summed, against the same shoulder distance: the
+  // hip line is often covered by an untucked top, the shoulders never are.
+  const shoulderW = sx1 - sx0;
+  const rowsAround = Math.max(1, Math.round((hipY - shoulderY) * 0.04));
+  const topW = fabricAround(mask, shoulderY + (hipY - shoulderY) * 0.5, sx0 - shoulderW * 0.25, sx1 + shoulderW * 0.25, rowsAround);
+  const reach = Math.max(hx1 - hx0, shoulderW) * 1.2;
+  const kneeW = fabricAround(mask, kneeY, hx0 - reach, hx1 + reach, rowsAround);
+  const fit = shoulderW > 4 && topW > shoulderW * 0.4 && kneeW > 0 ? { top: topW / shoulderW, legs: kneeW / shoulderW } : null;
+  return { top, bottom, breakRow, waistRow, left: bodyX0, right: bodyX1, centerX: (px(sL) + px(sR) + px(hL) + px(hR)) / 4, topColour, bottomColour, fit };
 }

@@ -5,20 +5,19 @@
 
 import type { Bins, AdviceLine, LineState } from "../engine/rules";
 import { colourLabel } from "../engine/names";
+import { RULEBOOK } from "../engine/rulebook";
 
-// The rule each line is held against, said once.
-export const RULE_COPY: Record<AdviceLine["rule"], string> = {
-  proportion: "A break near a third (0.333) or the golden section (0.382) of the height reads as composed; near-equal halves read as boxy.",
-  harmony: "Matsuda's hue templates (monochromatic, complementary, analogous, right-angle, split, double complementary, half wheel), fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.",
-  value: "Lightness carries form before hue does. A darker value below a lighter one grounds a figure; the widest lightness edge draws the eye first.",
-  shares: "Colour by area: one dominant, one secondary, one accent, near 0.60 · 0.30 · 0.10. Equal shares compete for the lead.",
-  chroma: "One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).",
-};
+// The rule each line is held against, said once, from the rulebook.
+export const RULE_COPY = Object.fromEntries(Object.entries(RULEBOOK).map(([id, e]) => [id, e.rule])) as Record<AdviceLine["rule"], string>;
 
 export const STATE_WORDS: Record<LineState, string> = { golden: "on the mark", neutral: "fine", advice: "advice" };
 
 export function measuredCopy(line: AdviceLine, bins: Bins): string {
   switch (line.rule) {
+    case "volume":
+      return bins.fit ? `Upper piece ${bins.fit.top.toFixed(2)}× the shoulder width at mid-torso; both legs ${bins.fit.legs.toFixed(2)}× at the knee.` : "Volume was not measured.";
+    case "legline":
+      return "Lightness of the lower piece against the shoes.";
     case "proportion":
       return bins.proportion === null
         ? "Upper and lower pieces measure as one colour, head to feet."
