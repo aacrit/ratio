@@ -4,6 +4,7 @@
 // tests check every rule the engine can produce has an entry here (V1: show
 // the method). Band edges here are the same constants the rules use.
 
+import { FIT_TOLERANCE, TEMPLATES } from "./colour-rules";
 import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARE_EDGES, VALUE_GAP_EDGES } from "./constants";
 
 export interface Source {
@@ -68,11 +69,11 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   },
   harmony: {
     title: "Harmony",
-    rule: "Matsuda's hue templates (monochromatic, complementary, analogous, right-angle, split, double complementary, half wheel), fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.",
-    maths: "Each template is rotated in 1° steps; its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of 4° or less names the palette.",
+    rule: "Matsuda's hue templates, fitted on the perceptual OKLCH wheel: a few shapes of hues that sit well together. A palette inside one reads as harmonious.",
+    maths: `Each template is rotated in 1° steps: ${TEMPLATES.map((t) => `${t.name} (${t.gloss})`).join(", ")}. Its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of ${FIT_TOLERANCE}° or less names the palette.`,
     edges: [
       { name: "a colour counts as a neutral below chroma (rising with lightness to 0.045 at white)", value: NEUTRAL_CHROMA },
-      { name: "fit tolerance (area-weighted degrees)", value: 4 },
+      { name: "fit tolerance (area-weighted degrees)", value: FIT_TOLERANCE },
     ],
     sources: [HARMONIZATION, OKLAB],
     calibrated: true,

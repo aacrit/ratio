@@ -37,6 +37,32 @@ checks:
     path: /privacy
     expect: 200
 
+  - name: rulebook status 200
+    type: status
+    path: /rules
+    expect: 200
+
+  - name: rulebook names itself
+    type: contains
+    path: /rules
+    text: "Rulebook"
+
+  - name: rulebook carries a build marker
+    type: meta
+    path: /rules
+    meta_name: build
+
+  - name: rulebook has no leftover placeholders
+    type: forbidden
+    path: /rules
+    strings:
+      - "undefined"
+      - "NaN"
+      - "lorem"
+      - "TODO"
+      - "__"
+      - "<!--rulebook-->"
+
   - name: healthz responds
     type: status
     path: /healthz
@@ -157,6 +183,8 @@ events:
     - "reading_completed"
     # A suggested look was tried in the tab (counted, never the look itself).
     - look_tried
+    # A rule's drill was opened on the Rulebook (once per rule per page visit).
+    - rule_opened
     - feedback_received
     - rate_limiter_error
   # Counted only by the Worker code that does the thing being counted; /e

@@ -77,14 +77,13 @@ body.app {
   }
 }
 
-/* ---- The bar: the mark, the name, one action ----------------------------------- */
+/* ---- The bar: the mark, the name, four tabs, one action ------------------------- */
 
 .bar {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding: 0 var(--gutter);
   border-bottom: 1px solid var(--color-border);
   position: relative;
@@ -99,6 +98,7 @@ body.app {
   text-decoration: none;
   color: var(--color-cream);
   min-height: 44px;
+  flex: none;
 }
 
 .brand-name {
@@ -116,8 +116,31 @@ body.app {
   color: var(--color-cream-muted);
 }
 
-@media (max-width: 479px) {
+@media (max-width: 767px) {
   .brand-eyebrow {
+    display: none;
+  }
+}
+
+@media (max-width: 479px) {
+  .bar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .tabs {
+    margin-left: 2px;
+  }
+  .tabs .tab {
+    padding: 0 8px;
+    font-size: 0.9rem;
+  }
+  .bar-actions .btn.small {
+    padding: 0 10px;
+  }
+}
+
+@media (max-width: 419px) {
+  .brand-name {
     display: none;
   }
 }
@@ -168,6 +191,115 @@ body.app {
 .bar-actions {
   display: flex;
   gap: 8px;
+  flex: none;
+}
+
+/* The tabs: four short words, and one chalk underline that glides between
+   them (the `underline` preset, design/tokens.css). Scrollable if the bar is
+   too narrow. Face and Card are buttons until their surfaces are built: they
+   open the drop cloth below, never a dead page. */
+.tabs {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 2px;
+  margin: 0 auto 0 6px;
+  position: relative;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs .tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  min-width: 44px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  scroll-snap-align: start;
+  text-decoration: none;
+  color: var(--color-cream-muted);
+  font: 500 0.92rem var(--font-structure);
+  position: relative;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.tabs .tab:hover {
+  background: none;
+  color: var(--color-cream);
+}
+
+.tabs .tab:active {
+  transform: none;
+}
+
+.tabs .tab[aria-current="page"],
+.tabs .tab[aria-expanded="true"] {
+  color: var(--color-cream);
+}
+
+.tabs .tab:focus-visible {
+  outline: 2px solid var(--color-cream);
+  outline-offset: -4px;
+  border-radius: var(--radius-control);
+}
+
+/* Before the script places the gliding underline, the current tab carries a
+   static one, so the bar says where you are without JavaScript too. */
+.tabs:not([data-ready]) .tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: 0;
+  height: 2px;
+  background: var(--color-cream);
+}
+
+.tab-underline {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 2px;
+  background: var(--color-cream);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.tabs[data-ready] .tab-underline {
+  transition: transform var(--dur-underline) var(--ease-underline);
+}
+
+/* A surface not built yet: its drop cloth covers everything under the bar. */
+.soon-cloth {
+  position: fixed;
+  inset: var(--bar-h) 0 0 0;
+  z-index: 5;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 20px;
+  padding: 24px var(--gutter);
+  text-align: center;
+  background: var(--color-bg);
+}
+
+.soon-cloth .drop-title:focus {
+  outline: none;
+}
+
+body[data-soon] {
+  overflow: hidden;
 }
 
 /* ---- Buttons: chalk on worsted, settle on press --------------------------- */

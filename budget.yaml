@@ -9,7 +9,7 @@ quotas:
   - name: workers_requests_per_day
     ceiling: 100000
     estimate_at_1000_users_per_day: 3000
-    notes: "Account-wide. ~3 Worker requests per visitor a day: a couple of /e events and occasional /feedback. Static pages, scripts, styles and fonts are served by Workers Static Assets without invoking the Worker (wrangler.jsonc's run_worker_first lists only the Worker routes), so they do not count here. Not bounded against abuse on the free plan: a refused request is still an invocation. The zone's WAF rule caps bursts (the /release skill), and the rest is an accepted risk signed at G3 (the /launch skill)."
+    notes: "Account-wide. ~3 Worker requests per visitor a day: a couple of /e events (page_view, reading_completed, look_tried, rule_opened) and occasional /feedback. Static pages, scripts, styles and fonts are served by Workers Static Assets without invoking the Worker (wrangler.jsonc's run_worker_first lists only the Worker routes), so they do not count here. Not bounded against abuse on the free plan: a refused request is still an invocation. The zone's WAF rule caps bursts (the /release skill), and the rest is an accepted risk signed at G3 (the /launch skill)."
 
   - name: d1_rows_read_per_day
     ceiling: 5000000
@@ -19,9 +19,9 @@ quotas:
   - name: d1_rows_written_per_day
     ceiling: 100000
     estimate_at_1000_users_per_day: 3000
-    worst_case_rows: 12605
+    worst_case_rows: 14006
     worst_case_max_share: 0.15
-    notes: "Account-wide. Typical is ~3,000 (one counter update per /e call, occasional feedback). Every write path sits behind a day ceiling that writes nothing once reached, so this product's writes are bounded by the sum of ceiling x rows-per-count, index entries included (worker/src/config.ts's worstCaseDailyWrites, with wrangler.jsonc's values): /e client events 3 x (3,000 + 1 + a daily feedback purge of up to 2 x the 100-row feedback ceiling, 2 rows each) = 10,203 (page_view, reading_completed, look_tried); feedback 100 x 22 + 101 = 2,301; rate_limiter_error 101. Worst case 12,605 rows, 12.6% of the account's 100,000; worst_case_max_share caps it at 15%, so four live products at their caps stay under the 70% alert together. tests/hardening.test.ts recomputes worst_case_rows from wrangler.jsonc and checks the share. Refused requests (rate limit, cross-site, content type, ceilings) write nothing."
+    notes: "Account-wide. Typical is ~3,000 (one counter update per /e call, occasional feedback). Every write path sits behind a day ceiling that writes nothing once reached, so this product's writes are bounded by the sum of ceiling x rows-per-count, index entries included (worker/src/config.ts's worstCaseDailyWrites, with wrangler.jsonc's values): /e client events 4 x (2,500 + 1 + a daily feedback purge of up to 2 x the 100-row feedback ceiling, 2 rows each) = 11,604 (page_view, reading_completed, look_tried, rule_opened); feedback 100 x 22 + 101 = 2,301; rate_limiter_error 101. Worst case 14,006 rows, 14.0% of the account's 100,000 (rule_opened, the fourth client event, moved the per-event day ceiling from 3,000 to 2,500 so it stays under the cap); worst_case_max_share caps it at 15%, so four live products at their caps stay under the 70% alert together. tests/hardening.test.ts recomputes worst_case_rows from wrangler.jsonc and checks the share. Refused requests (rate limit, cross-site, content type, ceilings) write nothing."
 
   - name: d1_storage_mb
     ceiling: 500
