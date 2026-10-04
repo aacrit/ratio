@@ -1,15 +1,16 @@
-// Telemetry here is aggregate counts only: no anonymous id, no localStorage,
-// no cookies, nothing that could identify a visitor. `/e` accepts exactly
-// `{ "name": "<allowed event>" }` and bumps a same-day, same-name counter.
-// Because it collects and stores nothing personal, no consent banner is
-// needed (see web/privacy.html). Every POST is same-origin JSON: the Worker
-// refuses anything else (worker/src/guard.ts), so never use sendBeacon,
-// which sends text/plain.
+// Telemetry here is aggregate counts only (events.ts): no anonymous id, no
+// localStorage, no cookies, nothing that could identify a visitor. Because
+// it collects and stores nothing personal, no consent banner is needed (see
+// web/privacy.html). The last reading's bins are handed to the Rulebook in
+// this tab's sessionStorage (rules/handoff.ts), never sent. Every POST is
+// same-origin JSON: the Worker refuses anything else (worker/src/guard.ts),
+// so never use sendBeacon, which sends text/plain.
 //
 // The page: a bar, a stage that holds the photo, and a sheet that holds the
 // reading (design/BRAND.md, Stage and sheet). The models and the measuring
 // run in the read worker (reader.ts); this thread only draws.
 
+import { sendEvent } from "./events";
 import { Velocity, reducedMotion } from "./motion";
 import { othersCopy } from "./engine/person";
 import { Figure, showPhoto } from "./overlay";
@@ -21,17 +22,8 @@ import { countTo } from "./ui/count";
 import { type Shown, heroEyebrowOf, setupLooks, verdictOf } from "./ui/looks";
 import { paletteStrip, renderRows } from "./ui/rows";
 import { Sheet } from "./ui/sheet";
-
-function sendEvent(name: string): void {
-  fetch("/e", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name }),
-    keepalive: true,
-  }).catch(() => {
-    // Best-effort telemetry: a failed send is not the user's problem.
-  });
-}
+import { setupTabs } from "./ui/tabs";
+import { lastReadOf, saveLastRead } from "./rules/handoff";
 
 /**
  * Call this exactly where the product's core action completes (the export
@@ -208,7 +200,11 @@ function setupRead(): void {
       hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
       hash.title = `Reading hash ${read.hash}`;
       reportCoreSuccess();
-      const looks = setupLooks({ read, reader, figure, sheet, rows, section: looksSection, list: looksList, heroN, heroEyebrow, verdict, trying, trial, paletteSlot, hash, wipe, asWornExtras, onTried: () => sendEvent("look_tried") });
+      // The Rulebook marks this read on its instruments (bins only, this tab only).
+      const source = sourceCredit === null ? "photo" : "sample";
+      const handOff = (s: Shown, look: string | null) => saveLastRead(lastReadOf({ engine: s.engine, hash: s.hash, source, look, bins: s.bins, lines: s.lines }));
+      handOff({ title: "As worn", lines: read.reading.lines, bins: read.reading.bins, hash: read.hash, engine: read.reading.engine }, null);
+      const looks = setupLooks({ read, reader, figure, sheet, rows, section: looksSection, list: looksList, heroN, heroEyebrow, verdict, trying, trial, paletteSlot, hash, wipe, asWornExtras, onTried: () => sendEvent("look_tried"), onShown: handOff });
       current = { figure, shown: looks.shown, credit: sourceCredit };
       sheet.measure();
       sheet.snap("half");
@@ -385,6 +381,7 @@ function setThemeColor(): void {
 
 sendEvent("page_view");
 setThemeColor();
+setupTabs({ onRead: true });
 setupDropFigure();
 setupRead();
 setupFeedback();

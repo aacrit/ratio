@@ -4,7 +4,8 @@
 // tests check every rule the engine can produce has an entry here (V1: show
 // the method). Band edges here are the same constants the rules use.
 
-import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARE_EDGES, VALUE_GAP_EDGES } from "./constants";
+import { FIT_TOLERANCE, TEMPLATES } from "./colour-rules";
+import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, neutralChromaAt, SATURATED_CHROMA, SHARES_REFERENCE, SHARE_EDGES, VALUE_GAP_EDGES, VIBRATION } from "./constants";
 
 export interface Source {
   label: string;
@@ -69,11 +70,11 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   },
   harmony: {
     title: "Harmony",
-    rule: "Matsuda's hue templates (monochromatic, complementary, analogous, right-angle, split, double complementary, half wheel), fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.",
-    maths: "Each template is rotated in 1° steps; its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of 4° or less names the palette. Colours with the same plain name count as one, at the hue of the larger and their summed area.",
+    rule: "Matsuda's hue templates, fitted on the perceptual OKLCH wheel: a few shapes of hues that sit well together. A palette inside one reads as harmonious.",
+    maths: `Each template is rotated in 1° steps: ${TEMPLATES.map((t) => `${t.name} (${t.gloss})`).join(", ")}. Its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of ${FIT_TOLERANCE}° or less names the palette. Colours with the same plain name count as one, at the hue of the larger and their summed area.`,
     edges: [
-      { name: "a colour counts as a neutral below chroma (rising with lightness to 0.045 at white)", value: NEUTRAL_CHROMA },
-      { name: "fit tolerance (area-weighted degrees)", value: 4 },
+      { name: `a colour counts as a neutral below chroma (rising with lightness to ${neutralChromaAt(1).toFixed(3)} at white)`, value: NEUTRAL_CHROMA },
+      { name: "fit tolerance (area-weighted degrees)", value: FIT_TOLERANCE },
     ],
     sources: [HARMONIZATION, OKLAB],
     calibrated: true,
@@ -92,7 +93,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   },
   shares: {
     title: "Colour shares",
-    rule: "Colour by area: one dominant, one secondary, one accent, near 0.60 · 0.30 · 0.10. Equal shares compete for the lead.",
+    rule: `Colour by area: one dominant, one secondary, one accent, near ${SHARES_REFERENCE.map((s) => s.toFixed(2)).join(" · ")}. Equal shares compete for the lead.`,
     maths: "Each colour's share of the garment area, in 0.05 units shared out by largest remainder so the shares always sum to 1.00. Colours with the same plain name (two greys) count as one.",
     edges: [
       { name: "one colour reads as a column at", value: SHARE_EDGES.column },
@@ -106,7 +107,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   chroma: {
     title: "Chroma",
     rule: "One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).",
-    maths: "OKLCH chroma of each colour; colours with the same plain name count as one, at the higher chroma and their area-weighted lightness. Vibration: two colours at least 150° apart, both of chroma 0.10 or more, within 0.08 of each other in lightness.",
+    maths: `OKLCH chroma of each colour; a colour below the neutral line (chroma ${NEUTRAL_CHROMA}, rising with lightness to ${neutralChromaAt(1).toFixed(3)} at white) counts as a neutral and is not read here; colours with the same plain name count as one, at the higher chroma and their area-weighted lightness. Vibration: two colours at least ${VIBRATION.minHueGap}° apart, both of chroma ${VIBRATION.minChroma.toFixed(2)} or more, within ${VIBRATION.maxLightnessGap} of each other in lightness.`,
     edges: [{ name: "saturated from chroma", value: SATURATED_CHROMA }],
     sources: [ALBERS, OKLAB],
     calibrated: true,

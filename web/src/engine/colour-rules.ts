@@ -13,7 +13,7 @@
 //    at equal lightness and high chroma), and the warm and cool balance.
 
 import { hueGap } from "./color";
-import { CONTRAST_EDGES, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARE_EDGES, VALUE_GAP_EDGES, isNeutral, nearEdge } from "./constants";
+import { CONTRAST_EDGES, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARES_REFERENCE, SHARE_EDGES, VALUE_GAP_EDGES, VIBRATION, isNeutral, nearEdge } from "./constants";
 import type { AdviceLine } from "./rules";
 
 export interface BinnedSwatch {
@@ -140,7 +140,7 @@ export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: numbe
 export function sharesLine(palette: BinnedSwatch[]): AdviceLine {
   const [a = 0, b = 0, c = 0] = palette.map((s) => s.share);
   const measured = [a, b, c].filter((v) => v > 0).map(pct).join(" · ");
-  const off = Math.abs(a - 0.6) + Math.abs(b - 0.3) + Math.abs(c - 0.1);
+  const off = Math.abs(a - SHARES_REFERENCE[0]) + Math.abs(b - SHARES_REFERENCE[1]) + Math.abs(c - SHARES_REFERENCE[2]);
   // Shares are binned to 0.05.
   const borderline = nearEdge(a, [SHARE_EDGES.column], 0.05) || nearEdge(Math.abs(a - b), [SHARE_EDGES.compete], 0.05) || nearEdge(off, [SHARE_EDGES.near6030], 0.05);
   const base = { rule: "shares" as const, title: "Colour shares", measured, borderline };
@@ -183,7 +183,7 @@ export function chromaLine(palette: BinnedSwatch[], waist: number): AdviceLine {
   for (let i = 0; i < chromatic.length; i++)
     for (let j = i + 1; j < chromatic.length; j++) {
       const p = chromatic[i], q = chromatic[j];
-      if (p.C >= 0.1 && q.C >= 0.1 && hueGap(p.h, q.h) >= 150 && Math.abs(p.L - q.L) < 0.08) {
+      if (p.C >= VIBRATION.minChroma && q.C >= VIBRATION.minChroma && hueGap(p.h, q.h) >= VIBRATION.minHueGap && Math.abs(p.L - q.L) < VIBRATION.maxLightnessGap) {
         return { ...base, state: "advice", text: `The ${place(p, waist)} and the ${place(q, waist)} are near-complements at almost the same lightness (the value row shows each). Josef Albers showed such pairs vibrate where they meet. Separate them by value, one clearly lighter, or set a neutral between them. The palette is ${temp}.` };
       }
     }

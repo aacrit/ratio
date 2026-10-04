@@ -14,6 +14,7 @@ import { byName, colourLabel, colourName, familyOf } from "../web/src/engine/nam
 import { extractPalette, type Swatch } from "../web/src/engine/palette";
 import { OTHER_MIN, UNSURE_COPY, isolatePerson, othersCopy } from "../web/src/engine/person";
 import { RULEBOOK } from "../web/src/engine/rulebook";
+import { yoursValues } from "../web/src/rules/model";
 import { type Bins, ENGINE_VERSION, readBins, readOutfit } from "../web/src/engine/rules";
 import { HONEST, NOT_ON_PHOTO, honesty } from "../web/src/tryon/recolour";
 
@@ -358,6 +359,17 @@ describe("2b. value reads each colour's own lightness", () => {
 });
 
 describe("5. one name, one entry", () => {
+  it("the Rulebook's yours markers read as the rules do: shares, chroma and harmony merged, value each colour's own", () => {
+    const palette = [sw(0.46, 0, 0, 0.4, 0.3), sw(0.68, 0, 0, 0.35, 0.7), sw(0.3, 0.07, 255, 0.25, 0.95)];
+    const bins: Bins = { proportion: 0.5, waist: 0.38, top: { L: 0.46, C: 0, h: 0 }, bottom: { L: 0.68, C: 0, h: 0 }, palette, fit: null };
+    const v = yoursValues(bins);
+    expect(v.shares.map((s) => s.share)).toEqual([0.75, 0.25]);
+    expect(v.chroma).toHaveLength(2);
+    expect(v.value).toEqual({ ls: [0.46, 0.68, 0.3], range: 0.38 });
+    expect(readBins(bins).find((l) => l.rule === "value")!.measured).toBe("range 0.38");
+    expect(readBins(bins).find((l) => l.rule === "shares")!.measured).toBe("0.75 · 0.25");
+  });
+
   it("merges swatches that share a plain name, summing their shares", () => {
     const palette = [sw(0.5, 0.1, 250, 0.45, 0.7), sw(0.5, 0, 0, 0.2, 0.3), sw(0.62, 0.01, 0, 0.15, 0.4), sw(0.9, 0, 0, 0.2, 0.95)];
     const named = byName(palette);

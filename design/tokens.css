@@ -97,6 +97,18 @@
   --color-borderline-glow: oklch(from var(--color-borderline) l c h / 0.16);
   --color-scrim: oklch(from var(--color-bg) l c h / 0.72); /* behind sheets and dialogs */
   --color-halo: oklch(from var(--hex-worsted) l c h / 0.85); /* under every overlay stroke and numeral; fixed in both themes */
+  /* The Rulebook's measuring scales (web/src/rules.css): data, not accents,
+     so they read the same in both themes. The lightness scale runs from
+     OKLab L 0.1 to 0.98; the hue ring is the OKLCH wheel at a muted chroma
+     0.09; the vibration pair is the worked example on the chroma instrument
+     (two complements at lightness 0.55, chroma 0.14: the copy says "both at
+     0.55"). */
+  --scale-lightness-dark: oklch(0.1 0 0);
+  --scale-lightness-light: oklch(0.98 0 0);
+  --scale-hue-ring: conic-gradient(in oklch longer hue, oklch(0.62 0.09 0), oklch(0.62 0.09 360));
+  --scale-hue-ring-mask: radial-gradient(circle closest-side, transparent 88%, black 89%, black 100%); /* alpha only: cuts the ring from the disc */
+  --scale-vibration-a: oklch(0.55 0.14 25);
+  --scale-vibration-b: oklch(0.55 0.14 205);
   /* Depth and light: the sheet rides over the stage, the photo sits on the
      cloth, a lamp falls on the table. One light, from above and slightly
      forward; shadows are the worsted's own dark, never grey. */

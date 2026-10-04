@@ -3,7 +3,10 @@
 // laptop has to run the models (founder, 2026-10-03: the machine is busy).
 // It serves dist/, opens it in headless Chromium at phone and desktop widths,
 // reads the sample painting, tries the first suggested look, moves the wipe,
-// and saves a card. Every image lands in screens/ for the workflow to upload;
+// and saves a card. The Rulebook (/rules) is shot before the read and after
+// it, when the read is marked on its instruments ("yours"), with a drill
+// open and the keyboard on the proportion instrument; then the Face tab's
+// "not yet built" drop cloth. Every image lands in screens/ for the workflow to upload;
 // the Chief of Staff brings them into Claude for review.
 //
 // The page is an app frame (design/BRAND.md, Stage and sheet): on the phone
@@ -57,6 +60,15 @@ async function run(name, viewport) {
   };
   const snap = (to) => page.evaluate((to) => document.getElementById("sheet")?.dispatchEvent(new CustomEvent("ratio:snap", { detail: to })), to);
   const phone = viewport.width < 1024;
+
+  // The Rulebook before any read: every instrument at its band's middle.
+  const rulesUrl = new URL("/rules", base).href;
+  await page.goto(rulesUrl, { waitUntil: "networkidle" });
+  await page.waitForTimeout(900);
+  note(`${name}: rulebook: ${await page.$$eval(".rule", (r) => r.length)} rule cards; chip: ${(await page.textContent("#yours-chip"))?.trim()}`);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  if (overflow > 0) errors.push(`/rules scrolls sideways by ${overflow} px`);
+  await shot("0-rules");
 
   const t0 = Date.now();
   await page.goto(base, { waitUntil: "networkidle" });
@@ -128,16 +140,60 @@ async function run(name, viewport) {
     if (!pressed || (await page.isVisible("#wipe"))) continue;
     chalkOnly = true;
     note(`${name}: chalk-only look ${i + 1}: ${await page.textContent(".trying-title")} | ${await page.textContent(".trying-note")}`);
-    await shot("6-chalk");
+    await shot("5b-chalk");
     if (phone) {
       await snap("full");
       await page.waitForTimeout(500);
     }
     const [chalkCard] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
-    await chalkCard.saveAs(path.join(out, `${name}-7-card-chalk.png`));
+    await chalkCard.saveAs(path.join(out, `${name}-5c-card-chalk.png`));
     note(`${name}: card saved after a chalk-only look (${chalkCard.suggestedFilename()})`);
   }
   if (!chalkOnly) note(`${name}: every look changes the photo, so no chalk-only card`);
+
+  // The Rulebook after the read: the last read in this tab marked on each instrument.
+  // rule_opened is counted from the moment the page loads: none on load, one per rule opened.
+  let ruleOpened = 0;
+  page.on("request", (r) => {
+    if (new URL(r.url()).pathname === "/e" && (r.postData() ?? "").includes("rule_opened")) ruleOpened++;
+  });
+  await page.goto(rulesUrl, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1200);
+  note(`${name}: rulebook chip: ${(await page.textContent("#yours-chip"))?.replace(/\s+/g, " ").trim()}`);
+  for (const y of await page.$$eval("[data-yours]", (ps) => ps.map((p) => `${p.getAttribute("data-yours")}: ${p.textContent?.replace(/\s+/g, " ").trim()}`))) note(`${name}:   ${y}`);
+  await shot("6-rules-yours");
+  // The keyboard moves the break; the drill opens (rule_opened).
+  await page.focus('[data-range="proportion"]');
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowDown");
+  note(`${name}: after 5 x ArrowDown: ${await page.textContent('[data-note="proportion"]')}`);
+  // A press on an instrument away from its handle is the page's, never a new value.
+  const before = await page.textContent('[data-note="volume"]');
+  const vol = await page.$('[data-instrument="volume"]');
+  await vol?.scrollIntoViewIfNeeded();
+  const box = await vol?.boundingBox();
+  if (box) await page.mouse.click(box.x + box.width - 6, box.y + box.height - 6);
+  const after = await page.textContent('[data-note="volume"]');
+  note(`${name}: press away from the volume handles leaves it: ${before === after}`);
+  if (before !== after) errors.push("a press away from a handle moved the volume instrument");
+  if (ruleOpened !== 0) errors.push(`rule_opened sent ${ruleOpened} times on load`);
+  await page.click("#rule-proportion summary");
+  await page.waitForTimeout(400);
+  const firstOpen = ruleOpened;
+  // Close and open the same drill again: still counted once for this visit.
+  await page.click("#rule-proportion summary");
+  await page.click("#rule-proportion summary");
+  await page.waitForTimeout(400);
+  note(`${name}: rule_opened on load 0, after the first open ${firstOpen}, after reopening the same drill ${ruleOpened}`);
+  if (firstOpen !== 1) errors.push(`rule_opened sent ${firstOpen} times on opening a drill (want 1)`);
+  if (ruleOpened !== 1) errors.push(`rule_opened sent again on reopening the same drill (${ruleOpened})`);
+  await page.screenshot({ path: path.join(out, `${name}-7-rules-drill.png`), fullPage: false });
+  note(`${name}: 7-rules-drill`);
+  // A surface not built yet opens its drop cloth, never a dead tab.
+  await page.click('.tabs [data-soon="face"]');
+  await page.waitForTimeout(600);
+  note(`${name}: face tab: ${await page.textContent("#soon-title")}`);
+  await page.screenshot({ path: path.join(out, `${name}-8-face-soon.png`), fullPage: false });
+  note(`${name}: 8-face-soon`);
 
   if (errors.length) note(`${name}: page errors:\n  ${errors.join("\n  ")}`);
   await browser.close();

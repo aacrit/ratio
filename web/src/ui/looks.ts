@@ -41,6 +41,8 @@ export interface LooksDeps {
   /** Rows extras for the reading as worn (the tuck button). */
   asWornExtras: () => Parameters<typeof renderRows>[3];
   onTried: () => void;
+  /** Whatever is now on screen, as worn (look null) or a tried look: the Rulebook marks it. */
+  onShown?: (shown: Shown, look: string | null) => void;
 }
 
 const changeText = (from: LineState, to: LineState) => `${STATE_WORDS[from]} → ${STATE_WORDS[to]}`;
@@ -138,6 +140,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     const from = shown.lines;
     current = null;
     shown = asWornShown;
+    d.onShown?.(shown, null);
     buttons.forEach((b) => {
       b.setAttribute("aria-pressed", "false");
       b.textContent = "Try it";
@@ -200,7 +203,10 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     d.paletteSlot.replaceChildren(paletteStrip(look.bins, "The look's palette"));
     const hh = await readingHash({ engine: ENGINE_VERSION, bins: look.bins });
     // A look refused on the photo says so on the card: the photo there is as worn.
-    if (current === look.id) shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: colour && !onPhoto ? CARD_AS_WORN : undefined };
+    if (current === look.id) {
+      shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: colour && !onPhoto ? CARD_AS_WORN : undefined };
+      d.onShown?.(shown, look.title);
+    }
     if (current === look.id) d.hash.textContent = `Trying a look. Same look, same reading. ${hh.slice(0, 4)} · ${ENGINE_VERSION}`;
     d.onTried();
   };
