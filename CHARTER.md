@@ -29,4 +29,4 @@ Reading the counts: every count is capped by its daily ceiling, and a browser-se
 - Any LLM feature (it needs a charter amendment and the plugin's free-provider add-on).
 - Anything the brief marked "Not in v1" (see `reports/briefs/ratio.md`, gitignored, on the Chief of Staff's side).
 
-## Workflows: 3 (gate, verify-production, branch-prune)
+## Workflows: 4 (gate, verify-production, branch-prune, screens)

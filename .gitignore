@@ -35,3 +35,7 @@ web/public/samples/
 *.tflite
 *.task
 *.wasm
+
+# CI screenshots (scripts/screens.mjs)
+screens/
+preview.log
