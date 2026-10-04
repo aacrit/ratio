@@ -168,8 +168,10 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     // Colour moves show on the photo behind the wipe; a look of proportion
     // moves alone leaves the photo as worn and shows on the chalk figure.
     // A doubtful recolour is never shown, so it can never reach a saved card.
-    const colour = showsOnPhoto(look.moves, read.palette);
-    const onPhoto = colour && (await honestOnPhoto(look));
+    // A colour move with nothing on the photo to move (shoes in a new colour
+    // when no shoes were measured) is refused like a doubtful one.
+    const colour = look.moves.some((mv) => mv.kind !== "break");
+    const onPhoto = colour && showsOnPhoto(look.moves, read.palette) && (await honestOnPhoto(look));
     if (current !== look.id) return;
     if (note) note.textContent = colour && !onPhoto ? NOT_ON_PHOTO : noteAsBuilt;
     if (onPhoto) {
