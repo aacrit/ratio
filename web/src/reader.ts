@@ -106,7 +106,11 @@ export class Reader {
   async read(file: Blob, onPhoto?: (display: Pixels) => void): Promise<ReadResult> {
     try {
       await this.warm();
-    } catch {
+    } catch (e) {
+      // Never shown to a visitor (the copy stays generic, V4), but the real
+      // cause belongs in the console: a support report, or scripts/fixture-hashes.mjs
+      // diagnosing a browser that cannot run the models at all (R3).
+      console.error("ratio: the models failed to load:", e);
       return { read: null, failure: "models_failed", copy: null };
     }
     const id = this.next++;
