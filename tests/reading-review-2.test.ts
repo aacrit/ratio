@@ -13,6 +13,7 @@ import { isNeutral, neutralChromaAt } from "../web/src/engine/constants";
 import { candidateMoves, accentOf } from "../web/src/engine/looks";
 import { colourName } from "../web/src/engine/names";
 import { changeWords, leadSentence, verdictOf } from "../web/src/engine/verdict";
+import { measuredCopy } from "../web/src/engine/measured";
 import { volumeLine } from "../web/src/engine/shape-rules";
 import { recolour } from "../web/src/tryon/recolour";
 import type { Swatch } from "../web/src/engine/palette";
@@ -97,6 +98,15 @@ describe("1. the break can land high", () => {
     const { m, reading } = read(figure({ upper: WHITE, lower: NAVYISH, shoes: [120, 60, 40], hem: 110 }));
     expect(m.breakRow).toBe(110);
     expect(reading.bins.proportion).toBeCloseTo(0.26, 2);
+  });
+
+  it("4px navy and white stripes over navy trousers: the hem is the top's, near 0.49, never a stripe's phase (round 3)", () => {
+    const navy = lch(0.3, 0.06, 255), white = lch(0.92, 0, 0);
+    for (const p of [2, 3, 4, 6, 8, 12]) {
+      const { reading } = read(figure({ upper: (x) => (x % (2 * p) < p ? navy : white), lower: navy, shoes: [30, 30, 30] }));
+      expect(reading.bins.proportion, `${p}px`).toBeGreaterThanOrEqual(0.44);
+      expect(reading.bins.proportion, `${p}px`).toBeLessThanOrEqual(0.52);
+    }
   });
 
   it("hems at 0.29 and 0.39 are read where they are", () => {
@@ -250,6 +260,28 @@ describe("4. volume reads where it can, says what it can't", () => {
     if (typeof m === "string") throw new Error(m);
     expect(m.fit?.top ?? null).toBeNull();
     expect(m.fitWhy).toBeUndefined();
+    // Round 3: neither the volume line nor its Measured copy blames an arm that is not there.
+    const reading = readOutfit(m, extractPalette(s.pixels, s.mask, m));
+    const line = reading.lines.find((l) => l.rule === "volume")!;
+    expect(line.measured).toBe("not read · 0.40×");
+    expect(line.text).not.toMatch(/arm|hand/);
+    expect(line.text).toMatch(/could not be read on these rows/);
+    expect(measuredCopy(line, reading.bins)).not.toMatch(/arm|hand/);
+  });
+
+  it("a bandeau over a bare midriff with no arms in the pose: the reason never names an arm", () => {
+    const s = figure({ upper: WHITE, lower: NAVYISH, shoes: [120, 60, 40], hem: 75, skinTo: 200 });
+    const { m, reading } = read(s);
+    expect(m.fitWhy).toBeUndefined();
+    const line = reading.lines.find((l) => l.rule === "volume")!;
+    expect(line.text).not.toMatch(/arm|hand/);
+    expect(measuredCopy(line, reading.bins)).not.toMatch(/arm|hand/);
+  });
+
+  it("arms hanging 0.04 and 0.08 of the shoulder width clear of the sides still read (round 3)", () => {
+    expect(read(withArms(2)).m.fit?.top).toBeCloseTo(1.06, 1);
+    expect(read(withArms(4)).m.fit?.top).toBeCloseTo(1.08, 1);
+    expect(read(withArms(2)).m.fitOneSide).toBeUndefined();
   });
 
   it("the volume advice offers the tuck as a condition, and never on an opening front", () => {
@@ -278,6 +310,16 @@ describe("also: shoes, accents, names, labels, recolour", () => {
     const mutes = candidateMoves(b, lines).filter((m) => m.kind === "recolour" && m.title.includes("muted"));
     expect(mutes.length).toBe(1);
     expect(mutes[0].kind === "recolour" && mutes[0].swatch).toBe(0);
+  });
+
+  it("a mute move is said as muted in the verdict, never as the plain colour (round 3)", async () => {
+    const { plainMove } = await import("../web/src/engine/verdict");
+    const sw = (L: number, C: number, h: number, share: number, y: number) => ({ L, C, h, share, y });
+    // A red top and green shoes at the same lightness, both saturated: the red is muted.
+    const b: Bins = { proportion: 0.38, waist: 0.38, top: { L: 0.55, C: 0.16, h: 25 }, bottom: { L: 0.3, C: 0, h: 0 }, palette: [sw(0.3, 0, 0, 0.5, 0.65), sw(0.55, 0.16, 25, 0.38, 0.3), sw(0.55, 0.15, 150, 0.12, 0.95)], fit: null };
+    const mute = candidateMoves(b, readBins(b)).find((m) => m.kind === "recolour" && m.title.includes("muted"));
+    expect(mute).toBeDefined();
+    expect(plainMove(mute!)).toBe("a muted red for the top");
   });
 
   it("scarlet stays red; coral and light coral are coral", () => {

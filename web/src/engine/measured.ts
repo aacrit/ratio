@@ -33,7 +33,9 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
       const w = volumeWords(bins.fit);
       const upper =
         bins.fit.top === null
-          ? "Upper piece not read: an arm or a hand lies over its edges on every row"
+          ? bins.fitWhy === "arms"
+            ? "Upper piece not read: an arm or a hand lies over its edges on every row"
+            : "Upper piece not read: its width could not be read on these rows"
           : `Upper piece ${two(bins.fit.top)}× the shoulder width${bins.fitOneSide ? ", read on one side," : ""} on the torso rows no arm spoils, ${w.top}`;
       const legs = bins.fit.legs === null ? "the legs not read" : `each leg ${two(bins.fit.legs)}× at the knee, ${w.legs}`;
       return `${upper}; ${legs}.`;

@@ -25,6 +25,8 @@ export function plainMove(m: Move): string {
   if (m.kind === "break") return m.title.startsWith("Belt") ? "a belt at the waist" : "a front tuck, if the top tucks";
   const name = colourName(m.L, m.C, m.h);
   if (m.kind === "accent") return `${name} shoes`;
+  // A muted red is still called red: the verdict says it is the muted one.
+  if (m.muted) return m.piece === "shoes" ? `muted ${name} shoes` : `a muted ${name} for ${PIECE_WORDS[m.piece]}`;
   return m.piece === "shoes" ? `${name} shoes` : `${name} for ${PIECE_WORDS[m.piece]}`;
 }
 

@@ -139,6 +139,8 @@ export const EDGE_WINDOW = 0.03;
 export const FLANK: readonly [number, number] = [0.05, 0.35];
 /** The torso rows the upper piece's width may be read on (fractions of shoulders to hips). */
 export const TORSO_ROWS: readonly [number, number] = [0.25, 0.75];
+/** The upper piece's widths, row to row, may spread (quartile to quartile) by at most this share of their median. */
+export const WIDTH_SPREAD = 0.25;
 /** An arm's half-width, as a share of the shoulder distance. */
 export const ARM_HALF = 0.12;
 /** At least this share of the torso rows must be clear of the arms for the width to be read. */
@@ -167,6 +169,20 @@ function median(values: number[]): number {
   const s = [...values].sort((a, b) => a - b);
   const m = s.length >> 1;
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** A row's colour: each channel's mean after trimming ROW_TRIM of its values from each end. */
+export const ROW_TRIM = 0.2;
+function trimmedLab(px: Lab[]): Lab {
+  const t = (vs: number[]) => {
+    const s = [...vs].sort((a, b) => a - b);
+    const cut = Math.floor(s.length * ROW_TRIM);
+    const kept = s.length - 2 * cut > 0 ? s.slice(cut, s.length - cut) : s;
+    let sum = 0;
+    for (const v of kept) sum += v;
+    return sum / kept.length;
+  };
+  return { L: t(px.map((p) => p.L)), a: t(px.map((p) => p.a)), b: t(px.map((p) => p.b)) };
 }
 
 function medianLab(rows: Lab[]): Lab {
@@ -300,8 +316,10 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
   // (FLANK of its width in from each edge above the hips): the outer layer,
   // never the middle, where a zip, an open front or a t-shirt under a
   // hoodie shows. Below the hips, the hips' column widened 20% for the legs,
-  // as one. Each row's colour is the median of its pixels, so a drawstring
-  // or a stray thread cannot move it.
+  // as one. Each row's colour is its pixels' well-lit core (coreColour), so
+  // a stripe reads as its lighter cloth on every row instead of flipping
+  // between its colours (a per-channel median read a false hem at 0.32 in
+  // navy and white stripes, review round 3), and a stray thread cannot move it.
   const widenH = (hx1 - hx0) * 0.2;
   const y0 = Math.ceil(shoulderY);
   const y1 = Math.min(H - 1, Math.floor(ankleY));
@@ -330,7 +348,16 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
   }
   const rowPx: Lab[][] = sidePx.map(([l, r]) => (l === r ? l : [...l, ...r]));
   const rows: (Lab | null)[] = rowPx.map((p) => (p.length ? medianLab(p) : null));
-  const sideRows: (Lab | null)[][] = [0, 1].map((k) => sidePx.map((p) => (p[k].length ? medianLab(p[k]) : null)));
+  // Each flank's rows twice over. Where a hem may be is decided on rows that
+  // blend a pattern: above the hips the narrow flank bands catch vertical
+  // stripes in a phase that shifts as the figure tapers, so a per-channel
+  // median flips between the stripes' colours and draws false hems (navy
+  // and white stripes read 0.32, review round 3); their trimmed mean
+  // (trimmedLab) blends them. Below the hips the leg column is wide and its
+  // median is the cloth's own colour. The median rows (the cloth's own
+  // colour, so a fold or a seam cannot drag it) place the hem.
+  const sideRows: (Lab | null)[][] = [0, 1].map((k) => sidePx.map((p, i) => (p[k].length ? (y0 + i < hipY ? trimmedLab(p[k]) : medianLab(p[k])) : null)));
+  const sideMedians: (Lab | null)[][] = [0, 1].map((k) => sidePx.map((p) => (p[k].length ? medianLab(p[k]) : null)));
   const idx = (y: number) => Math.round(y) - y0;
   const rowsIn = (from: number, to: number) => rows.slice(Math.max(0, idx(from)), Math.max(0, idx(to)) + 1).filter((r): r is Lab => r !== null);
 
@@ -354,7 +381,7 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
   const first = rows.findIndex((r) => r !== null);
   const lo = Math.max(first + 1, idx(shoulderY + torso * BREAK_MIN_ROWS));
   const hi = Math.min(idx(kneeY), rows.length - 1);
-  const sides = sideRows.map((sr) => {
+  const sides = sideMedians.map((sr) => {
     const errBottom = sr.map((r) => (r ? hemDistance(r, bottomR) : 0));
     const tail: number[] = new Array(sr.length + 1).fill(0);
     for (let i = sr.length - 1; i >= 0; i--) tail[i] = tail[i + 1] + errBottom[i];
@@ -486,8 +513,9 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
   }
   const armHalf = shoulderW * ARM_HALF;
   // An arm spoils only the edge on its side: an arm whose line (the pose's
-  // shoulder, elbow, wrist and hand) crosses the row anywhere from 2 armHalf
-  // outside an edge to the centre line spoils that edge. A sleeve against
+  // shoulder, elbow, wrist and hand) crosses the row anywhere from 1 armHalf
+  // outside an edge to the centre line spoils that edge (an arm hanging
+  // clear of the side by a small gap leaves the edge clean). A sleeve against
   // the side widens the run by its own width (the landmark sits near its
   // middle), and an arm inside the run means the run's edge beyond it is
   // not the torso's (a neighbour's sleeve, a bag, the hand in a pocket:
@@ -503,15 +531,24 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
     if (!run) continue;
     const xs = arms.map(([a, b]) => crossAt(a, b, y)).filter((x): x is number => x !== null);
     const c = centreAt(y);
-    const leftBad = xs.some((x) => x >= run.x0 - 2 * armHalf && x <= c);
-    const rightBad = xs.some((x) => x >= c && x <= run.x1 + 2 * armHalf);
+    const leftBad = xs.some((x) => x >= run.x0 - armHalf && x <= c);
+    const rightBad = xs.some((x) => x >= c && x <= run.x1 + armHalf);
     if (leftBad || rightBad) spoiled++;
     if (!leftBad && !rightBad) both.push(run.x1 - run.x0 + 1);
     else if (!leftBad) oneSide.push(2 * Math.abs(centreAt(y) - run.x0) + 1);
     else if (!rightBad) oneSide.push(2 * Math.abs(run.x1 - centreAt(y)) + 1);
   }
   const need = Math.max(3, candidates * MIN_CLEAR);
-  const topW = both.length >= need ? median(both) : both.length + oneSide.length >= need ? median([...both, ...oneSide]) : null;
+  // Widths that disagree from row to row (a quartile spread past WIDTH_SPREAD
+  // of their median) are not one garment's cut: a hand in a pocket or a
+  // neighbour's sleeve is in some of them (p1 of UX pass 2). Not read.
+  const steady = (ws: number[]) => {
+    const s = [...ws].sort((a, b) => a - b);
+    const q = (f: number) => s[Math.min(s.length - 1, Math.floor((s.length - 1) * f))];
+    return q(0.75) - q(0.25) <= median(ws) * WIDTH_SPREAD;
+  };
+  const pick = both.length >= need ? both : both.length + oneSide.length >= need ? [...both, ...oneSide] : null;
+  const topW = pick && steady(pick) ? median(pick) : null;
   const fitOneSide = topW !== null && both.length < need;
   // Each leg at its own knee: the run of garment pixels through the knee,
   // the median over a few rows. When both knees fall in one run (a skirt, a

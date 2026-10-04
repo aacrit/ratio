@@ -25,7 +25,7 @@ import { type AdviceLine, type Bins, type LineState, readBins, tuckable } from "
 
 export type Move =
   | { kind: "break"; to: number; title: string; detail: string }
-  | { kind: "recolour"; swatch: number; piece: Piece; L: number; C: number; h: number; title: string; detail: string }
+  | { kind: "recolour"; swatch: number; piece: Piece; L: number; C: number; h: number; title: string; detail: string; muted?: true }
   | { kind: "accent"; L: number; C: number; h: number; title: string; detail: string };
 
 export interface Look {
@@ -231,7 +231,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
     // A muted red is still called red: only a real step down in chroma counts here.
-    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
+    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
   }
 
   // Accent: a tenth of the area. The complement of the lead hue when the lead

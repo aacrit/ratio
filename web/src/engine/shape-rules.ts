@@ -32,6 +32,8 @@ export function volumeWords(fit: Fit): { top: TopFit | null; legs: LegFit | null
 export interface VolumeContext {
   /** The upper piece's width was read on one side only. */
   oneSide?: boolean;
+  /** Why the upper piece's width was not read: an arm or a hand lay on its edges ("arms"); otherwise the rows held no width to read. */
+  why?: "arms";
   /** The upper piece opens down the front, so it does not tuck. */
   front?: boolean;
 }
@@ -48,7 +50,7 @@ export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
   // One part alone is said, and the balance of the two is not judged.
   if (t === null || l === null) {
     const said = t !== null ? `The upper piece reads ${t} (${two(fit.top!)}× the shoulder width).` : `Each leg reads ${l} (${two(fit.legs!)}× the shoulder width at the knee).`;
-    const missing = t === null ? "An arm or a hand lies over the upper piece's edges, so its width was not read" : "The legs were not read";
+    const missing = t !== null ? "The legs were not read" : ctx.why === "arms" ? "An arm or a hand lies over the upper piece's edges, so its width was not read" : "The upper piece's width could not be read on these rows";
     return { ...base, state: "neutral", text: `${said} ${missing}, and the balance of the two is not judged.${side}` };
   }
   const pair = `${t} over ${l}`;
