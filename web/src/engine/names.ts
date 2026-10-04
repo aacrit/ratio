@@ -41,7 +41,7 @@ export function colourName(L: number, C: number, h: number): string {
   }
   const band = BANDS.find((b) => h >= b.from && h < b.to) ?? BANDS[0];
   // Denim-blue and low-chroma blues read as denim, the commonest garment colour.
-  if (h >= 230 && h < 265 && C < 0.08 && L >= 0.3 && L < 0.6) return "denim";
+  if (h >= 230 && h < 265 && C < 0.08 && L >= 0.36 && L < 0.6) return "denim";
   return L < 0.38 ? band.dark : L > 0.72 ? band.light : band.mid;
 }
 
