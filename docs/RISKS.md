@@ -25,6 +25,7 @@ Segmentation and colour readings may work less well on some skin tones, hair typ
 | No storage, no upload, no account. The photo exists only in the tab's memory and is dropped when the tab closes. | CSP `connect-src 'self'`; a test that no code path posts image bytes; a Playwright zero-egress run before G3 (Dial's pattern). | Spark (CSP), Proof (zero-egress) |
 | Copy never judges the body or the person (V4). | `JUDGING_WORDS` copy lint over every line the rulebook can produce (`tests/engine.test.ts`). | Spark |
 | Adults only: the upload step says so plainly, and Ratio refuses nothing silently. | The privacy page and the upload copy, checked by the contract. | Forge |
+| Several people in one photo: Ratio reads only the person the pose found (the mask component holding their shoulders, hips and knees, clipped to a corridor round the skeleton when they touch someone) and says which one it read. **Known limit:** when the pose's joints land on no person pixels, Ratio cannot separate that person; it reads the corridor alone and says so plainly ("Ratio could not separate the person it read; if others are in the photo, crop to one."). People who overlap within the corridor are not told apart. | `web/src/engine/person.ts` with `tests/read-trust.test.ts`; a recolour shows on the photo only when it passes `honesty` in `web/src/tryon/recolour.ts`. | Forge (T2) |
 
 ## R3. Determinism across devices
 

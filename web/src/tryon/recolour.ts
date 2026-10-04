@@ -62,8 +62,9 @@ export const showsOnPhoto = (moves: Move[], swatches: Swatch[]) => colourTargets
  *   share the recolour would move. Below `cover`, the change would show as a
  *   patch on a garment that stays its own colour. (Not for "other": an accent
  *   anywhere on the figure is small by nature.)
- * - area: the moved pixels against all the person's garment pixels in the
- *   box. Below `area`, the change is too small to see.
+ * - area: the moved pixels against all the read person's garment pixels in
+ *   the box's columns (padded as the palette's), every row. Below `area`,
+ *   the change is too small to see.
  */
 export const HONEST = { inside: 0.6, cover: 0.25, area: 0.01 } as const;
 

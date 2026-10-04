@@ -76,12 +76,16 @@ interface Placed {
  * plain name (a grey in light and a grey in shadow) become one entry with
  * their summed share, the larger one's hue, and the share-weighted lightness
  * and place (chroma is chosen so the entry keeps its name). Largest share
- * first; ties keep the palette's order. The colour rules read this view, and every list of
- * colours on screen and on the card shows it, so the numbers agree.
+ * first; ties keep the palette's order. Harmony, shares and chroma read this
+ * view (the Rulebook says so), and every list of colours on screen and on
+ * the card shows it, so the numbers agree. Value reads each swatch's own
+ * lightness: merging would average a light grey and a dark grey away.
  */
 export function byName<T extends Placed>(palette: readonly T[]): (Placed & { name: string })[] {
   const out: (Placed & { name: string; w: number })[] = [];
   for (const s of palette) {
+    // A speck the share binning took to zero is not listed.
+    if (s.share <= 0) continue;
     const name = colourName(s.L, s.C, s.h);
     const into = out.find((e) => e.name === name);
     if (!into) {

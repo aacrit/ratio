@@ -243,17 +243,26 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
   // no extra gain, and at most one look per hue family per piece (forest
   // green, olive and bottle green for the lower piece are one idea, Noor,
   // 2026-10-04). The slots left go to the next best different moves: a
-  // value move, an accent, a tuck or a belt.
+  // value move, an accent, a tuck or a belt. A proportion move sits in at
+  // most two of the three while a look without it also improves the
+  // reading, so the tuck cannot take every slot; only when none does may it.
   const chosen: Look[] = [];
   const used = new Set<string>();
-  for (const look of ranked) {
-    const redundant = chosen.some((c) => c.moves.every((m) => look.moves.includes(m)) && look.gain <= c.gain);
-    const keys = ideasOf(look.moves);
-    if (redundant || keys.some((k) => used.has(k))) continue;
-    chosen.push(look);
-    keys.forEach((k) => used.add(k));
-    if (chosen.length === limit) break;
+  const isBreak = (m: Move) => m.kind === "break";
+  for (const capBreaks of [true, false]) {
+    for (const look of ranked) {
+      if (chosen.length === limit) break;
+      if (chosen.includes(look)) continue;
+      const redundant = chosen.some((c) => c.moves.every((m) => look.moves.includes(m)) && look.gain <= c.gain);
+      const keys = ideasOf(look.moves);
+      if (redundant || keys.some((k) => used.has(k))) continue;
+      if (capBreaks && look.moves.some(isBreak) && chosen.filter((c) => c.moves.some(isBreak)).length >= limit - 1) continue;
+      chosen.push(look);
+      keys.forEach((k) => used.add(k));
+    }
   }
+  // Best first, as ranked.
+  chosen.sort((x, y) => ranked.indexOf(x) - ranked.indexOf(y));
   return chosen;
 }
 

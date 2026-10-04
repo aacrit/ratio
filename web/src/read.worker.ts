@@ -9,7 +9,7 @@
 
 import type { Pixels } from "./engine/resample";
 import { FAILURE_COPY, type Read, readPhoto } from "./read";
-import { recolour } from "./tryon/recolour";
+import { honesty, recolour } from "./tryon/recolour";
 import { loadModels } from "./vision";
 import type { FromWorker, ToWorker } from "./reader";
 
@@ -50,5 +50,8 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       post({ type: "recoloured", id: msg.id, pixels: out }, [out.data.buffer]);
       return;
     }
+    case "honesty":
+      post({ type: "honesty", id: msg.id, honesty: honesty(msg.pixels, msg.full, msg.person, msg.box, msg.bands, msg.swatches, msg.moves) });
+      return;
   }
 };

@@ -8,13 +8,14 @@ import type { Move } from "./engine/looks";
 import type { Swatch } from "./engine/palette";
 import type { Pixels } from "./engine/resample";
 import type { Read, ReadFailure } from "./read";
-import type { Bands, Box } from "./tryon/recolour";
+import type { Bands, Box, Honesty } from "./tryon/recolour";
 import ReadWorker from "./read.worker?worker";
 
 export type ToWorker =
   | { type: "load" }
   | { type: "read"; id: number; file: Blob }
-  | { type: "recolour"; id: number; pixels: Pixels; mask: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[] };
+  | { type: "recolour"; id: number; pixels: Pixels; mask: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[] }
+  | { type: "honesty"; id: number; pixels: Pixels; full: Mask; person: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[] };
 
 export type FromWorker =
   | { type: "progress"; loaded: number; total: number }
@@ -23,7 +24,8 @@ export type FromWorker =
   | { type: "photo"; id: number; display: Pixels }
   | { type: "read"; id: number; read: Read }
   | { type: "failed"; id: number; failure: ReadFailure; copy: string | null }
-  | { type: "recoloured"; id: number; pixels: Pixels };
+  | { type: "recoloured"; id: number; pixels: Pixels }
+  | { type: "honesty"; id: number; honesty: Honesty };
 
 export type Progress = (loaded: number, total: number) => void;
 
@@ -76,7 +78,8 @@ export class Reader {
         return;
       case "read":
       case "failed":
-      case "recoloured": {
+      case "recoloured":
+      case "honesty": {
         const w = this.waiting.get(msg.id);
         this.waiting.delete(msg.id);
         w?.resolve(msg);
@@ -127,5 +130,19 @@ export class Reader {
     });
     if (reply.type !== "recoloured") throw new Error("recolour failed");
     return reply.pixels;
+  }
+
+  /** Whether a look's colour change can be shown honestly on the photo (tryon/recolour.ts honesty), judged in the worker at reading size. */
+  async honesty(pixels: Pixels, full: Mask, person: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[]): Promise<Honesty> {
+    const id = this.next++;
+    const reply = await new Promise<FromWorker>((resolve) => {
+      this.waiting.set(id, { resolve });
+      const copy = (m: Mask): Mask => ({ width: m.width, height: m.height, data: new Uint8Array(m.data) });
+      const p: Pixels = { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data) };
+      const f = copy(full), o = copy(person);
+      this.ensure().postMessage({ type: "honesty", id, pixels: p, full: f, person: o, box, bands, swatches, moves } satisfies ToWorker, [p.data.buffer, f.data.buffer, o.data.buffer]);
+    });
+    if (reply.type !== "honesty") throw new Error("honesty check failed");
+    return reply.honesty;
   }
 }

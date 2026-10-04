@@ -32,13 +32,18 @@ export interface Person {
   mask: Mask;
   /** How many other sizeable people the photo holds. */
   others: number;
-  /** Where the read person stands among them (null when alone). */
+  /** Where the read person stands in the photo, by thirds of its width (null when alone). */
   side: Side | null;
   /** True when the person touched someone and the corridor clipped them apart. */
   clipped: boolean;
+  /** True when the pose could not single out the person: the corridor alone, or nothing, decided. */
+  unsure: boolean;
 }
 
 type P = { x: number; y: number };
+
+/** Distance by products and Math.sqrt only (no Math.hypot or **), so every engine gives the same bits (R3). */
+const dist = (a: P, b: P) => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
 
 /** Squared distance from a point to a segment. */
 function segDist2(p: P, a: P, b: P): number {
@@ -68,11 +73,11 @@ export function corridor(pose: Landmark[], width: number, height: number): (x: n
   const at = (i: number): P => ({ x: pose[i].x * width, y: pose[i].y * height });
   const seen = (i: number) => (pose[i].visibility ?? 1) >= VISIBLE;
   const sL = at(POSE.lShoulder), sR = at(POSE.rShoulder), hL = at(POSE.lHip), hR = at(POSE.rHip);
-  const shoulderW = Math.hypot(sL.x - sR.x, sL.y - sR.y);
+  const shoulderW = dist(sL, sR);
   const pad = Math.max(4, shoulderW * CORRIDOR_PAD);
   const mid = { x: (sL.x + sR.x) / 2, y: (sL.y + sR.y) / 2 };
   const hipMid = { x: (hL.x + hR.x) / 2, y: (hL.y + hR.y) / 2 };
-  const torso = Math.hypot(hipMid.x - mid.x, hipMid.y - mid.y);
+  const torso = dist(hipMid, mid);
   // The crown: past the nose by as much again as the nose sits above the shoulders.
   const nose = at(POSE.nose);
   const crown = seen(POSE.nose) ? { x: mid.x + (nose.x - mid.x) * 1.8, y: mid.y + (nose.y - mid.y) * 1.8 } : { x: mid.x, y: mid.y - torso * 0.6 };
@@ -127,7 +132,7 @@ function seedAt(mask: Mask, l: Landmark, radius: number): number {
   for (let y = Math.max(0, cy - radius); y <= Math.min(H - 1, cy + radius); y++)
     for (let x = Math.max(0, cx - radius); x <= Math.min(W - 1, cx + radius); x++) {
       if (data[y * W + x] === CATEGORY.background) continue;
-      const d = (x - cx) ** 2 + (y - cy) ** 2;
+      const d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
       if (d < bestD) { bestD = d; best = y * W + x; }
     }
   return best;
@@ -136,12 +141,13 @@ function seedAt(mask: Mask, l: Landmark, radius: number): number {
 /** Keeps only the read person's pixels; counts the other people in the photo. */
 export function isolatePerson(mask: Mask, pose: Landmark[]): Person {
   const { width: W, height: H, data } = mask;
-  const alone: Person = { mask, others: 0, side: null, clipped: false };
+  const alone: Person = { mask, others: 0, side: null, clipped: false, unsure: true };
   if (pose.length < 29) return alone;
   const seen = (i: number) => (pose[i].visibility ?? 1) >= VISIBLE;
   if (![POSE.lShoulder, POSE.rShoulder, POSE.lHip, POSE.rHip].every(seen)) return alone;
   const inside = corridor(pose, W, H);
-  const shoulderW = Math.hypot((pose[POSE.lShoulder].x - pose[POSE.rShoulder].x) * W, (pose[POSE.lShoulder].y - pose[POSE.rShoulder].y) * H);
+  const dx = (pose[POSE.lShoulder].x - pose[POSE.rShoulder].x) * W, dy = (pose[POSE.lShoulder].y - pose[POSE.rShoulder].y) * H;
+  const shoulderW = Math.sqrt(dx * dx + dy * dy);
   const radius = Math.max(2, Math.round(shoulderW * 0.1));
 
   // Every non-background component, labelled in a fixed order: the person's
@@ -157,50 +163,82 @@ export function isolatePerson(mask: Mask, pose: Landmark[]): Person {
 
   const isIn = (i: number) => inside(i % W, Math.floor(i / W));
   const keep = new Uint8Array(W * H);
-  // Centres (x) of the other people, for where the person stands among them.
-  const otherX: number[] = [];
-  const centreX = (px: number[]) => px.reduce((s, i) => s + (i % W), 0) / px.length;
-
-  const outside = person.filter((i) => !isIn(i));
-  // No seed on the person (the segmenter missed them where the pose found
-  // them), or a component that reaches far beyond the skeleton: the corridor
-  // decides which pixels are the person's.
-  const clipped = person.length === 0 || outside.length > person.length * MERGED_OUTSIDE;
   let size = 0;
-  if (person.length === 0) {
-    for (let i = 0; i < W * H; i++) if (data[i] !== CATEGORY.background && isIn(i)) { keep[i] = 1; size++; }
+  const take = (i: number) => {
+    if (keep[i]) return;
+    keep[i] = 1;
+    size++;
+  };
+  // Pixels that may be other people: split into connected components below.
+  const maybe: number[] = [];
+  // No seed on the person: the segmenter missed them where the pose found
+  // them, so the corridor alone decides, and the read says it is unsure.
+  const unsure = person.length === 0;
+  let clipped = false;
+  if (unsure) {
+    for (let i = 0; i < W * H; i++) if (data[i] !== CATEGORY.background) (isIn(i) ? take(i) : maybe.push(i));
   } else {
-    for (const i of person) if (!clipped || isIn(i)) { keep[i] = 1; size++; }
-  }
-  if (clipped && person.length && outside.length >= size * OTHER_MIN) otherX.push(centreX(outside));
-  for (const part of parts) {
-    if (person.length === 0) break;
-    const share = part.filter(isIn).length / part.length;
-    if (share >= OWN_FRAGMENT) {
-      // A piece of the person cut off by a gap; clipped to the corridor when the person was.
-      for (const i of part) if (!clipped || isIn(i)) { keep[i] = 1; size++; }
-    } else if (part.length >= size * OTHER_MIN) otherX.push(centreX(part));
-  }
-  if (person.length === 0) {
+    const outside = person.filter((i) => !isIn(i));
+    // A component that reaches far beyond the skeleton has merged with
+    // someone touching the person: the corridor clips it.
+    clipped = outside.length > person.length * MERGED_OUTSIDE;
+    for (const i of person) if (!clipped || isIn(i)) take(i);
+    if (clipped) for (const i of outside) maybe.push(i);
     for (const part of parts) {
-      const out = part.filter((i) => !isIn(i));
-      if (out.length >= Math.max(1, size) * OTHER_MIN) otherX.push(centreX(out));
+      const share = part.filter(isIn).length / part.length;
+      // A piece of the person cut off by a gap, always clipped to the corridor.
+      if (share >= OWN_FRAGMENT) for (const i of part) { if (isIn(i)) take(i); }
+      else for (const i of part) maybe.push(i);
     }
+  }
+
+  // The other people: each 8-connected component of what is left that is
+  // sizeable against the read person, so neighbours on both sides count as two.
+  const otherX: number[] = [];
+  const left = new Uint8Array(W * H);
+  for (const i of maybe) if (!keep[i]) left[i] = 1;
+  for (const start of maybe) {
+    if (!left[start]) continue;
+    left[start] = 0;
+    const comp = [start];
+    let sx = 0;
+    for (let k = 0; k < comp.length; k++) {
+      const i = comp[k];
+      const x = i % W, y = (i - x) / W;
+      sx += x;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          const j = ny * W + nx;
+          if (left[j]) {
+            left[j] = 0;
+            comp.push(j);
+          }
+        }
+    }
+    if (comp.length >= Math.max(1, size) * OTHER_MIN) otherX.push(sx / comp.length);
   }
 
   const out = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) if (keep[i]) out[i] = data[i];
+  // Where the read person stands in the frame, by thirds of its width.
   let side: Side | null = null;
   if (otherX.length) {
-    const own = (pose[POSE.lShoulder].x + pose[POSE.rShoulder].x + pose[POSE.lHip].x + pose[POSE.rHip].x) / 4 * W;
-    side = otherX.every((x) => x > own) ? "left" : otherX.every((x) => x < own) ? "right" : "middle";
+    const own = (pose[POSE.lShoulder].x + pose[POSE.rShoulder].x + pose[POSE.lHip].x + pose[POSE.rHip].x) / 4;
+    side = own < 1 / 3 ? "left" : own > 2 / 3 ? "right" : "middle";
   }
-  return { mask: { width: W, height: H, data: out }, others: otherX.length, side, clipped };
+  return { mask: { width: W, height: H, data: out }, others: otherX.length, side, clipped, unsure };
 }
 
-/** The one plain line the read shows when other people are in the photo. */
-export function othersCopy(p: Pick<Person, "others" | "side">): string | null {
+/** Said when the pose could not single out the person in the segmenter's mask (docs/RISKS.md). */
+export const UNSURE_COPY = "Ratio could not separate the person it read; if others are in the photo, crop to one.";
+
+const WHERE: Record<Side, string> = { left: "on the left of the photo", right: "on the right of the photo", middle: "in the middle of the photo" };
+
+/** The one plain line the read shows when other people are in the photo, or when the person could not be separated. */
+export function othersCopy(p: Pick<Person, "others" | "side" | "unsure">): string | null {
+  if (p.unsure) return UNSURE_COPY;
   if (!p.others || !p.side) return null;
-  const where = p.side === "middle" ? "in the middle" : `on the ${p.side}`;
-  return `Other people are in the photo; Ratio read the one ${where}.`;
+  return `${p.others === 1 ? "Someone else is" : "Other people are"} in the photo; Ratio read the one ${WHERE[p.side]}.`;
 }

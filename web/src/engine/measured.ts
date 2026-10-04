@@ -3,11 +3,24 @@
 // to that). Colours are listed as people read them, one name, one entry
 // (names.ts byName), the same view the colour rules read.
 
-import { byName, colourLabel } from "./names";
+import { byName, colourLabel, colourName } from "./names";
 import { pieces } from "./pieces";
 import { type AdviceLine, type Bins, ratioText } from "./rules";
 
 const two = (v: number) => v.toFixed(2);
+
+/**
+ * Each colour's own lightness, the values the value rule reads: one entry
+ * per name, every distinct lightness under it ("grey 0.46 and 0.68").
+ */
+function lightness(bins: Bins): string {
+  return byName(bins.palette)
+    .map((e) => {
+      const ls = [...new Set(bins.palette.filter((s) => s.share > 0 && colourName(s.L, s.C, s.h) === e.name).map((s) => two(s.L)))];
+      return `${colourLabel(e)} ${ls.length > 1 ? `${ls.slice(0, -1).join(", ")} and ${ls.at(-1)}` : ls[0]}`;
+    })
+    .join(", ");
+}
 
 export function measuredCopy(line: AdviceLine, bins: Bins): string {
   const named = byName(bins.palette);
@@ -27,7 +40,7 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
     case "harmony":
       return `${named.length === 1 ? "1 colour" : `${named.length} colours`} in the outfit: ${named.map(colourLabel).join(", ")}.`;
     case "value":
-      return `Upper piece ${two(bins.top.L)}, lower piece ${two(bins.bottom.L)}; lightness of each colour: ${each((s) => s.L)}.`;
+      return `Upper piece ${two(bins.top.L)}, lower piece ${two(bins.bottom.L)}; lightness of each colour: ${lightness(bins)}.`;
     case "shares":
       return `Share of the outfit's area: ${each((s) => s.share)}.`;
     case "chroma":

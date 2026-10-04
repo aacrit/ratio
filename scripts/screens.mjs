@@ -76,6 +76,7 @@ async function run(name, viewport) {
   note(`${name}: ${await page.textContent("#reading-hash")}`);
   note(`${name}: hero: ${await page.textContent("#hero-n")} (${await page.textContent("#hero-eyebrow")})`);
   note(`${name}: verdict: ${await page.textContent("#verdict")}`);
+  note(`${name}: others line: ${(await page.isVisible("#others-note")) ? await page.textContent("#others-note") : "(none)"}`);
   for (const row of await page.$$eval(".row", (rs) => rs.map((r) => `${r.querySelector(".row-t")?.textContent} | ${r.querySelector(".row-n")?.textContent} | ${r.getAttribute("data-state")}`))) note(`${name}:   ${row}`);
 
   const looks = await page.$$(".look .btn");
@@ -111,6 +112,32 @@ async function run(name, viewport) {
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
   await download.saveAs(path.join(out, `${name}-5-card.png`));
   note(`${name}: card saved (${download.suggestedFilename()})`);
+
+  // A look the photo does not show (a tuck, or a recolour refused as
+  // doubtful): the chalk figure alone, and its saved card says the photo is
+  // as worn (the verifier saw a card save fail after such a look).
+  let chalkOnly = false;
+  for (let i = 0; i < looks.length && !chalkOnly; i++) {
+    if (phone) {
+      await snap("full");
+      await page.waitForTimeout(500);
+    }
+    await looks[i].click();
+    await page.waitForTimeout(1800);
+    const pressed = (await looks[i].getAttribute("aria-pressed")) === "true";
+    if (!pressed || (await page.isVisible("#wipe"))) continue;
+    chalkOnly = true;
+    note(`${name}: chalk-only look ${i + 1}: ${await page.textContent(".trying-title")} | ${await page.textContent(".trying-note")}`);
+    await shot("6-chalk");
+    if (phone) {
+      await snap("full");
+      await page.waitForTimeout(500);
+    }
+    const [chalkCard] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
+    await chalkCard.saveAs(path.join(out, `${name}-7-card-chalk.png`));
+    note(`${name}: card saved after a chalk-only look (${chalkCard.suggestedFilename()})`);
+  }
+  if (!chalkOnly) note(`${name}: every look changes the photo, so no chalk-only card`);
 
   if (errors.length) note(`${name}: page errors:\n  ${errors.join("\n  ")}`);
   await browser.close();

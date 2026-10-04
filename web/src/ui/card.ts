@@ -52,6 +52,8 @@ export interface CardContent {
   still: OffscreenCanvas;
   /** "As worn" or the look's title. */
   title: string;
+  /** A line under the title, e.g. that the photo shows the outfit as worn. */
+  note?: string;
   lines: AdviceLine[];
   bins: Bins;
   hash: string;
@@ -105,6 +107,15 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
   for (const l of wrap(ctx, c.title, rw)) {
     ctx.fillText(l, x, y);
     y += 38;
+  }
+  if (c.note) {
+    ctx.fillStyle = k.muted;
+    ctx.font = `400 16px ${BODY}`;
+    for (const l of wrap(ctx, c.note, rw)) {
+      ctx.fillText(l, x, y);
+      y += 22;
+    }
+    y += 4;
   }
   y += 10;
   const stateInk = (s: LineState) => (s === "golden" ? k.section : s === "advice" ? k.ink : k.muted);

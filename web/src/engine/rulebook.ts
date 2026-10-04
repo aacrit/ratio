@@ -43,6 +43,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
       { name: "halves", value: "0.44 to 0.56" },
       { name: "composed from below (0.618, 0.667)", value: "0.56 to 0.70" },
       { name: "long top", value: "0.70 and above" },
+      { name: "the composed divisions: a third and the golden section", value: "0.333 and 0.382" },
     ],
     sources: [EUCLID],
     calibrated: true,
@@ -69,7 +70,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   harmony: {
     title: "Harmony",
     rule: "Matsuda's hue templates (monochromatic, complementary, analogous, right-angle, split, double complementary, half wheel), fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.",
-    maths: "Each template is rotated in 1° steps; its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of 4° or less names the palette.",
+    maths: "Each template is rotated in 1° steps; its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of 4° or less names the palette. Colours with the same plain name count as one, at the hue of the larger and their summed area.",
     edges: [
       { name: "a colour counts as a neutral below chroma (rising with lightness to 0.045 at white)", value: NEUTRAL_CHROMA },
       { name: "fit tolerance (area-weighted degrees)", value: 4 },
@@ -80,7 +81,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   value: {
     title: "Value",
     rule: "Lightness carries form before hue does. A darker value below a lighter one grounds a figure; the widest lightness edge draws the eye first.",
-    maths: "OKLab lightness of each colour holding at least 5% of the garment area; the range is the widest minus the narrowest. The upper and lower pieces are compared directly.",
+    maths: "OKLab lightness of each measured colour holding at least 5% of the garment area, each on its own even when two share a plain name (a light grey and a dark grey keep their range); the range is the widest minus the narrowest. The upper and lower pieces are compared directly.",
     edges: [
       { name: "range: low / medium / high", value: `below ${CONTRAST_EDGES[0]} / to ${CONTRAST_EDGES[1]} / above` },
       { name: "upper and lower read as one tone within", value: VALUE_GAP_EDGES[0] },
@@ -97,6 +98,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
       { name: "one colour reads as a column at", value: SHARE_EDGES.column },
       { name: "two colours compete when within", value: SHARE_EDGES.compete },
       { name: "close to 60-30-10 within (summed difference)", value: SHARE_EDGES.near6030 },
+      { name: "the reference proportion", value: "0.60 · 0.30 · 0.10 (60-30-10)" },
     ],
     sources: [{ label: "Interior design and painting convention, 60-30-10" }, EUCLID],
     calibrated: true,
@@ -104,7 +106,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   chroma: {
     title: "Chroma",
     rule: "One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).",
-    maths: "OKLCH chroma of each colour. Vibration: two colours at least 150° apart, both of chroma 0.10 or more, within 0.08 of each other in lightness.",
+    maths: "OKLCH chroma of each colour; colours with the same plain name count as one, at the higher chroma and their area-weighted lightness. Vibration: two colours at least 150° apart, both of chroma 0.10 or more, within 0.08 of each other in lightness.",
     edges: [{ name: "saturated from chroma", value: SATURATED_CHROMA }],
     sources: [ALBERS, OKLAB],
     calibrated: true,

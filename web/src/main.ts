@@ -285,7 +285,7 @@ function setupRead(): void {
     save.disabled = true;
     save.textContent = "Drawing the card.";
     try {
-      await saveCard({ still: current.figure.still(), title: shown.title, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: current.credit ?? undefined });
+      await saveCard({ still: current.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: current.credit ?? undefined });
       save.textContent = "Saved";
     } catch {
       save.textContent = "Could not draw the card";

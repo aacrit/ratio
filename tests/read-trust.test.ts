@@ -12,7 +12,7 @@ import { measuredCopy } from "../web/src/engine/measured";
 import { CATEGORY, type Landmark, type Mask, measureOutfit } from "../web/src/engine/measure";
 import { byName, colourLabel, colourName, familyOf } from "../web/src/engine/names";
 import { extractPalette, type Swatch } from "../web/src/engine/palette";
-import { OTHER_MIN, isolatePerson, othersCopy } from "../web/src/engine/person";
+import { OTHER_MIN, UNSURE_COPY, isolatePerson, othersCopy } from "../web/src/engine/person";
 import { RULEBOOK } from "../web/src/engine/rulebook";
 import { type Bins, ENGINE_VERSION, readBins, readOutfit } from "../web/src/engine/rules";
 import { HONEST, NOT_ON_PHOTO, honesty } from "../web/src/tryon/recolour";
@@ -87,7 +87,7 @@ describe("1. the read person only", () => {
     const reading = readOutfit(m, extractPalette(s.pixels, p.mask, m));
     expect(names(reading.bins)).not.toContain(colourName(...lch(FOREST)));
     expect(names(reading.bins)).toContain(colourName(...lch(BURGUNDY)));
-    expect(othersCopy(p)).toBe("Other people are in the photo; Ratio read the one on the left.");
+    expect(othersCopy(p)).toBe("Someone else is in the photo; Ratio read the one on the left of the photo.");
   });
 
   it("without isolation the other person's legs widened the volume reading (the bug it fixes)", () => {
@@ -114,27 +114,59 @@ describe("1. the read person only", () => {
     person(s, 262, DENIM, FOREST, { pose: false });
     const p = isolatePerson(s.mask, s.pose);
     expect(p).toMatchObject({ others: 2, side: "middle" });
-    expect(othersCopy(p)).toBe("Other people are in the photo; Ratio read the one in the middle.");
+    expect(othersCopy(p)).toBe("Other people are in the photo; Ratio read the one in the middle of the photo.");
     const r = blank();
     person(r, 210, SAND, BURGUNDY);
     person(r, 60, DENIM, FOREST, { pose: false });
     expect(isolatePerson(r.mask, r.pose)).toMatchObject({ others: 1, side: "right" });
   });
 
+  it("goes by thirds of the frame: a person at 0.45 of the width is in the middle, whoever else is there", () => {
+    // Noor's photo: she stands just left of centre, with someone to her right.
+    const s = blank();
+    person(s, 135, SAND, BURGUNDY);
+    person(s, 235, DENIM, FOREST, { pose: false });
+    const p = isolatePerson(s.mask, s.pose);
+    expect(p).toMatchObject({ others: 1, side: "middle" });
+    expect(othersCopy(p)).toBe("Someone else is in the photo; Ratio read the one in the middle of the photo.");
+  });
+
+  it("counts neighbours touching on both sides as two people", () => {
+    const s = blank();
+    person(s, 150, SAND, BURGUNDY);
+    person(s, 70, DENIM, FOREST, { pose: false });
+    person(s, 230, DENIM, FOREST, { pose: false });
+    // Shoulder to shoulder on both sides: one blob in the mask.
+    fill(s, 60, 120, 70, 230, CATEGORY.clothes, SAND);
+    const p = isolatePerson(s.mask, s.pose);
+    expect(p).toMatchObject({ clipped: true, others: 2, side: "middle", unsure: false });
+  });
+
+  it("says plainly when the pose cannot single out the person", () => {
+    const s = blank();
+    person(s, 150, SAND, BURGUNDY);
+    // The pose found someone where the segmenter saw nothing.
+    s.pose = s.pose.map((l) => (l.visibility ? { ...l, x: l.x - 0.4 } : l));
+    const p = isolatePerson(s.mask, s.pose);
+    expect(p.unsure).toBe(true);
+    expect(othersCopy(p)).toBe(UNSURE_COPY);
+    expect(UNSURE_COPY).toBe("Ratio could not separate the person it read; if others are in the photo, crop to one.");
+  });
+
   it("clips a person who touches someone else to the corridor around the pose", () => {
     const s = blank();
-    person(s, 100, SAND, BURGUNDY);
+    person(s, 90, SAND, BURGUNDY);
     // A second person shoulder to shoulder: one connected blob in the mask.
-    person(s, 170, DENIM, FOREST, { pose: false });
-    fill(s, 60, 200, 100, 170, CATEGORY.clothes, SAND);
+    person(s, 160, DENIM, FOREST, { pose: false });
+    fill(s, 60, 200, 90, 160, CATEGORY.clothes, SAND);
     const p = isolatePerson(s.mask, s.pose);
     expect(p.clipped).toBe(true);
     expect(p.others).toBe(1);
     expect(p.side).toBe("left");
-    // Nothing of the other person's legs (x 145..195, below the hips) survives.
-    for (let y = 220; y < 380; y++) for (let x = 160; x < 195; x++) expect(p.mask.data[y * W + x]).toBe(CATEGORY.background);
+    // Nothing of the other person's legs (x 135..185, below the hips) beyond the corridor survives.
+    for (let y = 220; y < 380; y++) for (let x = 150; x < 185; x++) expect(p.mask.data[y * W + x]).toBe(CATEGORY.background);
     // The read person's own legs do.
-    expect(p.mask.data[300 * W + 100]).toBe(CATEGORY.clothes);
+    expect(p.mask.data[300 * W + 90]).toBe(CATEGORY.clothes);
   });
 
   it("keeps the person's own pieces cut off by a gap, and ignores specks", () => {
@@ -236,6 +268,10 @@ describe("3. colour shares sum to 1.00", () => {
     // Rounded one by one these were 0.35 + 0.35 + 0.30 + 0.05 = 1.05.
     expect(binShares([0.34, 0.34, 0.29, 0.03])).toEqual([0.35, 0.35, 0.25, 0.05]);
     expect(binShares([1])).toEqual([1]);
+    // A dominant colour is never cut to pay for specks (the reviewer's case): 0.88 stays 0.85, a speck may fall to zero.
+    const dominant = [0.88, 0.03, 0.03, 0.03, 0.03];
+    expect(binShares(dominant)).toEqual([0.85, 0.05, 0.05, 0.05, 0]);
+    binShares(dominant).forEach((v, i) => expect(Math.abs(v - dominant[i])).toBeLessThanOrEqual(0.05));
     expect(binShares([])).toEqual([]);
     const next = lcg(7);
     for (let n = 1; n <= 6; n++)
@@ -244,7 +280,8 @@ describe("3. colour shares sum to 1.00", () => {
         const out = binShares(raw);
         expect(sum20(out)).toBe(20);
         expect(out.reduce((t, s) => t + s, 0).toFixed(2)).toBe("1.00");
-        expect(Math.min(...out)).toBeGreaterThanOrEqual(0.05);
+        const total = raw.reduce((t, s) => t + s, 0);
+        out.forEach((v, i) => expect(Math.abs(v - raw[i] / total)).toBeLessThanOrEqual(0.05 + 1e-9));
       }
   });
 
@@ -292,7 +329,7 @@ describe("4. advice quotes only numbers the reading shows", () => {
     for (const bins of grid())
       for (const line of readBins(bins)) {
         const e = RULEBOOK[line.rule];
-        const shown = numbersIn([measuredCopy(line, bins), line.measured, e.rule, e.maths, ...e.edges.map((x) => `${x.name} ${x.value}`)].join(" "));
+        const shown = numbersIn([measuredCopy(line, bins), line.measured, ...e.edges.map((x) => String(x.value))].join(" "));
         for (const n of numbersIn(line.text)) expect(shown.has(n), `${line.rule}: "${n}" in "${line.text}" but not in "${measuredCopy(line, bins)}"`).toBe(true);
         checked++;
       }
@@ -304,6 +341,19 @@ describe("4. advice quotes only numbers the reading shows", () => {
     const value = readBins(bins).find((l) => l.rule === "value")!;
     expect(value.text).toContain("0.28 and 0.22");
     expect(measuredCopy(value, bins)).toBe("Upper piece 0.28, lower piece 0.22; lightness of each colour: grey 0.50, white 0.90.");
+  });
+});
+
+describe("2b. value reads each colour's own lightness", () => {
+  it("keeps the range of a light grey over a dark grey (the merge does not average it away)", () => {
+    const grey = (L: number, share: number, y: number) => sw(L, 0, 0, share, y);
+    const bins: Bins = { proportion: 0.5, waist: 0.38, top: { L: 0.46, C: 0, h: 0 }, bottom: { L: 0.68, C: 0, h: 0 }, palette: [grey(0.46, 0.5, 0.3), grey(0.68, 0.5, 0.7)], fit: null };
+    expect(byName(bins.palette)).toHaveLength(1);
+    const value = readBins(bins).find((l) => l.rule === "value")!;
+    expect(value.measured).toBe("range 0.22");
+    expect(measuredCopy(value, bins)).toBe("Upper piece 0.46, lower piece 0.68; lightness of each colour: grey 0.46 and 0.68.");
+    const wide: Bins = { ...bins, top: { L: 0.24, C: 0, h: 0 }, palette: [sw(0.24, 0, 0, 0.5, 0.3), grey(0.68, 0.5, 0.7)] };
+    expect(readBins(wide).find((l) => l.rule === "value")!.measured).toBe("range 0.44");
   });
 });
 
@@ -342,6 +392,16 @@ describe("6. looks that differ", () => {
       expect(new Set(keys).size, looks.map((l) => l.title).join(" | ")).toBe(keys.length);
     }
     expect(multi).toBeGreaterThan(20);
+  });
+
+  it("lets the tuck take at most two of three slots while a look without it also helps", () => {
+    // A white top untucked over a green lower piece: near-equal halves, so the tuck is in the best looks.
+    const b: Bins = { proportion: 0.5, waist: 0.38, top: { L: 0.9, C: 0, h: 0 }, bottom: { L: 0.6, C: 0.12, h: 160 }, palette: [sw(0.9, 0, 0, 0.6, 0.3), sw(0.6, 0.12, 160, 0.3, 0.7), sw(0.5, 0.12, 30, 0.1, 0.3)], fit: null };
+    const looks = suggestLooks(b, readBins(b));
+    expect(looks).toHaveLength(3);
+    expect(looks.some((l) => l.moves.some((m) => m.kind === "break"))).toBe(true);
+    expect(looks.some((l) => l.moves.every((m) => m.kind !== "break"))).toBe(true);
+    for (let i = 1; i < looks.length; i++) expect(looks[i - 1].gain).toBeGreaterThanOrEqual(looks[i].gain);
   });
 
   it("puts forest green, olive and bottle green in one family", () => {

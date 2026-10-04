@@ -148,9 +148,11 @@ export function readBins(bins: Bins, rawBreak: number | null = bins.proportion):
   const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
   if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
   if (bins.palette.length) {
-    // The colour rules read the palette as people see it: one name, one entry.
+    // Harmony, shares and chroma read the palette as people name it, one
+    // name, one entry; value reads every swatch's own lightness, so a light
+    // grey over a dark grey keeps its range.
     const named = byName(bins.palette);
-    lines.push(harmonyLine(named, bins.waist), valueLine(named, bins.top.L, bins.bottom.L), sharesLine(named), chromaLine(named, bins.waist));
+    lines.push(harmonyLine(named, bins.waist), valueLine(bins.palette, bins.top.L, bins.bottom.L), sharesLine(named), chromaLine(named, bins.waist));
   }
   return lines;
 }
