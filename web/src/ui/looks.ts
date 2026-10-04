@@ -8,7 +8,7 @@
 
 import { readingHash } from "../engine/hash";
 import { type Look, suggestLooks } from "../engine/looks";
-import { verdictOf as engineVerdict } from "../engine/verdict";
+import { verdictOf as engineVerdict, looksIntroOf } from "../engine/verdict";
 import { shownColour } from "../engine/constants";
 import { colourLabel } from "../engine/names";
 import { ENGINE_VERSION, type LineState } from "../engine/rules";
@@ -69,7 +69,7 @@ export interface Shown {
 }
 
 /** The plain verdict (engine/verdict.ts): whether it works, and the best look in everyday words. */
-export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = []) => engineVerdict(lines, looks);
+export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = [], bins?: Read["reading"]["bins"]) => engineVerdict(lines, looks, bins);
 
 /** The sheet head's eyebrow under the hero numeral: the rule and its state. */
 export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].title}, ${stateLabel(lines[0])}`;
@@ -77,7 +77,7 @@ export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].ti
 export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => Promise<void> } {
   const { read } = d;
   const looks = suggestLooks(read.reading.bins, read.reading.lines);
-  d.verdict.textContent = verdictOf(read.reading.lines, looks);
+  d.verdict.textContent = verdictOf(read.reading.lines, looks, read.reading.bins);
   d.section.hidden = false;
   d.trying.hidden = true;
   d.trial.replaceChildren();
@@ -86,11 +86,11 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   let shown = asWornShown;
 
   if (!looks.length) {
-    if (intro) intro.textContent = "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
+    if (intro) intro.textContent = looksIntroOf(read.reading.lines, 0);
     d.list.replaceChildren();
     return { shown: () => shown, settled: () => Promise.resolve() };
   }
-  if (intro) intro.textContent = `${looks.length === 1 ? "One look" : `${looks.length} looks`} the rules prefer, judged by the same rulebook. Try one on the photo.`;
+  if (intro) intro.textContent = looksIntroOf(read.reading.lines, looks.length);
 
   // Where each piece may be found on the figure: the upper piece from the
   // crown to the break, the lower from the break to the ankle, the shoes in
@@ -105,7 +105,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   };
   const k = read.display.width / read.pixels.width;
   const bands = bandsAt(k);
-  const box = { left: m.left * k, right: m.right * k };
+  const box = { left: m.left * k, right: m.right * k, cast: m.cast };
   // Which of each look's colour moves the photo can show honestly, judged
   // once per look in the read worker at reading size, move by move. A failed
   // check refuses them all: the chalk figure still shows the look.
@@ -113,7 +113,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   const planOf = (look: Look) => {
     let plan = plans.get(look.id);
     if (!plan) {
-      plan = d.reader.plan(read.pixels, read.fullMask, read.mask, { left: m.left, right: m.right }, bandsAt(1), read.palette, look.moves).catch(() => refuseAll(look.moves));
+      plan = d.reader.plan(read.pixels, read.fullMask, read.mask, { left: m.left, right: m.right, cast: m.cast }, bandsAt(1), read.palette, look.moves).catch(() => refuseAll(look.moves));
       plans.set(look.id, plan);
     }
     return plan;
@@ -127,12 +127,12 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   /** The recoloured photo for each look, computed once in the worker. */
   const recoloured = new Map<string, Promise<Parameters<Figure["setLook"]>[0]>>();
 
-  const setHead = (lines: Read["reading"]["lines"], fromLines: Read["reading"]["lines"]) => {
+  const setHead = (lines: Read["reading"]["lines"], fromLines: Read["reading"]["lines"], bins: Read["reading"]["bins"]) => {
     countTo(d.heroN, lines[0].measured, fromLines[0].measured);
     d.heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
     d.heroEyebrow.textContent = heroEyebrowOf(lines);
     // As worn, the verdict names the best look; on a tried look, it judges that look.
-    d.verdict.textContent = verdictOf(lines, lines === read.reading.lines ? looks : []);
+    d.verdict.textContent = verdictOf(lines, lines === read.reading.lines ? looks : [], bins);
   };
 
   const asWorn = async () => {
@@ -151,7 +151,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     d.figure.setLook(null);
     d.wipe.hidden = true;
     document.body.dataset.compare = "off";
-    setHead(read.reading.lines, from);
+    setHead(read.reading.lines, from, read.reading.bins);
     renderRows(d.rows, read.reading.lines, read.reading.bins, { beforeMeasured: new Map(from.map((l) => [l.rule, l.measured])), ...d.asWornExtras() }).land();
     d.paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
     d.hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
@@ -201,7 +201,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     d.trying.hidden = false;
     const title = d.trying.querySelector<HTMLElement>(".trying-title");
     if (title) title.textContent = look.title;
-    setHead(look.lines, from);
+    setHead(look.lines, from, look.bins);
     // On a phone the sheet drops to half so the photo and the wipe are in view.
     if (!d.sheet.isWide) d.sheet.snap("half");
     renderRows(d.rows, look.lines, look.bins, { before, beforeMeasured: new Map(from.map((l) => [l.rule, l.measured])) }).land();
@@ -236,7 +236,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
 
       const moves = document.createElement("p");
       moves.className = "look-moves";
-      moves.textContent = look.moves.map((mv) => mv.detail).join(" ");
+      moves.textContent = [...look.moves.map((mv) => mv.detail), ...look.keeps].join(" ");
 
       const changes = document.createElement("ul");
       changes.className = "look-changes";

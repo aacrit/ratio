@@ -104,7 +104,7 @@ function scale(d: Omit<ScaleDef, "start">): ScaleDef {
 
 export const SCALES: readonly ScaleDef[] = [
   scale({ id: "volume-top", rule: "volume", title: "upper piece, × shoulders", min: 0.9, max: 1.8, step: 0.05, edges: FIT_TOP, bands: ["fitted", "straight", "loose"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The upper piece's width over the shoulders" }),
-  scale({ id: "volume-legs", rule: "volume", title: "both legs at the knee, × shoulders", min: 0.4, max: 1.1, step: 0.05, edges: FIT_LEGS, bands: ["narrow", "straight", "wide"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "Both legs' width at the knee over the shoulders" }),
+  scale({ id: "volume-legs", rule: "volume", title: "each leg at its knee, × shoulders", min: 0.2, max: 0.9, step: 0.05, edges: FIT_LEGS, bands: ["narrow", "straight", "wide"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "Each leg's width at its knee over the shoulders" }),
   scale({ id: "legline", rule: "legline", title: "lightness gap, lower piece to shoes", min: 0, max: 0.5, step: 0.02, edges: [LEG_LINE_EDGE], bands: ["the line runs on", "the line ends at the ankle"], borderlineBin: 0.04, format: (v) => `ΔL ${two(v)}`, label: "The lightness gap between the lower piece and the shoes" }),
   scale({ id: "value", rule: "value", title: "lightness range of the palette", min: 0, max: 1, step: 0.02, edges: CONTRAST_EDGES, bands: ["low", "medium", "high"], borderlineBin: 0.04, format: (v) => `range ${two(v)}`, label: "The lightness range, lightest colour minus darkest" }),
   // Chroma: the one edge RULEBOOK states. Whether a colour is a neutral depends on its lightness too
@@ -224,8 +224,8 @@ export function yoursValues(b: Bins): YoursValues {
   const fix = (v: number) => Number(v.toFixed(2));
   return {
     proportion: b.proportion,
-    volumeTop: b.fit ? b.fit.top : null,
-    volumeLegs: b.fit ? b.fit.legs : null,
+    volumeTop: b.fit?.top ?? null,
+    volumeLegs: b.fit?.legs ?? null,
     legline: p.lower >= 0 && p.shoes >= 0 ? { lower: b.palette[p.lower].L, shoes: b.palette[p.shoes].L, gap: fix(Math.abs(b.palette[p.lower].L - b.palette[p.shoes].L)) } : null,
     value: ls.length ? { ls, range: fix(Math.max(...ls) - Math.min(...ls)) } : null,
     shares: named.map(({ share, L, C, h }) => ({ share, L, C, h })),
@@ -254,6 +254,39 @@ export const stripX = (L: number) => SCALE_X.from + (SCALE_X.to - SCALE_X.from) 
 
 /** A marked value beyond a scale's ends: the marker sits at the end and says so, so the handle and "Yours" never disagree silently. */
 export const offScale = (v: number, min: number, max: number): "below" | "above" | null => (v < min - 1e-9 ? "below" : v > max + 1e-9 ? "above" : null);
+
+/**
+ * The arrow keys on an instrument: the handle moves the way the arrow points
+ * (Noor, 2026-10-04: ArrowDown moved the proportion handle up). On the
+ * vertical tape, Down moves the break down the figure (a larger value) and
+ * Up moves it up; Right and Left move the value the way they do on every
+ * horizontal scale, Right up the value (down the tape), Left down it. On a
+ * horizontal scale, Right and Up raise the value, Left and Down lower it.
+ * Page keys move five steps; Home and End go to the ends. Returns the steps
+ * to move, or "min" / "max", or null for any other key.
+ */
+export function keyStep(key: string, vertical: boolean): number | "min" | "max" | null {
+  switch (key) {
+    case "ArrowDown":
+      return vertical ? 1 : -1;
+    case "ArrowUp":
+      return vertical ? -1 : 1;
+    case "ArrowRight":
+      return 1;
+    case "ArrowLeft":
+      return -1;
+    case "PageDown":
+      return vertical ? 5 : -5;
+    case "PageUp":
+      return vertical ? -5 : 5;
+    case "Home":
+      return "min";
+    case "End":
+      return "max";
+    default:
+      return null;
+  }
+}
 
 /** A handle is taken only by a press within this many instrument units of it, so a thumb scrolling the page past an instrument never moves it. */
 export const HANDLE_HIT = 22;

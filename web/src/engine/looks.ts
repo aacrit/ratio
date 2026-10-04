@@ -6,20 +6,26 @@
 // so a suggestion is exactly as explainable as a reading. Deterministic:
 // candidates come in a fixed order and ties break by that order.
 //
-// Two laws:
+// Laws:
 // - Never fix one rule by breaking another: a look in which any line falls
 //   from on the mark or fine to "advice" is dropped.
 // - Only choices change: garment colour, tuck, belt, accent. Never the body.
+// - Honest to the photo (Mara, UX pass 2, 2026-10-04): never the colour a
+//   piece already wears (sameColour); never remove the outfit's accent, which
+//   the look keeps and says so; no tuck or belt for an upper piece that opens
+//   down the front, and a tuck is offered as a condition ("if it tucks");
+//   no shoes in a new colour when no shoes were read; and every look shows
+//   at least one rule that changes, or it is not offered.
 
 import type { BinnedSwatch } from "./colour-rules";
 import { colourName, familyOf } from "./names";
 import { binShares, isNeutral } from "./constants";
 import { type Piece, pieces as placedPieces } from "./pieces";
-import { type AdviceLine, type Bins, type LineState, readBins } from "./rules";
+import { type AdviceLine, type Bins, type LineState, readBins, tuckable } from "./rules";
 
 export type Move =
   | { kind: "break"; to: number; title: string; detail: string }
-  | { kind: "recolour"; swatch: number; piece: Piece; L: number; C: number; h: number; title: string; detail: string }
+  | { kind: "recolour"; swatch: number; piece: Piece; L: number; C: number; h: number; title: string; detail: string; muted?: true }
   | { kind: "accent"; L: number; C: number; h: number; title: string; detail: string };
 
 export interface Look {
@@ -27,6 +33,8 @@ export interface Look {
   id: string;
   title: string;
   moves: Move[];
+  /** What the look keeps as worn, said beside its moves ("Keeps the coral shoes."). */
+  keeps: string[];
   bins: Bins;
   lines: AdviceLine[];
   gain: number;
@@ -44,9 +52,14 @@ const CLASSIC_ACCENTS = [
   { L: 0.3, C: 0.07, h: 255 },
 ];
 const fix = (v: number, d = 2) => Number(v.toFixed(d));
+
+/** Neutrals closer than this in lightness are the same neutral to the eye (black and a charcoal in shade). */
+export const SAME_NEUTRAL_L = 0.12;
+/** An accent: a colour (not a neutral) of at most this share of the outfit. */
+export const ACCENT_SHARE = 0.15;
 const wrap = (h: number) => ((Math.round(h / 5) * 5) % 360 + 360) % 360;
 
-const SCORE: Record<LineState, number> = { golden: 2, neutral: 1, advice: 0 };
+const SCORE: Record<LineState, number> = { golden: 2, neutral: 1, advice: 0, unread: 1 };
 export const scoreOf = (lines: AdviceLine[]) => lines.reduce((s, l) => s + SCORE[l.state], 0);
 
 /** The pieces of the outfit: the swatches nearest the measured upper and lower garment colours, and the shoes. */
@@ -117,6 +130,35 @@ export function applyMove(b: Bins, m: Move): Bins {
   return { ...b, palette };
 }
 
+/**
+ * True when a suggested colour is the one the piece already wears: the same
+ * plain name, or closer than 0.06 in OKLab, or two neutrals within
+ * SAME_NEUTRAL_L of each other ("lower piece in black" on black jeans).
+ */
+export function sameColour(p: { L: number; C: number; h: number }, q: { L: number; C: number; h: number }): boolean {
+  if (colourName(p.L, p.C, p.h) === colourName(q.L, q.C, q.h)) return true;
+  if (labGap({ ...p, share: 0, y: 0 }, { ...q, share: 0, y: 0 }) < 0.06) return true;
+  return isNeutral(p) && isNeutral(q) && Math.abs(p.L - q.L) < SAME_NEUTRAL_L;
+}
+
+/** The outfit's accent: the most chromatic colour (clear of the neutral line) holding at most ACCENT_SHARE of it, or -1. */
+export function accentOf(b: Bins): number {
+  let best = -1;
+  b.palette.forEach((s, i) => {
+    if (s.share <= 0 || s.share > ACCENT_SHARE || isNeutral(s) || s.C < CLEAR_HUE) return;
+    if (best < 0 || s.C > b.palette[best].C) best = i;
+  });
+  return best;
+}
+
+/** The accent as people say it: "the coral shoes", "the plum accent"; null when the outfit has none. */
+export function accentWords(b: Bins): string | null {
+  const i = accentOf(b);
+  if (i < 0) return null;
+  const s = b.palette[i];
+  return `the ${colourName(s.L, s.C, s.h)} ${pieceOf(i, pieces(b)) === "shoes" ? "shoes" : "accent"}`;
+}
+
 /** A colour's plain name, for titles and advice; the degrees live in the Measured lines. */
 const plain = (c: { L: number; C: number; h: number }) => colourName(c.L, c.C, c.h);
 
@@ -131,22 +173,26 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   const chromatic = b.palette.filter((s) => !isNeutral(s));
   const lead = chromatic[0];
 
-  // Proportion: move the break to the waist.
-  if (b.proportion !== null && state("proportion") === "advice") {
+  // Proportion: move the break to the waist, unless the upper piece opens
+  // down the front (it hangs to its hem; the line suggests a shorter piece).
+  if (b.proportion !== null && state("proportion") === "advice" && tuckable(b)) {
     const tuck = b.proportion < 0.66;
     moves.push({
       kind: "break",
       to: b.waist,
-      title: tuck ? "Tuck the front" : "Belt at the waist",
-      detail: tuck ? "A front tuck moves the break up to the waist." : "A belt draws a break at the waist.",
+      title: tuck ? "A front tuck, if it tucks" : "Belt at the waist",
+      detail: tuck ? "If the upper piece tucks, a front tuck moves the break up to the waist." : "A belt draws a break at the waist.",
     });
   }
+  // The accent is kept as worn: no move recolours it, and no new accent competes with it.
+  const accent = accentOf(b);
 
   // Colour: the lower piece (the commonest question) and any piece that
   // sits outside the harmony, in hues that complete the scheme or a neutral.
   const recolourTargets = new Set<number>();
   if (p.lower >= 0) recolourTargets.add(p.lower);
   if (state("harmony") === "advice") chromatic.forEach((s) => recolourTargets.add(b.palette.indexOf(s)));
+  recolourTargets.delete(accent);
   for (const i of recolourTargets) {
     const s = b.palette[i];
     const anchor = b.palette.find((x, j) => j !== i && !isNeutral(x)) ?? lead;
@@ -160,27 +206,32 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     // Navy and denim: the two blues most wardrobes already have.
     options.push({ L: 0.3, C: 0.07, h: 255 }, { L: 0.45, C: 0.06, h: 250 });
     for (const o of options) {
-      if (labGap(s, { ...o, share: 0, y: 0 }) < 0.06) continue;
+      if (sameColour(s, o)) continue;
       const label = plain(o);
       moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} in ${label}`, detail: `Swap the ${pieceName(i, p).toLowerCase()} for ${label}.` });
     }
   }
 
   // Value: a darker lower piece grounds a top-heavy figure.
-  if (state("value") === "advice" && p.lower >= 0 && p.upper >= 0) {
+  if (state("value") === "advice" && p.lower >= 0 && p.upper >= 0 && p.lower !== accent) {
     const s = b.palette[p.lower];
     const L = fix(Math.max(0.14, b.top.L - 0.2));
     const o = { L, C: s.C, h: s.h };
-    moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: "A darker value below grounds the figure." });
+    if (!sameColour(s, o)) moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: "A darker value below grounds the figure." });
   }
 
-  // Chroma: step the second loud colour down to a muted version of itself.
+  // Chroma: step one loud colour down to a muted version of itself: the
+  // second by area, or, when the outfit has an accent that stays at full
+  // strength, the loudest colour that is not the accent.
   const loud = chromatic.filter((s) => s.C >= SATURATED);
-  if (state("chroma") === "advice" && loud.length >= 2) {
-    const s = loud[1];
+  const others = loud.filter((s) => b.palette.indexOf(s) !== accent);
+  const mute = accent >= 0 ? others.reduce<BinnedSwatch | undefined>((m, s) => (!m || s.C > m.C ? s : m), undefined) : loud[1];
+  if (state("chroma") === "advice" && loud.length >= 2 && mute) {
+    const s = mute;
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
-    moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
+    // A muted red is still called red: only a real step down in chroma counts here.
+    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
   }
 
   // Accent: a tenth of the area. The complement of the lead hue when the lead
@@ -188,10 +239,13 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   // complement of a barely-there hue means little, so the tailor's classic
   // accents are offered instead (oxblood, cognac, navy). The rulebook ranks
   // them like any other move.
-  if (state("shares") !== "golden") {
+  // Only on shoes Ratio read (a pair it cannot see is no place for an
+  // accent), only when the outfit has none, never the shoes' own colour.
+  if (state("shares") !== "golden" && p.shoes >= 0 && accent < 0) {
     const accents = lead && lead.C >= CLEAR_HUE ? [{ L: 0.5, C: 0.12, h: wrap(lead.h + 180) }] : CLASSIC_ACCENTS;
-    for (const accent of accents) {
-      moves.push({ kind: "accent", ...accent, title: `Shoes in ${plain(accent)}`, detail: "An accent of about a tenth gives the eye a place to rest." });
+    for (const a of accents) {
+      if (sameColour(b.palette[p.shoes], a)) continue;
+      moves.push({ kind: "accent", ...a, title: `Shoes in ${plain(a)}`, detail: "An accent of about a tenth gives the eye a place to rest." });
     }
   }
   return moves;
@@ -221,6 +275,8 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
     }
 
   const looks: Look[] = [];
+  const kept = accentWords(b);
+  const keeps = kept ? [`Keeps ${kept}.`] : [];
   combos.forEach((moves) => {
     const bins = normalise(moves.reduce(applyMove, b));
     const after = readBins(bins);
@@ -234,7 +290,9 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
     const changes = after
       .map((l) => ({ rule: l.rule, title: l.title, from: lines.find((x) => x.rule === l.rule)?.state ?? l.state, to: l.state }))
       .filter((c) => c.from !== c.to);
-    looks.push({ id: id(moves), title: moves.map((m) => m.title).join(" + "), moves, bins, lines: after, gain, changes });
+    // A look must show what it changes: no rule chip, no look (Noor, 2026-10-04).
+    if (!changes.length) return;
+    looks.push({ id: id(moves), title: moves.map((m) => m.title).join(" + "), moves, keeps, bins, lines: after, gain, changes });
   });
 
   // Best gain first; fewer moves first at equal gain; then candidate order.

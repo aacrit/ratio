@@ -17,7 +17,8 @@
 // Playwright is installed by the workflow only (npm install --no-save), so
 // it is not a project dependency and never runs on a laptop by accident.
 
-import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
@@ -41,6 +42,70 @@ try {
 } catch {
   // No dist: the sizes are a courtesy, not a check.
 }
+
+// The UX pass 2 photos (2026-10-04), read on every pull request so the
+// reading can be checked against what a stylist sees on real photos.
+// CC-licensed, from Wikimedia Commons, pinned by URL and SHA-256 and
+// downloaded into .cache/ by this script: never in git, never served.
+// p1: Calebrw, "140111-Stacie-Anaka.jpg", CC BY-SA 3.0. p2: Matias
+// Tukiainen, "20140118115458IMG 4996 - Yukicon 2014 - matiast1.jpg"
+// (the 960px rendition), CC BY 2.0.
+const PHOTOS = {
+  p1: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/7/74/140111-Stacie-Anaka.jpg",
+    sha256: "1572c1bdfe4dce1ca0b0a248dfa775c8ce23bd78d29d80c2668dbfb90a61bc58",
+  },
+  p2: {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/20140118115458IMG_4996_-_Yukicon_2014_-_matiast1.jpg/960px-20140118115458IMG_4996_-_Yukicon_2014_-_matiast1.jpg",
+    sha256: "25ad81fea0000ff70bd86f3908cb32969368f1c587d9963ae02786e3dfb732ae",
+  },
+};
+
+async function photo(id) {
+  const { url, sha256 } = PHOTOS[id];
+  const file = path.join(repoRoot, ".cache", "photos", `${id}.jpg`);
+  const sum = (buf) => createHash("sha256").update(buf).digest("hex");
+  if (existsSync(file) && sum(readFileSync(file)) === sha256) return file;
+  const res = await fetch(url, { headers: { "user-agent": "ratio-ci/1 (+https://ratio.voidvision.org)" } });
+  if (!res.ok) throw new Error(`${id}: ${url} answered ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (sum(buf) !== sha256) throw new Error(`${id}: sha256 ${sum(buf)}, pinned ${sha256}`);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, buf);
+  return file;
+}
+
+/** Reads one pinned photo on the page and logs what the reading says: the verdict, every row, the palette and the looks. */
+async function readPhotoShot(page, name, id, snap, phone, errors) {
+  let file;
+  try {
+    file = await photo(id);
+  } catch (e) {
+    errors.push(`photo ${id} could not be staged: ${e.message}`);
+    return;
+  }
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.setInputFiles("#photo", file);
+  await page.waitForSelector("#reading-hash:not(:empty)", { timeout: 120_000 });
+  await page.waitForTimeout(3500);
+  note(`${name}: ${id}: ${await page.textContent("#reading-hash")}`);
+  note(`${name}: ${id}: verdict: ${await page.textContent("#verdict")}`);
+  note(`${name}: ${id}: palette: ${await page.getAttribute(".palette", "aria-label")}`);
+  if (phone) {
+    await snap("full");
+    await page.waitForTimeout(500);
+  }
+  // Open every row so the shot shows Measured, Rule and Advice.
+  for (const row of await page.$$eval(".row", (rs) => rs.map((r) => `${r.querySelector(".row-t")?.textContent} | ${r.querySelector(".row-n")?.textContent} | ${r.getAttribute("data-state")} | ${r.querySelector(".row-b")?.textContent?.replace(/\s+/g, " ").trim()}`))) note(`${name}: ${id}:   ${row}`);
+  for (const t of await page.$$eval(".look", (ls) => ls.map((l) => `${l.querySelector(".look-title")?.textContent} | ${l.querySelector(".look-moves")?.textContent} | ${[...l.querySelectorAll(".look-changes li")].map((c) => c.textContent).join("; ")}`))) note(`${name}: ${id}:   look: ${t}`);
+  if ((await page.$$(".look")).length === 0) note(`${name}: ${id}:   looks: ${await page.textContent(".looks-intro")}`);
+  await shot(page, name, `9-${id}`);
+}
+
+const shot = async (page, name, step) => {
+  await page.screenshot({ path: path.join(out, `${name}-${step}.png`), fullPage: true });
+  note(`${name}: ${step}`);
+};
 
 async function run(name, viewport) {
   const browser = await chromium.launch();
@@ -219,6 +284,9 @@ async function run(name, viewport) {
   note(`${name}: face tab: ${await page.textContent("#soon-title")}`);
   await page.screenshot({ path: path.join(out, `${name}-8-face-soon.png`), fullPage: false });
   note(`${name}: 8-face-soon`);
+
+  // The UX pass 2 photos, read as worn (T4: the reading matches the photo).
+  for (const id of Object.keys(PHOTOS)) await readPhotoShot(page, name, id, snap, phone, errors);
 
   if (errors.length) note(`${name}: page errors:\n  ${errors.join("\n  ")}`);
   await browser.close();

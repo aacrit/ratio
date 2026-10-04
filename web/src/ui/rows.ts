@@ -9,12 +9,13 @@ import { shownColour } from "../engine/constants";
 import { byName, colourLabel } from "../engine/names";
 import { measuredCopy } from "../engine/measured";
 import { RULEBOOK } from "../engine/rulebook";
+import { tuckable } from "../engine/rules";
 import { countTo } from "./count";
 
 // The rule each line is held against, said once, from the rulebook.
 export const RULE_COPY = Object.fromEntries(Object.entries(RULEBOOK).map(([id, e]) => [id, e.rule])) as Record<AdviceLine["rule"], string>;
 
-export const STATE_WORDS: Record<LineState, string> = { golden: "on the mark", neutral: "fine", advice: "advice" };
+export const STATE_WORDS: Record<LineState, string> = { golden: "on the mark", neutral: "fine", advice: "advice", unread: "not read" };
 
 /** The Measured line of each rule lives in the engine, beside the rules it quotes. */
 export { measuredCopy };
@@ -58,6 +59,9 @@ export interface RowOptions {
   /** Extra controls for a row (the tuck button), by rule. */
   extra?: Partial<Record<AdviceLine["rule"], HTMLElement>>;
 }
+
+/** Advice from a rule whose edges are set by hand says so beside it (RULEBOOK calibrated: false). */
+export const adviceLabel = (line: AdviceLine): string => (line.state === "unread" ? "Why" : RULEBOOK[line.rule].calibrated ? "Advice" : "Advice, first estimate");
 
 /** The state word for a row, with borderline said. */
 export const stateLabel = (line: AdviceLine): string => (line.borderline ? `${STATE_WORDS[line.state]}, borderline` : STATE_WORDS[line.state]);
@@ -105,13 +109,14 @@ export function renderRows(list: HTMLOListElement, lines: AdviceLine[], bins: Bi
         change.textContent = `Was ${STATE_WORDS[was]}, now ${STATE_WORDS[line.state]}.`;
         body.append(change);
       }
-      body.append(para("Measured", measuredCopy(line, bins)), para("Rule", RULE_COPY[line.rule]), para("Advice", line.text));
+      body.append(para("Measured", measuredCopy(line, bins)), para("Rule", RULE_COPY[line.rule]), para(adviceLabel(line), line.text));
       if (line.borderline) {
         const note = para("Borderline", "This measurement sits on the edge between two bands, so a slightly different photo may read the other way. Both readings apply.");
         note.className = "row-borderline";
         body.append(note);
       }
-      const extra = opts.extra?.[line.rule];
+      // An upper piece that opens down the front does not tuck: its row shows no tuck control.
+      const extra = line.rule === "proportion" && !tuckable(bins) ? undefined : opts.extra?.[line.rule];
       if (extra) body.append(extra);
       li.append(head, body);
       return li;

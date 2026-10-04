@@ -93,7 +93,7 @@ describe("1. the read person only", () => {
     expect(othersCopy(p)).toBe("Someone else is in the photo; Ratio read the one on the left of the photo.");
   });
 
-  it("without isolation the other person's legs widened the volume reading (the bug it fixes)", () => {
+  it("the other person's legs never widen the volume reading: each leg is read on its own run of fabric (0.7.0)", () => {
     const s = blank();
     person(s, 90, SAND, BURGUNDY);
     // Two columns apart: close enough for the knee row's reach to count their legs.
@@ -103,9 +103,12 @@ describe("1. the read person only", () => {
     const p = isolatePerson(s.mask, s.pose);
     const own = measureOutfit(s.pixels, p.mask, s.pose);
     if (typeof own === "string") throw new Error(own);
-    // Both legs are 50 px of fabric against 50 px between the shoulders.
-    expect(own.fit?.legs).toBeCloseTo(1, 5);
-    expect(raw.fit!.legs).toBeGreaterThan(1.4);
+    // One 50 px lower piece holds both knees: 25 px a leg against 50 px between
+    // the shoulders. Under 0.6.0 the whole knee row was summed, and without
+    // isolation the neighbour's legs counted (1.4 and more); a run through
+    // each knee cannot reach them, isolated or not.
+    expect(own.fit?.legs).toBeCloseTo(0.5, 5);
+    expect(raw.fit?.legs).toBeCloseTo(0.5, 5);
     const palette = extractPalette(s.pixels, p.mask, own);
     expect(names(readOutfit(own, palette).bins)).not.toContain(colourName(...lch(FOREST)));
   });
@@ -505,7 +508,7 @@ describe("6. looks that differ", () => {
 });
 
 describe("7. engine version", () => {
-  it("is 0.6.0: shares, the named palette and the person mask change readings", () => {
-    expect(ENGINE_VERSION).toBe("ratio-engine/0.6.0");
+  it("is 0.7.0: garment colours, the break, volume and the shoes change readings", () => {
+    expect(ENGINE_VERSION).toBe("ratio-engine/0.7.0");
   });
 });

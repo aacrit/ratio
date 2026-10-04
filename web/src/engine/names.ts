@@ -16,12 +16,18 @@ interface Band {
   mid: string;
   light: string;
   family: Exclude<Family, "neutral">;
+  /** Where the light name starts, when not at the usual 0.72, for colours under lightLowC chroma. */
+  lightFrom?: number;
+  lightLowC?: number;
 }
 
 // Hue bands in OKLCH degrees, chosen against common garment colours.
 const BANDS: Band[] = [
   { from: 0, to: 20, dark: "burgundy", mid: "rose red", light: "pink", family: "red" },
-  { from: 20, to: 45, dark: "oxblood", mid: "red", light: "coral", family: "red" },
+  // Coral starts lower than other light names: a coral sits near L 0.65
+  // (Mara, 2026-10-04: coral sneakers read as "red"), but only below
+  // lightLowC chroma, so a scarlet at the same lightness stays red.
+  { from: 20, to: 45, dark: "oxblood", mid: "red", light: "coral", family: "red", lightFrom: 0.62, lightLowC: 0.18 },
   { from: 45, to: 70, dark: "rust", mid: "terracotta", light: "peach", family: "earth" },
   { from: 70, to: 95, dark: "brown", mid: "camel", light: "sand", family: "earth" },
   { from: 95, to: 115, dark: "olive brown", mid: "mustard", light: "cream", family: "earth" },
@@ -46,7 +52,8 @@ export function colourName(L: number, C: number, h: number): string {
   const band = BANDS.find((b) => h >= b.from && h < b.to) ?? BANDS[0];
   // Denim-blue and low-chroma blues read as denim, the commonest garment colour.
   if (h >= 230 && h < 265 && C < 0.08 && L >= 0.36 && L < 0.6) return "denim";
-  return L < 0.38 ? band.dark : L > 0.72 ? band.light : band.mid;
+  const lightFrom = band.lightFrom !== undefined && C < (band.lightLowC ?? Infinity) ? band.lightFrom : 0.72;
+  return L < 0.38 ? band.dark : L > lightFrom ? band.light : band.mid;
 }
 
 /** The hue family of a colour: one of five bands of the wheel, or neutral. */

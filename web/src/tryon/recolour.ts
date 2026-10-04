@@ -15,11 +15,12 @@
 // (found by the CI screenshots on David's Napoleon, 2026-10-04).
 
 import { type Lab, deltaE, oklabToSrgb, srgbToOklab } from "../engine/color";
+import { type Cast, uncast } from "../engine/garment-colour";
 import type { Move } from "../engine/looks";
 import { colourName } from "../engine/names";
 import { CATEGORY, type Mask } from "../engine/measure";
 import type { Swatch } from "../engine/palette";
-import type { Piece } from "../engine/pieces";
+import { type Piece, isShoes as isShoeSwatch } from "../engine/pieces";
 import type { Pixels } from "../engine/resample";
 
 const lchToLab = (L: number, C: number, h: number): Lab => ({ L, a: C * Math.cos((h * Math.PI) / 180), b: C * Math.sin((h * Math.PI) / 180) });
@@ -42,8 +43,10 @@ export function colourTargets(moves: Move[], swatches: Swatch[]): Target[] {
   for (const m of moves) {
     if (m.kind === "recolour" && m.swatch < swatches.length) targets.push({ swatch: m.swatch, piece: m.piece, to: lchToLab(m.L, m.C, m.h) });
     if (m.kind === "accent") {
-      // Accents show on the photo only when the shoes were measured.
-      const shoes = swatches.findIndex((s) => s.y >= 0.9);
+      // Accents show on the photo only when the shoes were measured: the
+      // same shoe test as the rules (pieces.ts isShoes), so the leg line and
+      // the photo never disagree about whether there are shoes.
+      const shoes = swatches.findIndex(isShoeSwatch);
       if (shoes >= 0) targets.push({ swatch: shoes, piece: "shoes", to: lchToLab(m.L, m.C, m.h) });
     }
   }
@@ -101,7 +104,8 @@ export function honesty(pixels: Pixels, full: Mask, person: Mask, box: Box, band
         if (mine) piecePx++;
         if (!isGarment(full.data[j]) && !mine) continue;
         const i = j * 4;
-        if (!sameCloth(srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]), from)) continue;
+        const raw = srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
+        if (!sameCloth(box.cast ? uncast(raw, box.cast) : raw, from)) continue;
         all++;
         if (mine) own++;
       }
@@ -182,10 +186,11 @@ export function refusedCardCopy(moves: Move[], plan: PhotoPlan): string | null {
   return `${subject(plan.refused.map((x) => moves[x.i]))} drawn on the chalk figure only.`;
 }
 
-/** The box around the figure that pixels are taken from, as the palette was measured. */
+/** The box around the figure that pixels are taken from, as the palette was measured, and the photo's cast (measure.ts) the swatches were read without. */
 export interface Box {
   left: number;
   right: number;
+  cast?: Cast;
 }
 
 /**
@@ -209,6 +214,7 @@ export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swa
   const sx = mw / pixels.width, sy = mh / pixels.height;
   const pad = (box.right - box.left) * 0.35;
   const x0 = Math.max(0, Math.floor(box.left - pad)), x1 = Math.min(W - 1, Math.ceil(box.right + pad));
+  const cast = box.cast;
   for (const { swatch, piece, to } of targets) {
     const from = swatches[swatch].lab;
     const band = bands[piece];
@@ -223,14 +229,17 @@ export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swa
       for (let x = x0; x <= x1; x++) {
         if (!isGarment(mask.data[my + Math.min(mw - 1, Math.floor(x * sx))])) continue;
         const i = (y * W + x) * 4;
-        // Read the original photo, never a pixel another move already changed.
-        const px = srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
+        // Read the original photo, never a pixel another move already changed,
+        // with the cast the swatches were read without taken off it; the cast
+        // goes back on the new colour, so the photo keeps its light.
+        const raw = srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
+        const px = cast ? uncast(raw, cast) : raw;
         if (!sameCloth(px, from)) continue;
         if (avoid.some((j) => j !== swatch && j < swatches.length && deltaE(px, swatches[j].lab) < deltaE(px, from))) continue;
         const [r, g, b] = oklabToSrgb({
           L: Math.max(0, Math.min(1, to.L + (px.L - from.L))),
-          a: to.a + (px.a - from.a) * k2,
-          b: to.b + (px.b - from.b) * k2,
+          a: to.a + (px.a - from.a) * k2 + (raw.a - px.a),
+          b: to.b + (px.b - from.b) * k2 + (raw.b - px.b),
         });
         data[i] = r;
         data[i + 1] = g;

@@ -14,7 +14,7 @@ import { legFit, legLine, topFit } from "../web/src/engine/shape-rules";
 import { LAST_READ_KEY, lastReadOf, parseLastRead } from "../web/src/rules/handoff";
 import { HANDLE_HIT, PROPORTION_EDGES, PROPORTION_LABELS, RULE_ORDER, SCALES, SCALE_X, harmonyFit, offScale, proportionAt, proportionNote, scaleAt, scaleById, stripX, yoursValues } from "../web/src/rules/model";
 import { SHARES_REFERENCE, VIBRATION } from "../web/src/engine/constants";
-import { PROVENANCE, UNCALIBRATED_NOTE, esc, renderCard, renderRulebook } from "../web/src/rules/render";
+import { PROVENANCE, UNCALIBRATED, UNCALIBRATED_NOTE, esc, renderCard, renderRulebook } from "../web/src/rules/render";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f: string) => readFileSync(path.join(root, f), "utf8");
@@ -58,13 +58,13 @@ describe("the Rulebook renders from RULEBOOK", () => {
     }
   });
 
-  it("the drill is closed until opened, and says when the edges are first estimates", () => {
+  it("the drill is closed until opened, and says when the edges are set by hand", () => {
     for (const id of ids) {
       const card = renderCard(id);
       expect(card).toMatch(/<details class="drill" data-drill="\w+">/);
       expect(card).not.toMatch(/<details[^>]*\bopen\b/);
       expect(card.includes(esc(UNCALIBRATED_NOTE)), id).toBe(!RULEBOOK[id].calibrated);
-      expect(card.includes("calibrated: no, first estimates"), id).toBe(!RULEBOOK[id].calibrated);
+      expect(card.includes(esc(UNCALIBRATED)), id).toBe(!RULEBOOK[id].calibrated);
     }
   });
 
@@ -126,7 +126,7 @@ describe("the scale instruments read bands as the engine does", () => {
       expect(scaleAt(scaleById("volume-top"), v).band).toBe(topFit(v));
       expect(scaleAt(scaleById("volume-top"), v).onEdge).toBe(nearEdge(v, FIT_TOP, 0.05));
     }
-    for (const v of grid(0.4, 1.1, 0.05)) {
+    for (const v of grid(0.2, 0.9, 0.05)) {
       expect(scaleAt(scaleById("volume-legs"), v).band).toBe(legFit(v));
       expect(scaleAt(scaleById("volume-legs"), v).onEdge).toBe(nearEdge(v, FIT_LEGS, 0.05));
     }

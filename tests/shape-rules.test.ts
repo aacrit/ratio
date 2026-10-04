@@ -12,23 +12,24 @@ describe("volume balance", () => {
     expect(topFit(1.0)).toBe("fitted");
     expect(topFit(1.3)).toBe("straight");
     expect(topFit(1.6)).toBe("loose");
-    expect(legFit(0.5)).toBe("narrow");
-    expect(legFit(0.7)).toBe("straight");
-    expect(legFit(1.0)).toBe("wide");
+    // Each leg on its own (0.7.0): skinny trousers measure about 0.42 a leg.
+    expect(legFit(0.42)).toBe("narrow");
+    expect(legFit(0.5)).toBe("straight");
+    expect(legFit(0.7)).toBe("wide");
   });
 
   it("advises on loose over straight (the founder's example) and keeps a classic pairing", () => {
-    expect(volumeLine({ top: 1.6, legs: 0.7 })).toMatchObject({ state: "advice" });
-    expect(volumeLine({ top: 1.6, legs: 0.7 }).text).toMatch(/^Loose over straight/);
-    expect(volumeLine({ top: 1.6, legs: 0.5 }).state).toBe("golden");
-    expect(volumeLine({ top: 1.0, legs: 1.0 }).state).toBe("golden");
-    expect(volumeLine({ top: 1.0, legs: 0.5 }).state).toBe("neutral");
+    expect(volumeLine({ top: 1.6, legs: 0.5 })).toMatchObject({ state: "advice" });
+    expect(volumeLine({ top: 1.6, legs: 0.5 }).text).toMatch(/^Loose over straight/);
+    expect(volumeLine({ top: 1.6, legs: 0.4 }).state).toBe("golden");
+    expect(volumeLine({ top: 1.0, legs: 0.7 }).state).toBe("golden");
+    expect(volumeLine({ top: 1.0, legs: 0.4 }).state).toBe("neutral");
   });
 
   it("marks a reading at a band edge as borderline", () => {
-    expect(volumeLine({ top: FIT_TOP[1], legs: 0.7 }).borderline).toBe(true);
+    expect(volumeLine({ top: FIT_TOP[1], legs: 0.52 }).borderline).toBe(true);
     expect(volumeLine({ top: 1.3, legs: FIT_LEGS[0] }).borderline).toBe(true);
-    expect(volumeLine({ top: 1.3, legs: 0.7 }).borderline).toBe(false);
+    expect(volumeLine({ top: 1.3, legs: 0.52 }).borderline).toBe(false);
   });
 });
 
@@ -99,7 +100,7 @@ describe("user-sim fixes (2026-10-04)", () => {
     const advice = { rule: "shares" as const, title: "", measured: "", text: "", state: "advice" as const, borderline: false };
     const fine = { ...advice, state: "neutral" as const };
     expect(verdictOf([fine], [])).toMatch(/^Works\. /);
-    expect(verdictOf([advice], [])).toBe("Works, with one change worth making.");
+    expect(verdictOf([advice], [])).toBe("Works, with one change worth making. Two colours share the outfit almost equally, so none leads. The change: one colour taking the lead, near 0.60 of the outfit.");
     expect(verdictOf([advice, advice], [])).toMatch(/^Two changes would help/);
     for (const v of [verdictOf([fine], []), verdictOf([advice, advice, advice], [])]) for (const w of JUDGING_WORDS) expect(v.toLowerCase()).not.toContain(w);
   });
