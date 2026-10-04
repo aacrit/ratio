@@ -98,6 +98,7 @@ async function run(name, viewport) {
   // look that changes the photo. On the phone the looks sit lower in the
   // sheet, so it is raised to full to press one; trying it drops the sheet
   // to half on its own so the photo and the wipe are in view.
+  let wipeShown = false;
   for (let i = 0; i < looks.length; i++) {
     if (phone) {
       await snap("full");
@@ -106,15 +107,39 @@ async function run(name, viewport) {
     await looks[i].click();
     await page.waitForTimeout(1800);
     if (i === 0) await shot("3-try");
+    note(`${name}: look ${i + 1} note: ${await page.textContent(".trying-note")}`);
     if (await page.isVisible("#wipe")) {
+      // The look must really change the photo: the stage at the wipe's two
+      // ends (all as worn, all the look) must differ in its pixels.
+      const at = async (v) => {
+        await page.fill("#wipe", v);
+        await page.dispatchEvent("#wipe", "input");
+        await page.waitForTimeout(400);
+        return page.evaluate(() => {
+          const c = document.getElementById("figure");
+          return Array.from(c.getContext("2d").getImageData(0, 0, c.width, c.height).data);
+        });
+      };
+      const worn = await at("100");
+      const tried = await at("0");
+      let moved = 0;
+      for (let p = 0; p < worn.length; p += 4) if (Math.abs(worn[p] - tried[p]) + Math.abs(worn[p + 1] - tried[p + 1]) + Math.abs(worn[p + 2] - tried[p + 2]) > 24) moved++;
+      note(`${name}: look ${i + 1} changes ${moved} of ${worn.length / 4} stage pixels`);
+      if (moved < 1000) continue;
       await page.fill("#wipe", "25");
       await page.dispatchEvent("#wipe", "input");
       await page.waitForTimeout(300);
       await shot("4-wipe");
       note(`${name}: wipe shown on look ${i + 1}`);
+      wipeShown = true;
       break;
     }
-    if (i === looks.length - 1) note(`${name}: no look changes the photo, so no wipe`);
+  }
+  // A regression guard: on the sample, at least one look must change the
+  // photo. If none does, try-on is off and the job fails.
+  if (!wipeShown) {
+    note(`${name}: no look changes the photo`);
+    errors.push("no suggested look changes the sample photo (try-on regression)");
   }
 
   if (phone) {

@@ -9,7 +9,7 @@
 
 import type { Pixels } from "./engine/resample";
 import { FAILURE_COPY, type Read, readPhoto } from "./read";
-import { honesty, recolour } from "./tryon/recolour";
+import { photoPlan, recolour, refuseAll } from "./tryon/recolour";
 import { loadModels } from "./vision";
 import type { FromWorker, ToWorker } from "./reader";
 
@@ -50,8 +50,17 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       post({ type: "recoloured", id: msg.id, pixels: out }, [out.data.buffer]);
       return;
     }
-    case "honesty":
-      post({ type: "honesty", id: msg.id, honesty: honesty(msg.pixels, msg.full, msg.person, msg.box, msg.bands, msg.swatches, msg.moves) });
+    case "plan": {
+      // A throw here must never kill the worker (and with it the loaded
+      // models): it is a refusal, and the chalk figure shows the look.
+      let plan;
+      try {
+        plan = photoPlan(msg.pixels, msg.full, msg.person, msg.box, msg.bands, msg.swatches, msg.moves);
+      } catch {
+        plan = refuseAll(msg.moves);
+      }
+      post({ type: "plan", id: msg.id, plan });
       return;
+    }
   }
 };

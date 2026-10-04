@@ -30,6 +30,9 @@ export interface Read {
   /** Other sizeable people in the photo, and where the read person stands among them. */
   others: number;
   side: Side | null;
+  /** Where the read person stands among the others, and whether they have their third of the frame to themselves (engine/person.ts). */
+  order: Side | null;
+  ownThird: boolean;
   /** True when the pose could not single out the person in the mask (docs/RISKS.md). */
   unsure: boolean;
   measure: OutfitMeasure;
@@ -77,5 +80,5 @@ export async function readPhoto(file: Blob, hooks: ReadHooks = {}): Promise<Read
   const palette = extractPalette(pixels, person.mask, measure);
   const reading = readOutfit(measure, palette);
   const hash = await readingHash({ engine: reading.engine, bins: reading.bins });
-  return { pixels, display, mask: person.mask, fullMask: seen.mask, others: person.others, side: person.side, unsure: person.unsure, measure, palette, reading, hash };
+  return { pixels, display, mask: person.mask, fullMask: seen.mask, others: person.others, side: person.side, order: person.order, ownThird: person.ownThird, unsure: person.unsure, measure, palette, reading, hash };
 }

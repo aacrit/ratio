@@ -34,6 +34,10 @@ export interface Person {
   others: number;
   /** Where the read person stands in the photo, by thirds of its width (null when alone). */
   side: Side | null;
+  /** Where the read person stands among the others: furthest left, furthest right, or between (middle). */
+  order: Side | null;
+  /** True when no one else stands in the read person's third of the frame. */
+  ownThird: boolean;
   /** True when the person touched someone and the corridor clipped them apart. */
   clipped: boolean;
   /** True when the pose could not single out the person: the corridor alone, or nothing, decided. */
@@ -141,7 +145,7 @@ function seedAt(mask: Mask, l: Landmark, radius: number): number {
 /** Keeps only the read person's pixels; counts the other people in the photo. */
 export function isolatePerson(mask: Mask, pose: Landmark[]): Person {
   const { width: W, height: H, data } = mask;
-  const alone: Person = { mask, others: 0, side: null, clipped: false, unsure: true };
+  const alone: Person = { mask, others: 0, side: null, order: null, ownThird: false, clipped: false, unsure: true };
   if (pose.length < 29) return alone;
   const seen = (i: number) => (pose[i].visibility ?? 1) >= VISIBLE;
   if (![POSE.lShoulder, POSE.rShoulder, POSE.lHip, POSE.rHip].every(seen)) return alone;
@@ -222,23 +226,37 @@ export function isolatePerson(mask: Mask, pose: Landmark[]): Person {
 
   const out = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) if (keep[i]) out[i] = data[i];
-  // Where the read person stands in the frame, by thirds of its width.
+  // Where the read person stands: first among the others (furthest left,
+  // furthest right or between them), then, for the wording, by thirds of
+  // the frame when no one else shares the person's third.
   let side: Side | null = null;
+  let order: Side | null = null;
+  let ownThird = false;
   if (otherX.length) {
     const own = (pose[POSE.lShoulder].x + pose[POSE.rShoulder].x + pose[POSE.lHip].x + pose[POSE.rHip].x) / 4;
-    side = own < 1 / 3 ? "left" : own > 2 / 3 ? "right" : "middle";
+    const third = (f: number): Side => (f < 1 / 3 ? "left" : f > 2 / 3 ? "right" : "middle");
+    side = third(own);
+    order = otherX.every((x) => x > own * W) ? "left" : otherX.every((x) => x < own * W) ? "right" : "middle";
+    ownThird = otherX.every((x) => third(x / W) !== side);
   }
-  return { mask: { width: W, height: H, data: out }, others: otherX.length, side, clipped, unsure };
+  return { mask: { width: W, height: H, data: out }, others: otherX.length, side, order, ownThird, clipped, unsure };
 }
 
 /** Said when the pose could not single out the person in the segmenter's mask (docs/RISKS.md). */
 export const UNSURE_COPY = "Ratio could not separate the person it read; if others are in the photo, crop to one.";
 
 const WHERE: Record<Side, string> = { left: "on the left of the photo", right: "on the right of the photo", middle: "in the middle of the photo" };
+const AMONG: Record<Side, string> = { left: "furthest left", right: "furthest right", middle: "between the others" };
 
-/** The one plain line the read shows when other people are in the photo, or when the person could not be separated. */
-export function othersCopy(p: Pick<Person, "others" | "side" | "unsure">): string | null {
+/**
+ * The one plain line the read shows when other people are in the photo, or
+ * when the person could not be separated. By thirds of the frame when the
+ * person has their third to themselves; otherwise by their order among the
+ * others, which always points to one person.
+ */
+export function othersCopy(p: Pick<Person, "others" | "side" | "order" | "ownThird" | "unsure">): string | null {
   if (p.unsure) return UNSURE_COPY;
-  if (!p.others || !p.side) return null;
-  return `${p.others === 1 ? "Someone else is" : "Other people are"} in the photo; Ratio read the one ${WHERE[p.side]}.`;
+  if (!p.others || !p.side || !p.order) return null;
+  const where = p.ownThird ? WHERE[p.side] : AMONG[p.order];
+  return `${p.others === 1 ? "Someone else is" : "Other people are"} in the photo; Ratio read the one ${where}.`;
 }

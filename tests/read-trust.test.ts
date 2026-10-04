@@ -16,7 +16,8 @@ import { OTHER_MIN, UNSURE_COPY, isolatePerson, othersCopy } from "../web/src/en
 import { RULEBOOK } from "../web/src/engine/rulebook";
 import { yoursValues } from "../web/src/rules/model";
 import { type Bins, ENGINE_VERSION, readBins, readOutfit } from "../web/src/engine/rules";
-import { HONEST, NOT_ON_PHOTO, honesty } from "../web/src/tryon/recolour";
+import { HONEST, honesty, photoPlan, refuseAll, refusedCardCopy, refusedCopy } from "../web/src/tryon/recolour";
+import { pieces } from "../web/src/engine/pieces";
 
 type Rgb = [number, number, number];
 const W = 300;
@@ -130,6 +131,16 @@ describe("1. the read person only", () => {
     const p = isolatePerson(s.mask, s.pose);
     expect(p).toMatchObject({ others: 1, side: "middle" });
     expect(othersCopy(p)).toBe("Someone else is in the photo; Ratio read the one in the middle of the photo.");
+  });
+
+  it("names the person by order when someone else shares their third: two people in the middle", () => {
+    const s = blank();
+    person(s, 120, SAND, BURGUNDY);
+    // Touching on the right, also in the middle third.
+    person(s, 180, DENIM, FOREST, { pose: false });
+    const p = isolatePerson(s.mask, s.pose);
+    expect(p).toMatchObject({ others: 1, side: "middle", order: "left", ownThird: false });
+    expect(othersCopy(p)).toBe("Someone else is in the photo; Ratio read the one furthest left.");
   });
 
   it("counts neighbours touching on both sides as two people", () => {
@@ -249,9 +260,29 @@ describe("2. recolour honesty", () => {
     expect(honesty(at.pixels, at.full, at.own, { left: 0, right: 0 }, bands, swatches, look).honest).toBe(true);
   });
 
-  it("says so plainly, without an em dash", () => {
-    expect(NOT_ON_PHOTO).toBe("This change can't be shown honestly on this photo; the chalk figure shows it.");
-    expect(NOT_ON_PHOTO).not.toContain("—");
+  it("judges each move on its own: the breeches are painted, the unmeasurable shoes stay on the chalk figure", () => {
+    // Napoleon's first look: the lower piece in black and oxblood shoes, on a photo with no measured shoes.
+    const { pixels, full, own } = scene(10, 10);
+    const black = { kind: "recolour" as const, swatch: 0, piece: "lower" as const, L: 0.2, C: 0, h: 0, title: "", detail: "" };
+    const shoes = { kind: "accent" as const, L: 0.36, C: 0.11, h: 25, title: "", detail: "" };
+    const tuck = { kind: "break" as const, to: 0.38, title: "Tuck the front", detail: "" };
+    const moves = [tuck, black, shoes];
+    const plan = photoPlan(pixels, full, own, { left: 0, right: 0 }, bands, swatches, moves);
+    expect(plan).toEqual({ paint: [1], refused: [{ i: 2, reason: "no_target" }] });
+    expect(refusedCopy(moves, plan)).toBe("The oxblood shoes are shown on the chalk figure only; this photo has no shoes Ratio could measure.");
+    expect(refusedCardCopy(moves, plan)).toBe("The oxblood shoes are drawn on the chalk figure only.");
+    // A doubtful recolour is refused alone, and names its piece.
+    const doubtful = scene(3, 10);
+    const half = photoPlan(doubtful.pixels, doubtful.full, doubtful.own, { left: 0, right: 0 }, bands, swatches, [black]);
+    expect(half).toEqual({ paint: [], refused: [{ i: 0, reason: "doubtful" }] });
+    expect(refusedCopy([black], half)).toBe("The lower piece in black is shown on the chalk figure only; it can't be shown honestly on this photo.");
+    expect(refusedCardCopy([black], half)).toBe("Shows the photo as worn; this look is drawn on the chalk figure.");
+    // Nothing refused, nothing said; a failed check refuses every colour move, never the tuck.
+    const all = photoPlan(pixels, full, own, { left: 0, right: 0 }, bands, swatches, [black]);
+    expect(refusedCopy([black], all)).toBeNull();
+    expect(refusedCardCopy([black], all)).toBeNull();
+    expect(refuseAll(moves)).toEqual({ paint: [], refused: [{ i: 1, reason: "doubtful" }, { i: 2, reason: "doubtful" }] });
+    for (const t of [refusedCopy(moves, plan), refusedCopy([black], half)]) expect(t).not.toContain("—");
   });
 });
 
@@ -355,6 +386,14 @@ describe("2b. value reads each colour's own lightness", () => {
     expect(measuredCopy(value, bins)).toBe("Upper piece 0.46, lower piece 0.68; lightness of each colour: grey 0.46 and 0.68.");
     const wide: Bins = { ...bins, top: { L: 0.24, C: 0, h: 0 }, palette: [sw(0.24, 0, 0, 0.5, 0.3), grey(0.68, 0.5, 0.7)] };
     expect(readBins(wide).find((l) => l.rule === "value")!.measured).toBe("range 0.44");
+  });
+});
+
+describe("pieces", () => {
+  it("never takes a speck the share binning dropped to zero as the shoes", () => {
+    const palette = [sw(0.9, 0, 0, 0.85, 0.3), sw(0.3, 0, 0, 0.15, 0.7), sw(0.2, 0.1, 25, 0, 0.95)];
+    expect(pieces(palette, 0.38).shoes).toBe(-1);
+    expect(pieces([...palette.slice(0, 2), { ...palette[2], share: 0.05 }], 0.38).shoes).toBe(2);
   });
 });
 

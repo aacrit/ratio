@@ -15,7 +15,7 @@ import type { Figure } from "../overlay";
 import type { Read } from "../read";
 import type { Reader } from "../reader";
 import { chalkFigure } from "../tryon/figure";
-import { type Bands, NOT_ON_PHOTO, showsOnPhoto } from "../tryon/recolour";
+import { type Bands, type PhotoPlan, refuseAll, refusedCardCopy, refusedCopy, showsOnPhoto } from "../tryon/recolour";
 import { countTo } from "./count";
 import { STATE_WORDS, paletteStrip, renderRows, stateLabel } from "./rows";
 import type { Sheet } from "./sheet";
@@ -66,9 +66,6 @@ export interface Shown {
   note?: string;
 }
 
-/** The card's line when a look's colour change was refused on the photo. */
-export const CARD_AS_WORN = "Shows the photo as worn; this look is drawn on the chalk figure.";
-
 /** The plain verdict (engine/verdict.ts): whether it works, and the best look in everyday words. */
 export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = []) => engineVerdict(lines, looks);
 
@@ -107,17 +104,17 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   const k = read.display.width / read.pixels.width;
   const bands = bandsAt(k);
   const box = { left: m.left * k, right: m.right * k };
-  // Whether each look's colour change can be shown honestly on the photo,
-  // judged once per look in the read worker at reading size. A failed check
-  // is a refusal: the chalk figure still shows the look.
-  const honestly = new Map<string, Promise<boolean>>();
-  const honestOnPhoto = (look: Look) => {
-    let ok = honestly.get(look.id);
-    if (!ok) {
-      ok = d.reader.honesty(read.pixels, read.fullMask, read.mask, { left: m.left, right: m.right }, bandsAt(1), read.palette, look.moves).then((h) => h.honest, () => false);
-      honestly.set(look.id, ok);
+  // Which of each look's colour moves the photo can show honestly, judged
+  // once per look in the read worker at reading size, move by move. A failed
+  // check refuses them all: the chalk figure still shows the look.
+  const plans = new Map<string, Promise<PhotoPlan>>();
+  const planOf = (look: Look) => {
+    let plan = plans.get(look.id);
+    if (!plan) {
+      plan = d.reader.plan(read.pixels, read.fullMask, read.mask, { left: m.left, right: m.right }, bandsAt(1), read.palette, look.moves).catch(() => refuseAll(look.moves));
+      plans.set(look.id, plan);
     }
-    return ok;
+    return plan;
   };
   const note = d.trying.querySelector<HTMLElement>(".trying-note");
   const noteAsBuilt = note?.textContent ?? "";
@@ -170,17 +167,19 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     // The photo: colour moves only. The chalk figure: the whole look.
     // Colour moves show on the photo behind the wipe; a look of proportion
     // moves alone leaves the photo as worn and shows on the chalk figure.
-    // A doubtful recolour is never shown, so it can never reach a saved card.
-    // A colour move with nothing on the photo to move (shoes in a new colour
-    // when no shoes were measured) is refused like a doubtful one.
-    const colour = look.moves.some((mv) => mv.kind !== "break");
-    const onPhoto = colour && showsOnPhoto(look.moves, read.palette) && (await honestOnPhoto(look));
+    // Honesty is per move: the photo shows every colour move that passes;
+    // one that fails (or has nothing on the photo to move, like shoes when
+    // none were measured) is named and shown on the chalk figure only. A
+    // doubtful recolour is never painted, so it can never reach a saved card.
+    const plan = await planOf(look);
     if (current !== look.id) return;
-    if (note) note.textContent = colour && !onPhoto ? NOT_ON_PHOTO : noteAsBuilt;
+    const painted = plan.paint.map((i) => look.moves[i]);
+    const onPhoto = painted.length > 0 && showsOnPhoto(painted, read.palette);
+    if (note) note.textContent = refusedCopy(look.moves, plan) ?? noteAsBuilt;
     if (onPhoto) {
       let job = recoloured.get(look.id);
       if (!job) {
-        job = d.reader.recolour(read.display, read.mask, box, bands, read.palette, look.moves);
+        job = d.reader.recolour(read.display, read.mask, box, bands, read.palette, painted);
         recoloured.set(look.id, job);
       }
       void job.then((pixels) => current === look.id && d.figure.setLook(pixels));
@@ -202,9 +201,9 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
     renderRows(d.rows, look.lines, look.bins, { before, beforeMeasured: new Map(from.map((l) => [l.rule, l.measured])) }).land();
     d.paletteSlot.replaceChildren(paletteStrip(look.bins, "The look's palette"));
     const hh = await readingHash({ engine: ENGINE_VERSION, bins: look.bins });
-    // A look refused on the photo says so on the card: the photo there is as worn.
+    // A look the photo shows only in part says so on the card, naming the parts on the chalk figure.
     if (current === look.id) {
-      shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: colour && !onPhoto ? CARD_AS_WORN : undefined };
+      shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: refusedCardCopy(look.moves, plan) ?? undefined };
       d.onShown?.(shown, look.title);
     }
     if (current === look.id) d.hash.textContent = `Trying a look. Same look, same reading. ${hh.slice(0, 4)} · ${ENGINE_VERSION}`;
