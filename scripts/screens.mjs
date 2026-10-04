@@ -65,7 +65,7 @@ async function run(name, viewport) {
   const rulesUrl = new URL("/rules", base).href;
   await page.goto(rulesUrl, { waitUntil: "networkidle" });
   await page.waitForTimeout(900);
-  note(`${name}: rulebook: ${await page.$eval(".rule", (r) => r.length)} rule cards; chip: ${(await page.textContent("#yours-chip"))?.trim()}`);
+  note(`${name}: rulebook: ${await page.$$eval(".rule", (r) => r.length)} rule cards; chip: ${(await page.textContent("#yours-chip"))?.trim()}`);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   if (overflow > 0) errors.push(`/rules scrolls sideways by ${overflow} px`);
   await shot("0-rules");
@@ -127,8 +127,8 @@ async function run(name, viewport) {
   // The Rulebook after the read: the last read in this tab marked on each instrument.
   await page.goto(rulesUrl, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
-  note(`${name}: rulebook chip: ${(await page.textContent("#yours-chip"))?.replace(/s+/g, " ").trim()}`);
-  for (const y of await page.$eval("[data-yours]", (ps) => ps.map((p) => `${p.getAttribute("data-yours")}: ${p.textContent?.replace(/s+/g, " ").trim()}`))) note(`${name}:   ${y}`);
+  note(`${name}: rulebook chip: ${(await page.textContent("#yours-chip"))?.replace(/\s+/g, " ").trim()}`);
+  for (const y of await page.$$eval("[data-yours]", (ps) => ps.map((p) => `${p.getAttribute("data-yours")}: ${p.textContent?.replace(/\s+/g, " ").trim()}`))) note(`${name}:   ${y}`);
   await shot("6-rules-yours");
   // The keyboard moves the break; the drill opens (rule_opened).
   await page.focus('[data-range="proportion"]');

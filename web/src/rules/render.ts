@@ -53,9 +53,10 @@ function proportionInstrument(): string {
     return `M${i % 5 === 0 ? 17 : 20} ${f1(y)} H24`;
   }).join(" ");
   const edges = PROPORTION_EDGES.map((e) => `M62 ${f1(propY(e))} H118`).join(" ");
+  // Beside the tape the long name is shortened, as in the mock, so it fits the column.
   const labels = PROPORTION_BANDS.map((b, i) => {
     const y = Math.min(sole - 4, Math.max(crown + 10, propY((b.from + Math.min(1, b.to)) / 2) + 3));
-    return `<text x="86" y="${f1(y)}" text-anchor="end" class="band" data-band="${i}">${esc(PROPORTION_LABELS[b.id])}</text>`;
+    return `<text x="86" y="${f1(y)}" text-anchor="end" class="band" data-band="${i}">${esc(b.id === "golden-long" ? "section, below" : PROPORTION_LABELS[b.id])}</text>`;
   }).join("");
   const golden = [GOLDEN, 1 - GOLDEN].map((g) => `M${tapeX} ${f1(propY(g))} H${tapeX + 12}`).join(" ");
   return `<div class="instrument-wrap">
