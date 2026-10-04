@@ -276,14 +276,17 @@ function setupRead(): void {
 
   // Save as card: whatever is on screen, as worn or the tried look.
   save.addEventListener("click", async () => {
-    if (!current) return;
+    // The read being saved is fixed now: a new read started during the wait
+    // must not swap in (its own recolour was never waited on).
+    const c = current;
+    if (!c) return;
     save.disabled = true;
     save.textContent = "Drawing the card.";
     // A look still being recoloured lands first: the card matches the photo and its note.
-    await current.settled();
-    const shown = current.shown();
+    await c.settled();
+    const shown = c.shown();
     try {
-      await saveCard({ still: current.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: current.credit ?? undefined });
+      await saveCard({ still: c.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: c.credit ?? undefined });
       save.textContent = "Saved";
     } catch {
       save.textContent = "Could not draw the card";
