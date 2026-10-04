@@ -185,7 +185,7 @@ function yoursLines(last: LastRead | null, v: YoursValues | null): void {
     valueEl.hidden = false;
     valueEl.textContent = line.measured;
     let words = line.borderline ? `${STATE_WORDS[line.state]}, borderline` : STATE_WORDS[line.state];
-    if (rule === "harmony" && v?.harmony?.fits) words += ` · ${v.harmony.name}`;
+    if (rule === "harmony" && v?.harmony?.fits && v.harmony.hues.length > 1) words += ` · ${v.harmony.name}`;
     stateEl.textContent = words;
     if (line.borderline) p.dataset.state = "borderline";
     else if (line.state === "golden") p.dataset.state = "golden";
@@ -224,7 +224,7 @@ function bracket(id: string, a: number, b: number): void {
 function label(rule: RuleId, last: LastRead): void {
   const t = page?.querySelector(`[data-yours-label="${rule}"]`);
   const line = last.lines.find((l) => l.rule === rule);
-  if (t && line) t.textContent = `yours: ${line.measured}, ${line.borderline ? `${STATE_WORDS[line.state]}, borderline` : STATE_WORDS[line.state]}`;
+  if (t && line) t.textContent = `yours: ${line.measured}`;
 }
 
 function marks(last: LastRead, v: YoursValues): void {
@@ -265,8 +265,10 @@ function marks(last: LastRead, v: YoursValues): void {
   const sg = layer("shares");
   let x = SCALE_X.from;
   const w = SCALE_X.to - SCALE_X.from;
+  // Binned shares can sum a little over 1: the bar is scaled to its own total so it never overruns.
+  const total = v.shares.reduce((t, s) => t + s.share, 0) || 1;
   v.shares.forEach((s, i) => {
-    const sw = w * s.share;
+    const sw = (w * s.share) / Math.max(1, total);
     sg?.append(svgEl("rect", { x: f1(x), y: 124, width: f1(Math.max(0, sw)), height: 18, fill: lch(s) }));
     if (i < 3 && sw >= 18) sg?.append(svgEl("text", { x: f1(x + sw / 2), y: 158, "text-anchor": "middle" }, s.share.toFixed(2)));
     x += sw;
@@ -287,7 +289,7 @@ function marks(last: LastRead, v: YoursValues): void {
         hg.append(svgEl("text", { x: f1(p.x + (right ? 14 : -14)), y: f1(p.y + 4), "text-anchor": right ? "start" : "end", class: "red" }, `${Math.round(hue.h)}°, ${hue.outside}° outside`));
       }
     }
-    hg.append(svgEl("text", { x: 14, y: 194, class: "yours" }, `yours: ${h.fits ? h.name : `nearest, ${h.name}`}`));
+    hg.append(svgEl("text", { x: 14, y: 194, class: "yours" }, h.hues.length < 2 ? "yours: one hue with neutrals" : `yours: ${h.fits ? h.name : `nearest, ${h.name}`}`));
   }
 }
 
