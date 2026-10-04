@@ -375,9 +375,13 @@ async function run(name, viewport) {
   await page.waitForTimeout(200);
 
   // The Card tab, with a read on screen, previews this read instead of "not built yet".
+  // tabs.ts shows the generic #soon-title synchronously, then swaps in
+  // .card-preview once the async draw resolves: waiting on either selector
+  // races and matches #soon-title first every time, so wait on .card-preview
+  // itself (falling back to reading #soon-title only to report what went wrong).
   await page.click('.tabs [data-soon="card"]');
-  await page.waitForSelector(".card-preview, #soon-title", { timeout: 5_000 });
-  const cardTabTitle = (await page.textContent("#soon-title").catch(() => null)) ?? (await page.textContent(".card-preview h1").catch(() => null));
+  await page.waitForSelector(".card-preview", { timeout: 5_000 }).catch(() => {});
+  const cardTabTitle = (await page.textContent(".card-preview h1").catch(() => null)) ?? (await page.textContent("#soon-title").catch(() => null));
   const cardPreviewImg = await page.isVisible(".card-preview-img");
   note(`${name}: Card tab with a read on screen: "${cardTabTitle?.trim()}", preview image shown: ${cardPreviewImg}`);
   if (cardTabTitle?.trim() !== "This read, as a card.") errors.push(`Card tab did not preview this read (showed "${cardTabTitle}")`);
