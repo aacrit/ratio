@@ -126,7 +126,7 @@ describe("the scale instruments read bands as the engine does", () => {
       expect(scaleAt(scaleById("volume-top"), v).band).toBe(topFit(v));
       expect(scaleAt(scaleById("volume-top"), v).onEdge).toBe(nearEdge(v, FIT_TOP, 0.05));
     }
-    for (const v of grid(0.4, 1.1, 0.05)) {
+    for (const v of grid(0.2, 0.9, 0.05)) {
       expect(scaleAt(scaleById("volume-legs"), v).band).toBe(legFit(v));
       expect(scaleAt(scaleById("volume-legs"), v).onEdge).toBe(nearEdge(v, FIT_LEGS, 0.05));
     }

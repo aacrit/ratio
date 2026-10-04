@@ -409,7 +409,7 @@ function setupYours(proportion: (r: number) => void, scales: Map<string, (v: num
     dot.setAttribute("aria-hidden", "true");
     const what = document.createElement("span");
     const source = last.source === "sample" ? "the sample" : "your photo";
-    what.textContent = `Your last read: ${source}, as worn${look ? `; the look ${look.title.charAt(0).toLowerCase()}${look.title.slice(1)} is the dashed mark` : ""}`;
+    what.textContent = `Your last read: ${source}, as worn${look ? `; the dashed mark is the look you tried, ${look.title.charAt(0).toLowerCase()}${look.title.slice(1)}` : ""}`;
     const meta = document.createElement("span");
     meta.dataset.numeral = "";
     meta.textContent = `${worn.hash.slice(0, 4)} · ${last.day === localDay() ? "today" : last.day}`;
