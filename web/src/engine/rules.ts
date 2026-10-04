@@ -134,7 +134,7 @@ export interface OutfitReading {
 export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
   const lines = [proportionLine(bins, rawBreak)];
   if (bins.fit) lines.push(volumeLine(bins.fit));
-  const p = pieces(bins.palette, bins.waist);
+  const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
   if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
   if (bins.palette.length) {
     lines.push(harmonyLine(bins.palette, bins.waist), valueLine(bins.palette, bins.top.L, bins.bottom.L), sharesLine(bins.palette), chromaLine(bins.palette, bins.waist));

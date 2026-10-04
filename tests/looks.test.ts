@@ -87,10 +87,22 @@ describe("suggested looks", () => {
   it("keeps swatch indices through several moves, and merges only at the end", () => {
     const b = example();
     const tucked = applyMove(b, { kind: "break", to: 0.38, title: "", detail: "" });
-    const recoloured = applyMove(tucked, { kind: "recolour", swatch: 1, L: 0.3, C: 0.07, h: 255, title: "", detail: "" });
+    const recoloured = applyMove(tucked, { kind: "recolour", swatch: 1, piece: "lower", L: 0.3, C: 0.07, h: 255, title: "", detail: "" });
     expect(recoloured.palette[1]).toMatchObject({ L: 0.3, C: 0.07, h: 255 });
     expect(recoloured.bottom).toEqual({ L: 0.3, C: 0.07, h: 255 });
     expect(normalise(recoloured).palette.reduce((t, s) => t + s.share, 0)).toBeCloseTo(1, 1);
+  });
+
+  it("splits a swatch the upper and lower pieces share when only the lower piece changes", () => {
+    // White waistcoat over white breeches: one swatch, both pieces.
+    const white = { L: 0.9, C: 0, h: 0 };
+    const b: Bins = { proportion: 0.6, waist: 0.38, top: white, bottom: white, palette: [sw(0.9, 0, 0, 0.6, 0.5), sw(0.15, 0, 0, 0.4, 0.4)], fit: null };
+    expect(pieces(b)).toMatchObject({ upper: 0, lower: 0 });
+    const out = applyMove(b, { kind: "recolour", swatch: 0, piece: "lower", L: 0.45, C: 0.06, h: 250, title: "", detail: "" });
+    expect(out.top).toEqual(white);
+    expect(out.bottom).toMatchObject({ L: 0.45, C: 0.06, h: 250 });
+    expect(out.palette).toHaveLength(3);
+    expect(out.palette[0]).toMatchObject({ L: 0.9, C: 0 });
   });
 
   it("never names the body or judges the person in a look", () => {
@@ -110,8 +122,8 @@ describe("try it: recolour on the photo", () => {
     const mask = { width: 3, height: 1, data: Uint8Array.from([CATEGORY.clothes, CATEGORY.clothes, CATEGORY.background]) };
     const lab = srgbToOklab(150, 75, 50);
     const swatches: Swatch[] = [{ lab, share: 1, y: 0.6 }];
-    const bands = new Map([[0, [0, 0] as const]]);
-    const out = recolour(pixels, mask, { left: 0, right: 2 }, bands, swatches, [{ kind: "recolour", swatch: 0, L: 0.3, C: 0.07, h: 255, title: "", detail: "" }]);
+    const bands = { upper: [0, 0], lower: [0, 0], shoes: [0, 0], other: [0, 0] } as const;
+    const out = recolour(pixels, mask, { left: 0, right: 2 }, bands, swatches, [{ kind: "recolour", swatch: 0, piece: "lower", L: 0.3, C: 0.07, h: 255, title: "", detail: "" }]);
     expect(Array.from(out.data.slice(8))).toEqual([10, 200, 10, 255]);
     const lit = srgbToOklab(out.data[0], out.data[1], out.data[2]);
     const shade = srgbToOklab(out.data[4], out.data[5], out.data[6]);
@@ -127,8 +139,8 @@ describe("try it: recolour on the photo", () => {
     const mask = { width: 1, height: 2, data: Uint8Array.from([CATEGORY.clothes, CATEGORY.clothes]) };
     const lab = srgbToOklab(235, 232, 222);
     const swatches: Swatch[] = [{ lab, share: 1, y: 0.7 }];
-    const bands = new Map([[0, [1, 1] as const]]);
-    const out = recolour(pixels, mask, { left: 0, right: 0 }, bands, swatches, [{ kind: "recolour", swatch: 0, L: 0.45, C: 0.06, h: 250, title: "", detail: "" }]);
+    const bands = { upper: [0, 0], lower: [1, 1], shoes: [1, 1], other: [0, 1] } as const;
+    const out = recolour(pixels, mask, { left: 0, right: 0 }, bands, swatches, [{ kind: "recolour", swatch: 0, piece: "lower", L: 0.45, C: 0.06, h: 250, title: "", detail: "" }]);
     expect(Array.from(out.data.slice(0, 4))).toEqual(white);
     expect(Array.from(out.data.slice(4, 8))).not.toEqual(white);
   });

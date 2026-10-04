@@ -18,32 +18,39 @@ import { type Lab, oklabToSrgb, srgbToOklab } from "../engine/color";
 import type { Move } from "../engine/looks";
 import { CATEGORY, type Mask } from "../engine/measure";
 import type { Swatch } from "../engine/palette";
+import type { Piece } from "../engine/pieces";
 import type { Pixels } from "../engine/resample";
 
 const lchToLab = (L: number, C: number, h: number): Lab => ({ L, a: C * Math.cos((h * Math.PI) / 180), b: C * Math.sin((h * Math.PI) / 180) });
 
 /** Rows [from, to] (pixel rows) where each piece's garment may be found. */
-export type Bands = Map<number, readonly [number, number]>;
+export type Bands = Record<Piece, readonly [number, number]>;
 
 /** How far a pixel's hue plane (a, b) may sit from its swatch and still be that cloth, and how far its lightness. */
 export const SAME_CLOTH = { ab: 0.06, L: 0.4 } as const;
 
-/** Which swatch each colour move targets, and the colour it moves to. */
-export function colourTargets(moves: Move[], swatches: Swatch[]): Map<number, Lab> {
-  const targets = new Map<number, Lab>();
+interface Target {
+  swatch: number;
+  piece: Piece;
+  to: Lab;
+}
+
+/** Which swatch and piece each colour move targets, and the colour it moves to. */
+export function colourTargets(moves: Move[], swatches: Swatch[]): Target[] {
+  const targets: Target[] = [];
   for (const m of moves) {
-    if (m.kind === "recolour" && m.swatch < swatches.length) targets.set(m.swatch, lchToLab(m.L, m.C, m.h));
+    if (m.kind === "recolour" && m.swatch < swatches.length) targets.push({ swatch: m.swatch, piece: m.piece, to: lchToLab(m.L, m.C, m.h) });
     if (m.kind === "accent") {
       // Accents show on the photo only when the shoes were measured.
       const shoes = swatches.findIndex((s) => s.y >= 0.9);
-      if (shoes >= 0) targets.set(shoes, lchToLab(m.L, m.C, m.h));
+      if (shoes >= 0) targets.push({ swatch: shoes, piece: "shoes", to: lchToLab(m.L, m.C, m.h) });
     }
   }
   return targets;
 }
 
 /** True when a look changes anything that can honestly be shown on the photo. */
-export const showsOnPhoto = (moves: Move[], swatches: Swatch[]) => colourTargets(moves, swatches).size > 0;
+export const showsOnPhoto = (moves: Move[], swatches: Swatch[]) => colourTargets(moves, swatches).length > 0;
 
 /** The box around the figure that pixels are taken from, as the palette was measured. */
 export interface Box {
@@ -59,14 +66,13 @@ export interface Box {
 export function recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[]): Pixels {
   const targets = colourTargets(moves, swatches);
   const data = new Uint8ClampedArray(pixels.data);
-  if (!targets.size) return { width: pixels.width, height: pixels.height, data };
+  if (!targets.length) return { width: pixels.width, height: pixels.height, data };
   const W = mask.width;
   const pad = (box.right - box.left) * 0.35;
   const x0 = Math.max(0, Math.floor(box.left - pad)), x1 = Math.min(W - 1, Math.ceil(box.right + pad));
-  for (const [k, to] of targets) {
-    const from = swatches[k].lab;
-    const band = bands.get(k);
-    if (!band) continue;
+  for (const { swatch, piece, to } of targets) {
+    const from = swatches[swatch].lab;
+    const band = bands[piece];
     const y0 = Math.max(0, Math.floor(band[0])), y1 = Math.min(mask.height - 1, Math.ceil(band[1]));
     const fromC = Math.hypot(from.a, from.b);
     const toC = Math.hypot(to.a, to.b);

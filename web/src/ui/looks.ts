@@ -6,7 +6,7 @@
 // "As worn" puts everything back. Nothing leaves the tab.
 
 import { readingHash } from "../engine/hash";
-import { type Look, pieces, suggestLooks } from "../engine/looks";
+import { type Look, suggestLooks } from "../engine/looks";
 import { colourLabel } from "../engine/names";
 import { ENGINE_VERSION, type LineState } from "../engine/rules";
 import type { Figure } from "../overlay";
@@ -74,8 +74,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown } {
   const m = read.measure;
   const h = m.bottom - m.top;
   const brk = m.breakRow ?? m.waistRow;
-  const role = pieces(read.reading.bins);
-  const bands: Bands = new Map(read.palette.map((_, i) => [i, i === role.upper ? [m.top, brk] : i === role.lower ? [brk, m.bottom - h * 0.04] : i === role.shoes ? [m.bottom - h * 0.08, m.bottom] : [m.top, m.bottom]] as const));
+  const bands: Bands = { upper: [m.top, brk], lower: [brk, m.bottom - h * 0.04], shoes: [m.bottom - h * 0.08, m.bottom], other: [m.top, m.bottom] };
   const before = new Map(read.reading.lines.map((l) => [l.rule, l.state] as const));
   let current: string | null = null;
   const buttons = new Map<string, HTMLButtonElement>();

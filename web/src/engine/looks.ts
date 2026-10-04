@@ -13,12 +13,12 @@
 
 import type { BinnedSwatch } from "./colour-rules";
 import { colourLabel } from "./names";
-import { pieces as placedPieces } from "./pieces";
+import { type Piece, pieces as placedPieces } from "./pieces";
 import { type AdviceLine, type Bins, type LineState, readBins } from "./rules";
 
 export type Move =
   | { kind: "break"; to: number; title: string; detail: string }
-  | { kind: "recolour"; swatch: number; L: number; C: number; h: number; title: string; detail: string }
+  | { kind: "recolour"; swatch: number; piece: Piece; L: number; C: number; h: number; title: string; detail: string }
   | { kind: "accent"; L: number; C: number; h: number; title: string; detail: string };
 
 export interface Look {
@@ -41,9 +41,14 @@ const wrap = (h: number) => ((Math.round(h / 5) * 5) % 360 + 360) % 360;
 const SCORE: Record<LineState, number> = { golden: 2, neutral: 1, advice: 0 };
 export const scoreOf = (lines: AdviceLine[]) => lines.reduce((s, l) => s + SCORE[l.state], 0);
 
-/** The pieces of the outfit, by where their colour sits on the figure. */
+/** The pieces of the outfit: the swatches nearest the measured upper and lower garment colours, and the shoes. */
 export function pieces(b: Bins): { upper: number; lower: number; shoes: number } {
-  return placedPieces(b.palette, b.waist);
+  return placedPieces(b.palette, b.waist, { top: b.top, bottom: b.bottom });
+}
+
+/** What a swatch is to the outfit, preferring the lower piece when one swatch is both. */
+export function pieceOf(i: number, p: ReturnType<typeof pieces>): Piece {
+  return i === p.lower ? "lower" : i === p.upper ? "upper" : i === p.shoes ? "shoes" : "other";
 }
 
 const lchToLab = ({ L, C, h }: { L: number; C: number; h: number }) => ({ L, a: C * Math.cos((h * Math.PI) / 180), b: C * Math.sin((h * Math.PI) / 180) });
@@ -77,10 +82,19 @@ export function applyMove(b: Bins, m: Move): Bins {
   const colour = { L: m.L, C: m.C, h: m.C < NEUTRAL_CHROMA ? 0 : m.h };
   if (m.kind === "recolour") {
     const { upper, lower } = pieces(b);
-    palette[m.swatch] = { ...palette[m.swatch], ...colour };
+    const s = palette[m.swatch];
+    // One swatch can be both pieces (white waistcoat, white breeches). Changing
+    // one of them splits it: the changed part takes its share of the area.
+    const shared = upper === lower && upper === m.swatch && (m.piece === "upper" || m.piece === "lower");
+    if (shared) {
+      const brk = b.proportion ?? b.waist;
+      const f = m.piece === "lower" ? 1 - brk : brk;
+      palette[m.swatch] = { ...s, share: fix(s.share * (1 - f)) };
+      palette.push({ ...colour, share: fix(s.share * f), y: m.piece === "lower" ? 0.7 : 0.3 });
+    } else palette[m.swatch] = { ...s, ...colour };
     const next = { ...b, palette };
-    if (m.swatch === upper) next.top = colour;
-    if (m.swatch === lower) next.bottom = colour;
+    if (m.piece === "upper") next.top = colour;
+    if (m.piece === "lower") next.bottom = colour;
     return next;
   }
   // An accent recolours the shoes when they were measured; otherwise it adds
@@ -94,9 +108,8 @@ export function applyMove(b: Bins, m: Move): Bins {
   return { ...b, palette };
 }
 
-function pieceName(i: number, p: ReturnType<typeof pieces>): string {
-  return i === p.upper ? "Upper piece" : i === p.lower ? "Lower piece" : i === p.shoes ? "Shoes" : "Accent";
-}
+const PIECE_NAME: Record<Piece, string> = { upper: "Upper piece", lower: "Lower piece", shoes: "Shoes", other: "Accent" };
+const pieceName = (i: number, p: ReturnType<typeof pieces>) => PIECE_NAME[pieceOf(i, p)];
 
 /** Every candidate move for these bins, in a fixed order. */
 export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
@@ -137,7 +150,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     for (const o of options) {
       if (labGap(s, { ...o, share: 0, y: 0 }) < 0.06) continue;
       const label = colourLabel(o);
-      moves.push({ kind: "recolour", swatch: i, ...o, title: `${pieceName(i, p)} in ${label}`, detail: `Swap the ${pieceName(i, p).toLowerCase()} for ${label}.` });
+      moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} in ${label}`, detail: `Swap the ${pieceName(i, p).toLowerCase()} for ${label}.` });
     }
   }
 
@@ -146,7 +159,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const s = b.palette[p.lower];
     const L = fix(Math.max(0.14, b.top.L - 0.2));
     const o = { L, C: s.C, h: s.h };
-    moves.push({ kind: "recolour", swatch: p.lower, ...o, title: `A darker lower piece: ${colourLabel(o)}`, detail: "A darker value below grounds the figure." });
+    moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${colourLabel(o)}`, detail: "A darker value below grounds the figure." });
   }
 
   // Chroma: step the second loud colour down to a muted version of itself.
@@ -155,7 +168,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const s = loud[1];
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
-    moves.push({ kind: "recolour", swatch: i, ...o, title: `${pieceName(i, p)} muted to ${colourLabel(o)}`, detail: "One colour at full strength, the other stepped down." });
+    moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} muted to ${colourLabel(o)}`, detail: "One colour at full strength, the other stepped down." });
   }
 
   // Accent: a tenth of the area in a complement of the lead hue, or a warm
