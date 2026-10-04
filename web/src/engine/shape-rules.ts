@@ -6,10 +6,10 @@ import { FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, nearEdge } from "./constants";
 import type { AdviceLine } from "./rules";
 
 export type TopFit = "fitted" | "straight" | "loose";
-export type LegFit = "slim" | "straight" | "wide";
+export type LegFit = "narrow" | "straight" | "wide";
 
 export const topFit = (r: number): TopFit => (r < FIT_TOP[0] ? "fitted" : r < FIT_TOP[1] ? "straight" : "loose");
-export const legFit = (r: number): LegFit => (r < FIT_LEGS[0] ? "slim" : r < FIT_LEGS[1] ? "straight" : "wide");
+export const legFit = (r: number): LegFit => (r < FIT_LEGS[0] ? "narrow" : r < FIT_LEGS[1] ? "straight" : "wide");
 
 const two = (v: number) => v.toFixed(2);
 
@@ -21,13 +21,13 @@ export function volumeLine(fit: { top: number; legs: number }): AdviceLine {
   const base = { rule: "volume" as const, title: "Volume", measured: `${two(fit.top)}× · ${two(fit.legs)}×`, borderline };
   const pair = `${t} over ${l}`;
   const cap = pair.charAt(0).toUpperCase() + pair.slice(1);
-  if (t === "loose" && l !== "slim") {
-    return { ...base, state: "advice", text: `${cap}: two full volumes, so the outfit has nothing to anchor it. Keep one fitted: tuck the upper piece, or pair it with a slimmer leg.` };
+  if (t === "loose" && l !== "narrow") {
+    return { ...base, state: "advice", text: `${cap}: two full volumes, so the outfit has nothing to anchor it. Keep one fitted: tuck the upper piece, or pair it with a narrower leg.` };
   }
-  if (t === "fitted" && l === "slim") {
+  if (t === "fitted" && l === "narrow") {
     return { ...base, state: "neutral", text: `${cap}: a streamlined column of fitted pieces. A single fuller piece, a wide leg or a looser layer, would add contrast if you want it.` };
   }
-  if ((t === "loose" && l === "slim") || (t === "fitted" && l === "wide")) {
+  if ((t === "loose" && l === "narrow") || (t === "fitted" && l === "wide")) {
     return { ...base, state: "golden", text: `${cap}: one full volume balanced by one fitted, the classic pairing. Keep it.` };
   }
   return { ...base, state: "neutral", text: `${cap}: moderate volumes that sit together quietly.` };

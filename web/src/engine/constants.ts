@@ -9,7 +9,7 @@ export const SATURATED_CHROMA = 0.11;
 
 /** Upper piece fabric width over shoulder distance: fitted below [0], loose above [1]. First estimates (R1 calibrates). */
 export const FIT_TOP: readonly [number, number] = [1.15, 1.4];
-/** Both legs' fabric at the knee over shoulder distance: slim below [0], wide above [1]. First estimates (R1 calibrates). */
+/** Both legs' fabric at the knee over shoulder distance: narrow below [0], wide above [1]. First estimates (R1 calibrates). */
 export const FIT_LEGS: readonly [number, number] = [0.6, 0.85];
 
 /** Lightness difference between lower piece and shoes under which the leg line reads continuous. */

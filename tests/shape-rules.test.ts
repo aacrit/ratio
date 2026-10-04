@@ -12,7 +12,7 @@ describe("volume balance", () => {
     expect(topFit(1.0)).toBe("fitted");
     expect(topFit(1.3)).toBe("straight");
     expect(topFit(1.6)).toBe("loose");
-    expect(legFit(0.5)).toBe("slim");
+    expect(legFit(0.5)).toBe("narrow");
     expect(legFit(0.7)).toBe("straight");
     expect(legFit(1.0)).toBe("wide");
   });

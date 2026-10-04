@@ -53,7 +53,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
     maths: "Fabric width (garment pixels across one row, so stance and arms do not count) of the upper piece halfway down the torso, and of both legs at the knee, each against the distance between the shoulders. Rounded to 0.05.",
     edges: [
       { name: "upper piece: fitted / straight / loose", value: `below ${FIT_TOP[0]} / to ${FIT_TOP[1]} / above` },
-      { name: "legs: slim / straight / wide", value: `below ${FIT_LEGS[0]} / to ${FIT_LEGS[1]} / above` },
+      { name: "legs: narrow / straight / wide", value: `below ${FIT_LEGS[0]} / to ${FIT_LEGS[1]} / above` },
     ],
     sources: [{ label: "Tailoring convention: balance a full piece with a fitted one" }],
     calibrated: false,
