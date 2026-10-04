@@ -43,7 +43,7 @@ Panels inside the sheet (a look card, the trying card) are `--color-surface-rais
 
 The Read surface is an app frame, not a page (founder, 2026-10-04): a bar, a stage and a sheet.
 
-- **The bar** (52px): the mark with the plumb drop, the name, and one action at most ("Read another" while a photo is read).
+- **The bar** (52px): the mark with the plumb drop, the name, four tabs (Read · Face · Rules · Card, Inter 500, 44px touch width, a scrollable strip if the bar is too narrow) under one 2px chalk underline that glides to the chosen tab (`underline`), and one action at most ("Read another" while a photo is read). The name hides under 420px, the eyebrow under 768.
 - **The stage** fills the rest of the height and never scrolls away. Before a photo it is the drop cloth: the chalk figure under the lamp, one line, the actions. With a photo it is the photo well: the photo fitted to the room above the sheet, with the loading tape, a status line or the compare control in the foot beneath it. The whole stage accepts a drop.
 - **The sheet** holds everything that is read: the hero numeral and its eyebrow, the verdict, the palette, the looks, the argument, the hash, then feedback and the foot. On a phone it rides over the stage with three resting places: **peek** (the grip and the hero row), **half** (the viewport's half: verdict, palette, the first look), **full** (8px under the bar, and only then does it scroll inside). A drag follows the finger one to one, resists past the ends, and a release carries its velocity into the `sheet` spring. As the sheet rises the stage scales the photo (transform only) to the room above it, so the photo is always in view. From 1024 up the sheet is the side panel on the right, `--split-panel` (38.2%) wide: the stage keeps the major section, and the layout sits on the division it teaches.
 - Trying a look drops the sheet to half, so the photo and the wipe are in hand. The chalk figure dressed as the look rides in the sheet head beside "As worn".
@@ -73,6 +73,7 @@ Springs are stiffness / damping / mass. JS integrates them (`v += (-k·x − c·
 | `fling` | standard | 160 / 24 / 1 (zeta 0.95) | 640 ms | the wipe let go mid drag carries on and settles where friction would stop it (`x + v · 0.18 s`) |
 | `arrive` | standard | 300 / 24 / 1 (zeta 0.69, one small overshoot) | 640 ms | a card is put down on the table: look cards 80 ms apart, the photo settling onto the cloth |
 | `settle` | micro | 600 / 35 / 1 | 430 ms | a button or chip was pressed (scale 0.97 and back) |
+| `underline` | standard | 420 / 41 / 1 (critically damped) | 420 ms | the chalk underline in the bar moves and resizes to the chosen tab; a chalk mark never bounces |
 | `argument` | standard | 70 ms stagger between rows, `--dur-normal` rise of 8px; 200 ms between the three parts of a reading | per reading | the readings arrive in order: the measurement, then the rule, then the advice |
 | `breathe` | standard | opacity 0.4 to 0.85 over 3000 ms | until done | indeterminate waiting (the models at work on a photo): the status line breathes |
 | `hard-cut` | | 0 ms | | reduced motion, and every state change that is not one of the above |
@@ -109,13 +110,21 @@ Precise, warm, unhurried; a tailor explaining a chalk mark. No exclamation marks
 | Surface | Hero | Everything else |
 |---|---|---|
 | Read `/` | the photo on the stage with the overlay: tape, break mark, section tick; before a photo, the chalk figure under the lamp with the plumb line hanging | the sheet: hero numeral, verdict, palette, looks, the argument as drill rows, the hash |
-| Face `/face` | the face oval with its three horizontal divisions and the length : width ratio | hair, makeup and expression readings as drill rows; palette as a stacked bar |
-| Rulebook `/rules` | the open rule's diagram, live: drag the break along a line and watch the ratio and which band it lands in | the list of rules, each a drill row with its constants, sources and version |
-| Style Card `/card` | the card itself, at 1 : 1.618, in Paper | the photo tray (3 to 5 slots), the export button |
+| Face `/face` | the portrait on the stage with the face oval (dashed construction line), the tape from hairline to chin with the canon's thirds, the four measured divisions, the width line and the length : width numeral | volume, thirds, parting, length, the portrait note and the waiting personal-colour row as rows; never a verdict on the face |
+| Rulebook `/rules` | the proportion instrument, live: drag the break along the figure and watch the ratio and the band; one column of rule cards, each with its own instrument and your value marked | the drill under each card: maths, edges, sources, calibrated or not |
+| Style Card `/card` | the card itself, at 1 : 1.618, always Paper | the wardrobe (3 to 5 kept reads as chalk figures), the offer with the free path beside it |
 
 ## Logomark
 
 A square frame (Vitruvius' square) with a plumb line dropping from the top edge to a small filled bob at 0.618 of the height. Chalk strokes, 1.6px at 24px, round caps; the bob is the one filled element and the only tape in the mark. In the app it animates with `plumb` once on load, in the bar; in print and at 16px it hangs straight with the bob only. Wordmark: "Ratio" in Fraunces, opsz 144, weight 400, with "reason and proportion" beside it in mono eyebrow. Endorsed "a voidvision production".
+
+## Instruments (the Rulebook)
+
+A rule card is an instrument beside its words: the instrument on the raised lining with a hairline border, 256px wide (320 for the proportion hero), the words to its right from 768 up and below it on a phone. Anatomy: a chalk scale or figure, band names in Inter 10px and edges in mono beside it, one or two tape handles (9px bob, a lining ring) that follow the hand one to one with no spring (it is your hand, so the numeral updates as it moves and never counts), a verdigris tick labelled "yours" that stays where your last read put it, and red chalk only for a value outside its band or an uncalibrated rule. Crossing an edge flashes the band name's glow for `--dur-fast`. Every instrument starts at your value, or at its band's middle when nothing was read.
+
+## The wardrobe (within Read)
+
+Opt-in, this browser only (IndexedDB), deletable from Card. It keeps a reading and the chalk figure's inputs, never pixels: the photo is still gone when the tab closes. The ask is an inline block with a chalk rule on its left, shown once; "Kept" is a hard cut. Three to five kept reads draw the Style Card; a portrait read adds only its hair line.
 
 ## Iconography and components
 
