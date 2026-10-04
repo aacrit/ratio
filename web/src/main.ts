@@ -56,6 +56,16 @@ export function reportCoreSuccess(): void {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
+/** A blob as a data: URL: the CSP's img-src allows data: (and this origin)
+ * but never blob:, and this needs no revocation. */
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("could not read blob"));
+    reader.readAsDataURL(blob);
+  });
+
 interface Current {
   figure: Figure;
   shown: () => Shown;
@@ -683,6 +693,12 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     rulebookApi = setupRulebook(rulesView);
   };
   const showRulesRoute = (push: boolean): void => {
+    // A read's reveal may still be in flight (e.g. the popstate handler's own
+    // quick re-show after a "back"); its tail would otherwise call
+    // setUrlHash(..., false) once it finishes, replaceState-ing this route's
+    // URL back to "/#r=..." after we've already left for Rules. Invalidate it,
+    // the same way showChalkRestore does.
+    showGen++;
     ensureRulebook();
     rulebookApi?.refreshYours();
     onRules = true;
@@ -697,6 +713,9 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     if (push) history.pushState({ route: "rules" }, "", "/rules");
   };
   const showReadRoute = (push: boolean): void => {
+    // Same reasoning as showRulesRoute: a stale in-flight showRead must not
+    // be allowed to touch the URL once we've routed away from it.
+    showGen++;
     onRules = false;
     rulesView.hidden = true;
     document.body.classList.remove("rules-page");
@@ -834,15 +853,17 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     heading.textContent = "This read, as a card.";
     wrap.append(heading);
     const shown = c.shown();
-    let objectUrl: string | null = null;
     try {
       const drawn = await drawCard({ still: c.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: c.credit ?? undefined });
       const blob = await drawn.convertToBlob({ type: "image/png" });
-      objectUrl = URL.createObjectURL(blob);
+      // A data: URL, not an object URL: the CSP's img-src allows this
+      // origin and data: only, never blob:, and a data: URL needs no
+      // revocation, so there is nothing to clean up when the preview closes.
+      const dataUrl = await blobToDataUrl(blob);
       const img = document.createElement("img");
       img.className = "card-preview-img";
       img.alt = "The card drawn from this read: the photo at rest, the readings and the palette.";
-      img.src = objectUrl;
+      img.src = dataUrl;
       wrap.append(img);
     } catch {
       const p = document.createElement("p");
@@ -860,19 +881,6 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     note.setAttribute("aria-live", "polite");
     dl.addEventListener("click", () => void downloadCard(dl, note));
     wrap.append(dl, note);
-    // The preview's own object URL is this closure's; it is released once
-    // the cloth closes and the preview can no longer be seen (ui/tabs.ts
-    // replaces this element wholesale on the next open or close).
-    const url = objectUrl;
-    if (url) {
-      const observer = new MutationObserver(() => {
-        if (!wrap.isConnected) {
-          URL.revokeObjectURL(url);
-          observer.disconnect();
-        }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-    }
     return wrap;
   };
 
