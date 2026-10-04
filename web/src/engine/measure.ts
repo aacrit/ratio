@@ -316,10 +316,10 @@ export function measureOutfit(pixels: Pixels, mask: Mask, pose: Landmark[]): Out
   // (FLANK of its width in from each edge above the hips): the outer layer,
   // never the middle, where a zip, an open front or a t-shirt under a
   // hoodie shows. Below the hips, the hips' column widened 20% for the legs,
-  // as one. Each row's colour is its pixels' well-lit core (coreColour), so
-  // a stripe reads as its lighter cloth on every row instead of flipping
-  // between its colours (a per-channel median read a false hem at 0.32 in
-  // navy and white stripes, review round 3), and a stray thread cannot move it.
+  // as one. Above the hips, a row's trimmed mean (trimmedLab) decides where a
+  // hem may sit, so a stripe cannot flip a row between its colours (a
+  // per-channel median alone read a false hem at 0.32 in navy and white
+  // stripes, review round 3); the median (medianLab) then places the hem.
   const widenH = (hx1 - hx0) * 0.2;
   const y0 = Math.ceil(shoulderY);
   const y1 = Math.min(H - 1, Math.floor(ankleY));
