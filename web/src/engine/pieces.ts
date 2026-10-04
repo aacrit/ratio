@@ -33,7 +33,8 @@ export function pieces(palette: readonly Placed[], waist: number, measured?: { t
   const pick = (test: (s: Placed) => boolean, near?: Lch) => {
     let best = -1;
     palette.forEach((s, i) => {
-      if (!test(s)) return;
+      // A speck the share binning took to zero is no piece (never the shoes).
+      if (s.share <= 0 || !test(s)) return;
       if (best < 0) return void (best = i);
       const b = palette[best];
       if (near) {

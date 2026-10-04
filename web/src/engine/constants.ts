@@ -17,6 +17,14 @@ export function neutralChromaAt(L: number): number {
 }
 
 export const isNeutral = (c: { L: number; C: number }): boolean => c.C < neutralChromaAt(c.L);
+
+/**
+ * The colour to draw for a swatch: a neutral is drawn with no chroma, so a
+ * cream or a white the engine reads as neutral never shows as a pale pink
+ * (a binned neutral keeps its small chroma at hue 0°). Display only: the
+ * readings and the hash keep the measured chroma.
+ */
+export const shownColour = (c: { L: number; C: number; h: number }): { L: number; C: number; h: number } => (isNeutral(c) ? { L: c.L, C: 0, h: 0 } : { L: c.L, C: c.C, h: c.h });
 /** From this OKLCH chroma a colour reads as saturated. */
 export const SATURATED_CHROMA = 0.11;
 
@@ -44,4 +52,44 @@ export const VIBRATION = { minHueGap: 150, minChroma: 0.1, maxLightnessGap: 0.08
 /** True when a binned value sits within half a bin of any edge: a slightly different photo could read the other way. */
 export function nearEdge(value: number, edges: readonly number[], bin: number): boolean {
   return edges.some((e) => Math.abs(value - e) <= bin / 2 + 1e-9);
+}
+
+/** Colour shares are binned in units of this size. */
+export const SHARE_BIN = 0.05;
+
+/**
+ * Shares binned to SHARE_BIN so they always sum to exactly 1.00: largest
+ * remainder (Hamilton) apportionment of 20 units, so every share stays
+ * within one unit of its quota. A speck below one unit is lifted to one
+ * unit while there is room; when the lifts overflow the 20, the smallest
+ * specks fall back to zero first (ties: the later colour), so a dominant
+ * colour is never cut to pay for them (0.88 stays 0.85, not 0.80). Then the
+ * units left go to the largest remainders; ties go to the earlier colour.
+ * Deterministic.
+ */
+export function binShares(shares: readonly number[]): number[] {
+  const units = Math.round(1 / SHARE_BIN);
+  const n = shares.length;
+  if (!n) return [];
+  const total = shares.reduce((t, s) => t + s, 0);
+  const quota = shares.map((s) => (total > 0 ? (s / total) * units : units / n));
+  const got = quota.map((q) => Math.floor(q + 1e-9));
+  // Lift specks to one unit, then drop the smallest lifts while they overflow.
+  const specks = quota.map((q, i) => ({ q, i })).filter(({ i }) => got[i] === 0);
+  for (const { i } of specks) got[i] = 1;
+  let over = got.reduce((t, u) => t + u, 0) - units;
+  specks.sort((x, y) => x.q - y.q || y.i - x.i);
+  for (const { i } of specks) {
+    if (over <= 0) break;
+    got[i] = 0;
+    over--;
+  }
+  let left = units - got.reduce((t, u) => t + u, 0);
+  while (left > 0) {
+    let best = 0;
+    for (let i = 1; i < n; i++) if (quota[i] - got[i] > quota[best] - got[best] + 1e-9) best = i;
+    got[best]++;
+    left--;
+  }
+  return got.map((u) => Number((u * SHARE_BIN).toFixed(2)));
 }

@@ -9,7 +9,7 @@ import type { RuleId } from "./engine/rulebook";
 import { ENGINE_VERSION } from "./engine/rules";
 import { sendEvent } from "./events";
 import { reducedMotion } from "./motion";
-import { SATURATED_CHROMA, nearEdge } from "./engine/constants";
+import { SATURATED_CHROMA, nearEdge, shownColour } from "./engine/constants";
 import { type LastRead, clearLastRead, loadLastRead, localDay } from "./rules/handoff";
 import {
   HANDLE_HIT,
@@ -47,7 +47,11 @@ function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<strin
   return el;
 }
 
-const lch = (c: { L: number; C: number; h: number }) => `oklch(${c.L.toFixed(3)} ${c.C.toFixed(3)} ${c.h})`;
+const lch = (s: { L: number; C: number; h: number }) => {
+  // A neutral is drawn with no chroma (engine/constants.ts shownColour).
+  const c = shownColour(s);
+  return `oklch(${c.L.toFixed(3)} ${c.C.toFixed(3)} ${c.h})`;
+};
 const f1 = (n: number) => n.toFixed(1);
 /** A marker beyond the instrument's ends says so: the handle stops at the end, "Yours" keeps the real value. */
 const past = (side: "below" | "above" | null) => (side ? ", past the end" : "");
@@ -305,7 +309,7 @@ function marks(last: LastRead, v: YoursValues): void {
   const sg = layer("shares");
   let x = SCALE_X.from;
   const w = SCALE_X.to - SCALE_X.from;
-  // Binned shares can sum a little over 1: the bar is scaled to its own total so it never overruns.
+  // Shares sum to 1.00 (largest remainder); the bar is still scaled to its own total so it never overruns.
   const total = v.shares.reduce((t, s) => t + s.share, 0) || 1;
   v.shares.forEach((s, i) => {
     const sw = (w * s.share) / Math.max(1, total);

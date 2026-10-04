@@ -88,6 +88,7 @@ async function run(name, viewport) {
   note(`${name}: ${await page.textContent("#reading-hash")}`);
   note(`${name}: hero: ${await page.textContent("#hero-n")} (${await page.textContent("#hero-eyebrow")})`);
   note(`${name}: verdict: ${await page.textContent("#verdict")}`);
+  note(`${name}: others line: ${(await page.isVisible("#others-note")) ? await page.textContent("#others-note") : "(none)"}`);
   for (const row of await page.$$eval(".row", (rs) => rs.map((r) => `${r.querySelector(".row-t")?.textContent} | ${r.querySelector(".row-n")?.textContent} | ${r.getAttribute("data-state")}`))) note(`${name}:   ${row}`);
 
   const looks = await page.$$(".look .btn");
@@ -97,6 +98,7 @@ async function run(name, viewport) {
   // look that changes the photo. On the phone the looks sit lower in the
   // sheet, so it is raised to full to press one; trying it drops the sheet
   // to half on its own so the photo and the wipe are in view.
+  let wipeShown = false;
   for (let i = 0; i < looks.length; i++) {
     if (phone) {
       await snap("full");
@@ -105,15 +107,39 @@ async function run(name, viewport) {
     await looks[i].click();
     await page.waitForTimeout(1800);
     if (i === 0) await shot("3-try");
+    note(`${name}: look ${i + 1} note: ${await page.textContent(".trying-note")}`);
     if (await page.isVisible("#wipe")) {
+      // The look must really change the photo: the stage at the wipe's two
+      // ends (all as worn, all the look) must differ in its pixels.
+      const at = async (v) => {
+        await page.fill("#wipe", v);
+        await page.dispatchEvent("#wipe", "input");
+        await page.waitForTimeout(400);
+        return page.evaluate(() => {
+          const c = document.getElementById("figure");
+          return Array.from(c.getContext("2d").getImageData(0, 0, c.width, c.height).data);
+        });
+      };
+      const worn = await at("100");
+      const tried = await at("0");
+      let moved = 0;
+      for (let p = 0; p < worn.length; p += 4) if (Math.abs(worn[p] - tried[p]) + Math.abs(worn[p + 1] - tried[p + 1]) + Math.abs(worn[p + 2] - tried[p + 2]) > 24) moved++;
+      note(`${name}: look ${i + 1} changes ${moved} of ${worn.length / 4} stage pixels`);
+      if (moved < 1000) continue;
       await page.fill("#wipe", "25");
       await page.dispatchEvent("#wipe", "input");
       await page.waitForTimeout(300);
       await shot("4-wipe");
       note(`${name}: wipe shown on look ${i + 1}`);
+      wipeShown = true;
       break;
     }
-    if (i === looks.length - 1) note(`${name}: no look changes the photo, so no wipe`);
+  }
+  // A regression guard: on the sample, at least one look must change the
+  // photo. If none does, try-on is off and the job fails.
+  if (!wipeShown) {
+    note(`${name}: no look changes the photo`);
+    errors.push("no suggested look changes the sample photo (try-on regression)");
   }
 
   if (phone) {
@@ -123,6 +149,32 @@ async function run(name, viewport) {
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
   await download.saveAs(path.join(out, `${name}-5-card.png`));
   note(`${name}: card saved (${download.suggestedFilename()})`);
+
+  // A look the photo does not show (a tuck, or a recolour refused as
+  // doubtful): the chalk figure alone, and its saved card says the photo is
+  // as worn (the verifier saw a card save fail after such a look).
+  let chalkOnly = false;
+  for (let i = 0; i < looks.length && !chalkOnly; i++) {
+    if (phone) {
+      await snap("full");
+      await page.waitForTimeout(500);
+    }
+    await looks[i].click();
+    await page.waitForTimeout(1800);
+    const pressed = (await looks[i].getAttribute("aria-pressed")) === "true";
+    if (!pressed || (await page.isVisible("#wipe"))) continue;
+    chalkOnly = true;
+    note(`${name}: chalk-only look ${i + 1}: ${await page.textContent(".trying-title")} | ${await page.textContent(".trying-note")}`);
+    await shot("5b-chalk");
+    if (phone) {
+      await snap("full");
+      await page.waitForTimeout(500);
+    }
+    const [chalkCard] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
+    await chalkCard.saveAs(path.join(out, `${name}-5c-card-chalk.png`));
+    note(`${name}: card saved after a chalk-only look (${chalkCard.suggestedFilename()})`);
+  }
+  if (!chalkOnly) note(`${name}: every look changes the photo, so no chalk-only card`);
 
   // The Rulebook after the read: the last read in this tab marked on each instrument.
   // rule_opened is counted from the moment the page loads: none on load, one per rule opened.

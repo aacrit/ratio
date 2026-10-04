@@ -9,7 +9,7 @@
 
 import type { Pixels } from "./engine/resample";
 import { FAILURE_COPY, type Read, readPhoto } from "./read";
-import { recolour } from "./tryon/recolour";
+import { photoPlan, recolour, refuseAll } from "./tryon/recolour";
 import { loadModels } from "./vision";
 import type { FromWorker, ToWorker } from "./reader";
 
@@ -17,7 +17,8 @@ const post = (message: FromWorker, transfer: Transferable[] = []) => self.postMe
 
 /** The share of a Read that can be posted (typed arrays go as transfers). */
 function pack(read: Read): { read: Read; transfer: Transferable[] } {
-  return { read, transfer: [read.pixels.data.buffer, read.display.data.buffer, read.mask.data.buffer] };
+  // A buffer may be listed once only (the person's mask can be the photo's own when alone).
+  return { read, transfer: [...new Set([read.pixels.data.buffer, read.display.data.buffer, read.mask.data.buffer, read.fullMask.data.buffer])] };
 }
 
 self.onmessage = async (event: MessageEvent<ToWorker>) => {
@@ -45,8 +46,20 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       return;
     }
     case "recolour": {
-      const out = recolour(msg.pixels, msg.mask, msg.box, msg.bands, msg.swatches, msg.moves);
+      const out = recolour(msg.pixels, msg.mask, msg.box, msg.bands, msg.swatches, msg.moves, msg.avoid);
       post({ type: "recoloured", id: msg.id, pixels: out }, [out.data.buffer]);
+      return;
+    }
+    case "plan": {
+      // A throw here must never kill the worker (and with it the loaded
+      // models): it is a refusal, and the chalk figure shows the look.
+      let plan;
+      try {
+        plan = photoPlan(msg.pixels, msg.full, msg.person, msg.box, msg.bands, msg.swatches, msg.moves);
+      } catch {
+        plan = refuseAll(msg.moves);
+      }
+      post({ type: "plan", id: msg.id, plan });
       return;
     }
   }

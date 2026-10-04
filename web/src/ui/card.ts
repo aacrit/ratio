@@ -4,7 +4,8 @@
 // quiet line naming the site. No tracking, no watermark beyond that line,
 // nothing uploaded: the file is made here and saved by the browser.
 
-import { colourLabel } from "../engine/names";
+import { shownColour } from "../engine/constants";
+import { byName, colourLabel } from "../engine/names";
 import type { AdviceLine, Bins, LineState } from "../engine/rules";
 import { STATE_WORDS } from "./rows";
 
@@ -52,6 +53,8 @@ export interface CardContent {
   still: OffscreenCanvas;
   /** "As worn" or the look's title. */
   title: string;
+  /** A line under the title, e.g. that the photo shows the outfit as worn. */
+  note?: string;
   lines: AdviceLine[];
   bins: Bins;
   hash: string;
@@ -106,6 +109,15 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
     ctx.fillText(l, x, y);
     y += 38;
   }
+  if (c.note) {
+    ctx.fillStyle = k.muted;
+    ctx.font = `400 16px ${BODY}`;
+    for (const l of wrap(ctx, c.note, rw)) {
+      ctx.fillText(l, x, y);
+      y += 22;
+    }
+    y += 4;
+  }
   y += 10;
   const stateInk = (s: LineState) => (s === "golden" ? k.section : s === "advice" ? k.ink : k.muted);
   for (const line of c.lines) {
@@ -131,11 +143,13 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
   // The palette, each colour as wide as its share.
   y = Math.max(y + 12, top + maxH - 84);
   let px = x;
-  // Binned shares can sum a little over or under 1; the strip always spans the column.
-  const total = c.bins.palette.reduce((t, s) => t + s.share, 0) || 1;
-  for (const s of c.bins.palette) {
+  // One name, one entry; the shares sum to 1.00, and the strip spans the column.
+  const named = byName(c.bins.palette);
+  const total = named.reduce((t, s) => t + s.share, 0) || 1;
+  for (const s of named) {
     const w = (rw * s.share) / total;
-    ctx.fillStyle = `oklch(${s.L} ${s.C} ${s.h})`;
+    const d = shownColour(s);
+    ctx.fillStyle = `oklch(${d.L} ${d.C} ${d.h})`;
     ctx.fillRect(px, y, w, 22);
     px += w;
   }
@@ -143,7 +157,7 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
   ctx.strokeRect(x + 0.5, y + 0.5, rw - 1, 21);
   ctx.fillStyle = k.muted;
   ctx.font = `400 14px ${BODY}`;
-  const names = c.bins.palette.map((s) => colourLabel(s)).join(", ");
+  const names = named.map((s) => `${colourLabel(s)} ${s.share.toFixed(2)}`).join(", ");
   wrap(ctx, names, rw).slice(0, 2).forEach((l, i) => ctx.fillText(l, x, y + 46 + i * 20));
 
   // Footer: the hash, the site, the credit.

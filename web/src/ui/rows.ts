@@ -5,7 +5,9 @@
 // `argument` stagger) and their numerals count up as they land.
 
 import type { Bins, AdviceLine, LineState } from "../engine/rules";
-import { colourLabel } from "../engine/names";
+import { shownColour } from "../engine/constants";
+import { byName, colourLabel } from "../engine/names";
+import { measuredCopy } from "../engine/measured";
 import { RULEBOOK } from "../engine/rulebook";
 import { countTo } from "./count";
 
@@ -14,26 +16,8 @@ export const RULE_COPY = Object.fromEntries(Object.entries(RULEBOOK).map(([id, e
 
 export const STATE_WORDS: Record<LineState, string> = { golden: "on the mark", neutral: "fine", advice: "advice" };
 
-export function measuredCopy(line: AdviceLine, bins: Bins): string {
-  switch (line.rule) {
-    case "volume":
-      return bins.fit ? `Upper piece ${bins.fit.top.toFixed(2)}× the shoulder width at mid-torso; both legs ${bins.fit.legs.toFixed(2)}× at the knee.` : "Volume was not measured.";
-    case "legline":
-      return "Lightness of the lower piece against the shoes.";
-    case "proportion":
-      return bins.proportion === null
-        ? "Upper and lower pieces measure as one colour, head to feet."
-        : `The break sits at ${bins.proportion.toFixed(2)} of the height, head to feet.`;
-    case "harmony":
-      return `${bins.palette.length} colours in the outfit: ${bins.palette.map(colourLabel).join(", ")}.`;
-    case "value":
-      return `Lightness of each colour: ${bins.palette.map((p) => p.L.toFixed(2)).join(", ")}.`;
-    case "shares":
-      return `Share of the outfit's area: ${bins.palette.map((p) => p.share.toFixed(2)).join(", ")}.`;
-    case "chroma":
-      return `Chroma of each colour: ${bins.palette.map((p) => p.C.toFixed(2)).join(", ")}.`;
-  }
-}
+/** The Measured line of each rule lives in the engine, beside the rules it quotes. */
+export { measuredCopy };
 
 export function para(label: string, text: string): HTMLParagraphElement {
   const p = document.createElement("p");
@@ -43,15 +27,20 @@ export function para(label: string, text: string): HTMLParagraphElement {
   return p;
 }
 
-const lchCss = ({ L, C, h }: { L: number; C: number; h: number }) => `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h})`;
+const lchCss = (c: { L: number; C: number; h: number }) => {
+  const { L, C, h } = shownColour(c);
+  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${h})`;
+};
 
 /** A palette as a strip, each colour as wide as its share. The photo's own colours carry it. */
 export function paletteStrip(bins: Bins, label = "The outfit's palette"): HTMLElement {
   const strip = document.createElement("div");
   strip.className = "palette";
   strip.setAttribute("role", "img");
-  strip.setAttribute("aria-label", `${label}: ${bins.palette.map((p) => `${colourLabel(p)} ${Math.round(p.share * 100)}%`).join(", ")}`);
-  for (const sw of bins.palette) {
+  // One name, one entry: two greys are one grey with their shares summed.
+  const named = byName(bins.palette);
+  strip.setAttribute("aria-label", `${label}: ${named.map((p) => `${colourLabel(p)} ${p.share.toFixed(2)}`).join(", ")}`);
+  for (const sw of named) {
     const chip = document.createElement("span");
     chip.style.flexGrow = String(sw.share);
     chip.style.background = lchCss(sw);

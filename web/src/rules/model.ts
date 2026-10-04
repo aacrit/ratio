@@ -7,6 +7,7 @@
 import { FIT_TOLERANCE, TEMPLATES, fitTemplate } from "../engine/colour-rules";
 import { hueGap } from "../engine/color";
 import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, SATURATED_CHROMA, SHARES_REFERENCE, isNeutral, nearEdge } from "../engine/constants";
+import { byName } from "../engine/names";
 import { pieces } from "../engine/pieces";
 import type { RuleId } from "../engine/rulebook";
 import { type Bins, PROPORTION_BANDS, PROPORTION_BIN, type ProportionBand } from "../engine/rules";
@@ -215,6 +216,10 @@ export interface YoursValues {
 /** Every instrument's marker for a set of bins, measured the way the engine measures it. */
 export function yoursValues(b: Bins): YoursValues {
   const p = pieces(b.palette, b.waist, { top: b.top, bottom: b.bottom });
+  // As the engine reads them: harmony, shares and chroma over one entry per
+  // colour name (names.ts byName); value and the leg line over each colour's
+  // own lightness.
+  const named = byName(b.palette);
   const ls = b.palette.filter((s) => s.share >= 0.05).map((s) => s.L);
   const fix = (v: number) => Number(v.toFixed(2));
   return {
@@ -223,9 +228,9 @@ export function yoursValues(b: Bins): YoursValues {
     volumeLegs: b.fit ? b.fit.legs : null,
     legline: p.lower >= 0 && p.shoes >= 0 ? { lower: b.palette[p.lower].L, shoes: b.palette[p.shoes].L, gap: fix(Math.abs(b.palette[p.lower].L - b.palette[p.shoes].L)) } : null,
     value: ls.length ? { ls, range: fix(Math.max(...ls) - Math.min(...ls)) } : null,
-    shares: b.palette.map(({ share, L, C, h }) => ({ share, L, C, h })),
-    chroma: b.palette.map(({ L, C, h }) => ({ L, C, h, neutral: isNeutral({ L, C }) })),
-    harmony: harmonyFit(b.palette),
+    shares: named.map(({ share, L, C, h }) => ({ share, L, C, h })),
+    chroma: named.map(({ L, C, h }) => ({ L, C, h, neutral: isNeutral({ L, C }) })),
+    harmony: harmonyFit(named),
   };
 }
 

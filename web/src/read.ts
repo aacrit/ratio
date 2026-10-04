@@ -10,6 +10,7 @@
 import { readingHash } from "./engine/hash";
 import { type Mask, type MeasureFailure, type OutfitMeasure, measureOutfit } from "./engine/measure";
 import { extractPalette, type Swatch } from "./engine/palette";
+import { type Side, isolatePerson } from "./engine/person";
 import { downsample, type Pixels } from "./engine/resample";
 import { type OutfitReading, readOutfit } from "./engine/rules";
 import { decode, see } from "./vision";
@@ -22,8 +23,18 @@ export interface Read {
   pixels: Pixels;
   /** The photo at display size, for the stage and the card. */
   display: Pixels;
-  /** The segmenter's categories, kept in the tab for "try it" (never sent anywhere). */
+  /** The segmenter's categories for the read person only (engine/person.ts), kept in the tab for "try it" (never sent anywhere). */
   mask: Mask;
+  /** The segmenter's categories for everyone in the photo, for the recolour's honesty check. */
+  fullMask: Mask;
+  /** Other sizeable people in the photo, and where the read person stands among them. */
+  others: number;
+  side: Side | null;
+  /** Where the read person stands among the others, and whether they have their third of the frame to themselves (engine/person.ts). */
+  order: Side | null;
+  ownThird: boolean;
+  /** True when the pose could not single out the person in the mask (docs/RISKS.md). */
+  unsure: boolean;
   measure: OutfitMeasure;
   palette: Swatch[];
   reading: OutfitReading;
@@ -62,10 +73,12 @@ export async function readPhoto(file: Blob, hooks: ReadHooks = {}): Promise<Read
     return "models_failed";
   }
   if (seen.mask.width !== pixels.width || seen.mask.height !== pixels.height) return "models_failed";
-  const measure = measureOutfit(pixels, seen.mask, seen.pose);
+  // The read person only: no one else's pixels enter the measure, the palette or a recolour.
+  const person = isolatePerson(seen.mask, seen.pose);
+  const measure = measureOutfit(pixels, person.mask, seen.pose);
   if (typeof measure === "string") return measure;
-  const palette = extractPalette(pixels, seen.mask, measure);
+  const palette = extractPalette(pixels, person.mask, measure);
   const reading = readOutfit(measure, palette);
   const hash = await readingHash({ engine: reading.engine, bins: reading.bins });
-  return { pixels, display, mask: seen.mask, measure, palette, reading, hash };
+  return { pixels, display, mask: person.mask, fullMask: seen.mask, others: person.others, side: person.side, order: person.order, ownThird: person.ownThird, unsure: person.unsure, measure, palette, reading, hash };
 }

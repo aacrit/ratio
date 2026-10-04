@@ -8,13 +8,14 @@ import type { Move } from "./engine/looks";
 import type { Swatch } from "./engine/palette";
 import type { Pixels } from "./engine/resample";
 import type { Read, ReadFailure } from "./read";
-import type { Bands, Box } from "./tryon/recolour";
+import { type Bands, type Box, type PhotoPlan, refuseAll } from "./tryon/recolour";
 import ReadWorker from "./read.worker?worker";
 
 export type ToWorker =
   | { type: "load" }
   | { type: "read"; id: number; file: Blob }
-  | { type: "recolour"; id: number; pixels: Pixels; mask: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[] };
+  | { type: "recolour"; id: number; pixels: Pixels; mask: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[]; avoid: number[] }
+  | { type: "plan"; id: number; pixels: Pixels; full: Mask; person: Mask; box: Box; bands: Bands; swatches: Swatch[]; moves: Move[] };
 
 export type FromWorker =
   | { type: "progress"; loaded: number; total: number }
@@ -23,7 +24,8 @@ export type FromWorker =
   | { type: "photo"; id: number; display: Pixels }
   | { type: "read"; id: number; read: Read }
   | { type: "failed"; id: number; failure: ReadFailure; copy: string | null }
-  | { type: "recoloured"; id: number; pixels: Pixels };
+  | { type: "recoloured"; id: number; pixels: Pixels }
+  | { type: "plan"; id: number; plan: PhotoPlan };
 
 export type Progress = (loaded: number, total: number) => void;
 
@@ -76,7 +78,8 @@ export class Reader {
         return;
       case "read":
       case "failed":
-      case "recoloured": {
+      case "recoloured":
+      case "plan": {
         const w = this.waiting.get(msg.id);
         this.waiting.delete(msg.id);
         w?.resolve(msg);
@@ -117,15 +120,28 @@ export class Reader {
   }
 
   /** A recoloured copy of the display photo, computed off the page's thread. The buffers are copied, so the caller keeps its own. */
-  async recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[]): Promise<Pixels> {
+  async recolour(pixels: Pixels, mask: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[], avoid: number[] = []): Promise<Pixels> {
     const id = this.next++;
     const reply = await new Promise<FromWorker>((resolve) => {
       this.waiting.set(id, { resolve });
       const data = new Uint8ClampedArray(pixels.data);
       const maskData = new Uint8Array(mask.data);
-      this.ensure().postMessage({ type: "recolour", id, pixels: { width: pixels.width, height: pixels.height, data }, mask: { width: mask.width, height: mask.height, data: maskData }, box, bands, swatches, moves } satisfies ToWorker, [data.buffer, maskData.buffer]);
+      this.ensure().postMessage({ type: "recolour", id, pixels: { width: pixels.width, height: pixels.height, data }, mask: { width: mask.width, height: mask.height, data: maskData }, box, bands, swatches, moves, avoid } satisfies ToWorker, [data.buffer, maskData.buffer]);
     });
     if (reply.type !== "recoloured") throw new Error("recolour failed");
     return reply.pixels;
+  }
+
+  /** Which of a look's colour moves the photo can show honestly (tryon/recolour.ts photoPlan), judged in the worker at reading size. Any failure refuses them all. */
+  async plan(pixels: Pixels, full: Mask, person: Mask, box: Box, bands: Bands, swatches: Swatch[], moves: Move[]): Promise<PhotoPlan> {
+    const id = this.next++;
+    const reply = await new Promise<FromWorker>((resolve) => {
+      this.waiting.set(id, { resolve });
+      const copy = (m: Mask): Mask => ({ width: m.width, height: m.height, data: new Uint8Array(m.data) });
+      const p: Pixels = { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data) };
+      const f = copy(full), o = copy(person);
+      this.ensure().postMessage({ type: "plan", id, pixels: p, full: f, person: o, box, bands, swatches, moves } satisfies ToWorker, [p.data.buffer, f.data.buffer, o.data.buffer]);
+    });
+    return reply.type === "plan" ? reply.plan : refuseAll(moves);
   }
 }
