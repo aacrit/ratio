@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="G2 mock: the Style Card surface: the wardrobe of kept reads and the card drawn from them, on Paper, with the paid and free paths." />
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="./frame.css" />
+    <title>Ratio: Card</title>
+    <style>
+      /* The card on the stage: always Paper, whatever the screen theme. */
+      .card-well {
+        position: relative;
+        padding: 20px var(--gutter) 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+      }
+      @media (min-width: 1024px) {
+        .card-well {
+          padding: 28px 32px 24px;
+        }
+      }
+      .style-card {
+        --p: var(--card-paper);
+        --ink: var(--card-ink);
+        --mu: var(--card-muted);
+        --rule: var(--card-rule);
+        --tp: var(--card-tape);
+        --sec: var(--card-section);
+        width: min(100%, 420px);
+        aspect-ratio: 1 / 1.618;
+        max-height: calc(100dvh - var(--bar-h) - 56px);
+        background: var(--p);
+        color: var(--ink);
+        box-shadow: var(--shadow-photo);
+        border-radius: 3px;
+        padding: 6.5% 7%;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 14px;
+        container-type: inline-size;
+        font-size: clamp(10px, 2.9cqw, 13px);
+        line-height: 1.45;
+      }
+      @media (min-width: 1024px) {
+        .style-card {
+          width: min(100%, 460px);
+        }
+      }
+      .sc-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 10px;
+      }
+      .sc-name {
+        font-family: var(--font-display);
+        font-variation-settings: var(--display-settings);
+        font-size: 2.6em;
+        line-height: 1;
+      }
+      .sc-eyebrow {
+        font: 500 0.72em var(--font-data);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--mu);
+      }
+      .sc-body {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+      .sc-row {
+        display: grid;
+        grid-template-columns: 7.5em 1fr;
+        gap: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--rule);
+      }
+      .sc-row:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+      .sc-row h3 {
+        font-family: var(--font-structure);
+        font-weight: 600;
+        font-size: 1em;
+      }
+      .sc-row .n {
+        font-family: var(--font-data);
+        font-variant-numeric: tabular-nums;
+        color: var(--tp);
+        font-size: 0.95em;
+      }
+      .sc-row .n.sec {
+        color: var(--sec);
+      }
+      .sc-row p {
+        font-size: 0.95em;
+      }
+      .sc-figs {
+        display: flex;
+        gap: 10px;
+        align-items: end;
+      }
+      .sc-figs figure {
+        margin: 0;
+        display: grid;
+        gap: 2px;
+        justify-items: center;
+        width: 3.6em;
+      }
+      .sc-figs svg {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .sc-figs figcaption {
+        font: 500 0.78em var(--font-data);
+        font-variant-numeric: tabular-nums;
+        color: var(--sec);
+      }
+      .sc-figs .chalk path,
+      .sc-figs .chalk circle {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .sc-figs .brk {
+        stroke: var(--tp);
+        stroke-width: 3;
+      }
+      .sc-swatches {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+      }
+      .sc-swatches span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.9em;
+      }
+      .sc-swatches i {
+        width: 1.3em;
+        height: 1.3em;
+        border-radius: 3px;
+        border: 1px solid var(--rule);
+      }
+      .sc-palette {
+        display: flex;
+        height: 1.4em;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .sc-palette span {
+        flex-grow: var(--share, 1);
+      }
+      .sc-foot {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        border-top: 1px solid var(--rule);
+        padding-top: 8px;
+        font: 500 0.78em var(--font-data);
+        font-variant-numeric: tabular-nums;
+        color: var(--mu);
+      }
+      /* Fewer than 3 reads: the card's outline, waiting. */
+      .ghost-card {
+        width: min(100%, 420px);
+        aspect-ratio: 1 / 1.618;
+        max-height: calc(100dvh - var(--bar-h) - 56px);
+        border: 1px dashed var(--color-cream-muted);
+        border-radius: 3px;
+        display: grid;
+        place-content: center;
+        gap: 8px;
+        text-align: center;
+        padding: 24px;
+      }
+      .ghost-card h2 {
+        font-size: 1.3rem;
+        max-width: 18ch;
+      }
+      .ghost-card p {
+        color: var(--color-cream-muted);
+        font-size: 0.9rem;
+        max-width: 32ch;
+      }
+
+      /* The wardrobe in the sheet. */
+      .wardrobe {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .kept {
+        display: grid;
+        grid-template-columns: 56px 1fr auto;
+        gap: 12px;
+        align-items: center;
+      }
+      .kept .chalk-figure {
+        width: 56px;
+      }
+      .kept-text {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+      }
+      .kept-title {
+        font-family: var(--font-display);
+        font-variation-settings: var(--display-settings);
+        font-size: 1.02rem;
+        line-height: 1.25;
+      }
+      .kept-meta {
+        font-size: 0.78rem;
+        color: var(--color-cream-muted);
+      }
+      .kept-meta [data-ratio] {
+        color: var(--color-section);
+      }
+      .kept .palette {
+        height: 8px;
+        max-width: 160px;
+      }
+      .kept button {
+        min-height: 36px;
+        padding: 0 10px;
+        font-size: 0.8rem;
+      }
+      .offer {
+        display: grid;
+        gap: 10px;
+        justify-items: start;
+      }
+      .offer p {
+        max-width: 48ch;
+        font-size: 0.92rem;
+      }
+      .offer .price {
+        font-family: var(--font-display);
+        font-variation-settings: var(--display-settings);
+        font-size: 1.3rem;
+        line-height: 1.3;
+      }
+      .offer .price [data-numeral] {
+        color: var(--color-tape);
+      }
+      .offer .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .offer .fine {
+        font-size: 0.82rem;
+        color: var(--color-cream-muted);
+      }
+      .state-line {
+        font-size: 0.9rem;
+        max-width: 48ch;
+      }
+
+      /* Mock states: fewer than 3, ready (default), paid, printed, error. */
+      body[data-state="few"] [data-when]:not([data-when~="few"]),
+      body[data-state="ready"] [data-when]:not([data-when~="ready"]),
+      body[data-state="paid"] [data-when]:not([data-when~="paid"]),
+      body[data-state="printed"] [data-when]:not([data-when~="printed"]),
+      body[data-state="error"] [data-when]:not([data-when~="error"]) {
+        display: none;
+      }
+      body[data-state="few"] .kept[data-third] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body class="app" data-state="ready">
+    <header class="bar">
+      <a class="brand" href="./read.html" aria-label="Ratio, home">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="2" />
+          <g class="mark-plumb">
+            <line x1="12" y1="2" x2="12" y2="14.36" />
+            <circle cx="12" cy="14.36" r="1.7" />
+          </g>
+        </svg>
+        <span class="brand-name">Ratio</span>
+        <span class="brand-eyebrow">reason and proportion</span>
+      </a>
+      <nav class="tabs" aria-label="Surfaces">
+        <a class="tab" href="./read.html">Read</a>
+        <a class="tab" href="./face.html">Face</a>
+        <a class="tab" href="./rules.html">Rules</a>
+        <a class="tab" href="./card.html" aria-current="page">Card</a>
+      </nav>
+      <div class="bar-actions"></div>
+    </header>
+
+    <main class="stage" aria-label="The stage">
+      <div class="stage-light" aria-hidden="true"></div>
+      <div class="card-well">
+        <div class="ghost-card" data-when="few">
+          <h2>The card needs 3 to 5 reads.</h2>
+          <p>2 kept. Read another outfit and keep it, and the card is drawn here.</p>
+        </div>
+        <article class="style-card" data-when="ready paid printed error" aria-label="The Style Card, a preview on paper">
+          <header class="sc-head">
+            <div>
+              <p class="sc-name">Ratio</p>
+              <p class="sc-eyebrow">Style card</p>
+            </div>
+            <p class="sc-eyebrow">3 reads · <span data-numeral>2026-10-04</span></p>
+          </header>
+          <div class="sc-body">
+            <section class="sc-row">
+              <h3>Your break</h3>
+              <div>
+                <div class="sc-figs" aria-label="The three reads' chalk figures with their breaks">
+                  <figure><svg viewBox="0 0 100 150" aria-hidden="true"><g class="chalk"><circle cx="50" cy="16" r="10" /><path d="M36 32 L64 32 L70 44 L68 70 L66 136 L34 136 L32 70 L30 44 Z" /></g><path d="M22 92 H78" class="brk" /></svg><figcaption>0.64</figcaption></figure>
+                  <figure><svg viewBox="0 0 100 150" aria-hidden="true"><g class="chalk"><circle cx="50" cy="16" r="10" /><path d="M36 32 L64 32 L70 44 L68 70 L66 136 L34 136 L32 70 L30 44 Z" /></g><path d="M22 92 H78" class="brk" /></svg><figcaption>0.64</figcaption></figure>
+                  <figure><svg viewBox="0 0 100 150" aria-hidden="true"><g class="chalk"><circle cx="50" cy="16" r="10" /><path d="M36 32 L64 32 L70 44 L68 70 L66 136 L34 136 L32 70 L30 44 Z" /></g><path d="M22 89 H78" class="brk" /></svg><figcaption>0.62</figcaption></figure>
+                </div>
+                <p>Near the golden section from below (<span class="n sec">0.618</span>) in 3 of 3 reads. A long upper piece over a short lower one is your division; keep the lower block narrow.</p>
+              </div>
+            </section>
+            <section class="sc-row">
+              <h3>Volume</h3>
+              <p>Loose over narrow in 2 of 3, straight over narrow in 1. One full piece over a narrow leg is the pairing that holds. <span class="n">1.45× · 0.55×</span></p>
+            </section>
+            <section class="sc-row">
+              <h3>Colour families that fit</h3>
+              <div>
+                <div class="sc-swatches">
+                  <span><i style="background: oklch(0.3 0.07 255)"></i>navy (255°)</span>
+                  <span><i style="background: oklch(0.36 0.11 25)"></i>oxblood (25°)</span>
+                  <span><i style="background: oklch(0.45 0.06 250)"></i>denim (250°)</span>
+                  <span><i style="background: oklch(0.4 0.005 0)"></i>charcoal</span>
+                </div>
+                <p>The lower pieces and accents the rules preferred in your looks: a cool lower piece under a warm neutral, with one saturated accent.</p>
+              </div>
+            </section>
+            <section class="sc-row">
+              <h3>Contrast level</h3>
+              <p>High. Light over dark in every read, the weight low and the figure grounded. <span class="n">range 0.74 · 0.70 · 0.66</span></p>
+            </section>
+            <section class="sc-row">
+              <h3>Your palette</h3>
+              <div>
+                <div class="sc-palette" role="img" aria-label="Your palette: cream, black, charcoal, navy, oxblood">
+                  <span style="--share: 0.35; background: oklch(0.93 0.03 105)"></span>
+                  <span style="--share: 0.25; background: oklch(0.19 0 0)"></span>
+                  <span style="--share: 0.15; background: oklch(0.4 0.005 0)"></span>
+                  <span style="--share: 0.15; background: oklch(0.3 0.07 255)"></span>
+                  <span style="--share: 0.1; background: oklch(0.36 0.11 25)"></span>
+                </div>
+                <p>cream (105°), black, charcoal, navy (255°), oxblood (25°). What recurs across your reads, by area.</p>
+              </div>
+            </section>
+          </div>
+          <footer class="sc-foot">
+            <span>12eb · 89f0 · 3c7a · ratio-engine/0.4.0</span>
+            <span>ratio.voidvision.org · made in the tab</span>
+          </footer>
+        </article>
+      </div>
+      <div class="stage-foot">
+        <p class="read-status muted" data-when="ready">A preview at screen size. The download is the same card at print size.</p>
+      </div>
+    </main>
+
+    <aside class="sheet" aria-label="The wardrobe and the card">
+      <button class="grip" type="button" aria-label="Collapse the panel" aria-expanded="true"><span class="grip-bar"></span></button>
+      <div class="sheet-body">
+        <header class="sheet-head">
+          <div class="hero-row">
+            <p class="hero"><span class="hero-n" data-numeral data-when="ready paid printed error">3</span><span class="hero-n" data-numeral data-when="few">2</span></p>
+            <p class="eyebrow" data-when="ready paid printed error">reads kept, enough for a card</p>
+            <p class="eyebrow" data-when="few">reads kept, one more for a card</p>
+          </div>
+          <p class="verdict" data-when="ready paid printed error">The card is what repeats across your reads: the break, the volumes, the colour families, the contrast.</p>
+          <p class="verdict" data-when="few">Keep one more read and the card can be drawn.</p>
+        </header>
+
+        <section aria-labelledby="wardrobe-title">
+          <h2 id="wardrobe-title" class="eyebrow section-title">Your wardrobe · this browser only</h2>
+          <ol class="wardrobe">
+            <li class="card kept">
+              <svg viewBox="0 0 236 440" class="chalk-figure" role="img" aria-label="Chalk figure: cream upper and lower pieces, the break at 0.64">
+                <g transform="translate(36 0)">
+                  <path d="M54 277 L146 277 L142 410 L106 410 L100 323 L94 410 L58 410 Z" fill="oklch(0.93 0.03 105)" class="garment" />
+                  <path d="M93 76 Q100 80 107 76 L140 86 L152 98 L147 152 L136 149 L152 277 L48 277 L64 149 L53 152 L48 98 L60 86 Z" fill="oklch(0.93 0.03 105)" class="garment" />
+                  <g class="chalk"><circle cx="100" cy="44" r="22" /><path d="M93 65 V76 M107 65 V76 M50 102 L44 232 M150 102 L156 232 M50 415 H94 M106 415 H150" /></g>
+                  <g class="fig-tape"><path d="M24 22 V420 M17 22 H24 M17 221 H24 M17 420 H24" /></g>
+                  <path d="M24 268 H34" class="fig-section on" />
+                  <path d="M24 277 H170" class="fig-break" />
+                </g>
+              </svg>
+              <div class="kept-text">
+                <p class="kept-title">As worn</p>
+                <p class="kept-meta"><span data-ratio>0.64 : 0.36</span> · <span data-numeral>12eb · 2026-10-04</span></p>
+                <div class="palette" aria-hidden="true"><span style="--share: 0.25; background: oklch(0.93 0.03 105)"></span><span style="--share: 0.25; background: oklch(0.19 0 0)"></span><span style="--share: 0.2; background: oklch(0.78 0.02 105)"></span><span style="--share: 0.15; background: oklch(0.4 0.005 0)"></span><span style="--share: 0.15; background: oklch(0.7 0.01 60)"></span></div>
+              </div>
+              <button class="btn ghost" type="button" aria-label="Delete this read from the wardrobe">Delete</button>
+            </li>
+            <li class="card kept">
+              <svg viewBox="0 0 236 440" class="chalk-figure" role="img" aria-label="Chalk figure: cream upper piece, navy lower piece, oxblood shoes, the break at 0.64">
+                <g transform="translate(36 0)">
+                  <path d="M54 277 L146 277 L142 410 L106 410 L100 323 L94 410 L58 410 Z" fill="oklch(0.3 0.07 255)" class="garment" />
+                  <path d="M93 76 Q100 80 107 76 L140 86 L152 98 L147 152 L136 149 L152 277 L48 277 L64 149 L53 152 L48 98 L60 86 Z" fill="oklch(0.93 0.03 105)" class="garment" />
+                  <rect x="50" y="410" width="44" height="10" rx="5" fill="oklch(0.36 0.11 25)" class="garment" /><rect x="106" y="410" width="44" height="10" rx="5" fill="oklch(0.36 0.11 25)" class="garment" />
+                  <g class="chalk"><circle cx="100" cy="44" r="22" /><path d="M93 65 V76 M107 65 V76 M50 102 L44 232 M150 102 L156 232" /></g>
+                  <g class="fig-tape"><path d="M24 22 V420 M17 22 H24 M17 221 H24 M17 420 H24" /></g>
+                  <path d="M24 268 H34" class="fig-section on" />
+                  <path d="M24 277 H170" class="fig-break" />
+                </g>
+              </svg>
+              <div class="kept-text">
+                <p class="kept-title">Lower piece in navy (255°) + Shoes in oxblood (25°)</p>
+                <p class="kept-meta"><span data-ratio>0.64 : 0.36</span> · <span data-numeral>89f0 · 2026-10-04</span></p>
+                <div class="palette" aria-hidden="true"><span style="--share: 0.25; background: oklch(0.93 0.03 105)"></span><span style="--share: 0.25; background: oklch(0.19 0 0)"></span><span style="--share: 0.2; background: oklch(0.78 0.02 105)"></span><span style="--share: 0.15; background: oklch(0.4 0.005 0)"></span><span style="--share: 0.1; background: oklch(0.3 0.07 255)"></span><span style="--share: 0.05; background: oklch(0.36 0.11 25)"></span></div>
+              </div>
+              <button class="btn ghost" type="button" aria-label="Delete this read from the wardrobe">Delete</button>
+            </li>
+            <li class="card kept" data-third>
+              <svg viewBox="0 0 236 440" class="chalk-figure" role="img" aria-label="Chalk figure: camel upper piece, black lower piece, black shoes, the break at 0.62">
+                <g transform="translate(36 0)">
+                  <path d="M54 269 L146 269 L142 410 L106 410 L100 315 L94 410 L58 410 Z" fill="oklch(0.19 0 0)" class="garment" />
+                  <path d="M93 76 Q100 80 107 76 L140 86 L152 98 L147 152 L136 149 L152 269 L48 269 L64 149 L53 152 L48 98 L60 86 Z" fill="oklch(0.6 0.08 70)" class="garment" />
+                  <rect x="50" y="410" width="44" height="10" rx="5" fill="oklch(0.19 0 0)" class="garment" /><rect x="106" y="410" width="44" height="10" rx="5" fill="oklch(0.19 0 0)" class="garment" />
+                  <g class="chalk"><circle cx="100" cy="44" r="22" /><path d="M93 65 V76 M107 65 V76 M50 102 L44 232 M150 102 L156 232" /></g>
+                  <g class="fig-tape"><path d="M24 22 V420 M17 22 H24 M17 221 H24 M17 420 H24" /></g>
+                  <path d="M24 268 H34" class="fig-section on" />
+                  <path d="M24 269 H170" class="fig-break" />
+                </g>
+              </svg>
+              <div class="kept-text">
+                <p class="kept-title">As worn</p>
+                <p class="kept-meta"><span data-ratio>0.62 : 0.38</span> · <span data-numeral>3c7a · 2026-10-02</span></p>
+                <div class="palette" aria-hidden="true"><span style="--share: 0.6; background: oklch(0.6 0.08 70)"></span><span style="--share: 0.3; background: oklch(0.19 0 0)"></span><span style="--share: 0.1; background: oklch(0.93 0.02 105)"></span></div>
+              </div>
+              <button class="btn ghost" type="button" aria-label="Delete this read from the wardrobe">Delete</button>
+            </li>
+          </ol>
+          <p class="state-line muted" style="margin-top: 10px">Each kept read is the reading and its chalk figure, never the photo. Up to 5; the oldest is replaced after that. <a href="./read.html">Read another and keep it</a>.</p>
+        </section>
+
+        <section class="offer" aria-labelledby="offer-title">
+          <h2 id="offer-title" class="eyebrow section-title">The Style Card</h2>
+          <p>One page of what repeats across your reads, on paper: your break, your volumes, the colour families that fit, your contrast level, your palette. Every rule in it is free in single reads and on Rules; the card is the pattern, not new advice.</p>
+          <p class="price" data-when="ready error"><span data-numeral>$12</span>, once. Drawn in this tab; the photos never leave it.</p>
+          <p class="state-line" data-when="error">The payment did not complete, and nothing was charged. Try again, or save a free single-read card from Read.</p>
+          <div class="actions" data-when="ready error">
+            <button class="btn" type="button">Get the Style Card, $12</button>
+            <a class="btn ghost" href="./read.html">Save a free single-read card</a>
+          </div>
+          <p class="fine" data-when="ready error">Paid through Polar. The licence is a signed token kept in this browser, so the download works here without an account. Single-read cards stay free: Save as card under any read.</p>
+          <p class="price" data-when="paid">Paid. The card is yours to download.</p>
+          <div class="actions" data-when="paid">
+            <button class="btn" type="button">Download for print</button>
+          </div>
+          <p class="fine" data-when="paid"><span data-numeral>2400 × 3883</span> px at <span data-numeral>300</span> dpi: <span data-numeral>8 × 13</span> in, or A4 with margins. Download again any time from this browser.</p>
+          <p class="price" data-when="printed">Downloaded <span data-numeral>ratio-style-card-12eb.png</span>.</p>
+          <p class="fine" data-when="printed">Print it at <span data-numeral>8 × 13</span> in, or A4 with margins. Download again any time from this browser; keep more reads and the card redraws.</p>
+          <p class="state-line" data-when="few">The card is drawn from 3 to 5 reads. Keep one more from Read.</p>
+          <div class="actions" data-when="few">
+            <a class="btn" href="./read.html">Read another</a>
+          </div>
+        </section>
+
+        <footer class="sheet-foot">
+          <span>A voidvision production</span>
+          <a href="../../web/privacy.html">Privacy</a>
+        </footer>
+      </div>
+    </aside>
+
+    <details class="mock-states">
+      <summary>Mock state: ready</summary>
+      <div>
+        <button type="button" data-set="few">fewer than 3 reads</button>
+        <button type="button" data-set="ready">ready</button>
+        <button type="button" data-set="paid">paid</button>
+        <button type="button" data-set="printed">printed</button>
+        <button type="button" data-set="error">payment failed</button>
+      </div>
+    </details>
+    <script>
+      // Mock only: switch the surface's state for review.
+      document.querySelectorAll("[data-set]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          document.body.dataset.state = b.dataset.set;
+          document.querySelector(".mock-states summary").textContent = "Mock state: " + b.dataset.set;
+          document.querySelector(".mock-states").open = false;
+        });
+      });
+    </script>
+  </body>
+</html>

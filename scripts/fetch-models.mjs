@@ -55,6 +55,15 @@ export const SAMPLES = {
     url: "https://upload.wikimedia.org/wikipedia/commons/e/ed/Jacques-Louis_David_-_Napoleon_in_his_Study_-_WGA6093.jpg",
     sha256: "2443631a3bd6ba673be324419f7b5ccee52f62cdb4d85679c6454a3f92c44c18",
   },
+  // The Face sample (G2 design, 2026-10-04): a head-and-shoulders portrait
+  // of an adult, strictly frontal, hair in the frame. Albrecht Dürer,
+  // Self-portrait at Twenty-eight (1500), Alte Pinakothek, Munich; public
+  // domain, via Wikimedia Commons. Dürer also wrote the Four Books on Human
+  // Proportion, which the Face rules cite.
+  "durer.jpg": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/4/40/D%C3%BCrer_Alte_Pinakothek.jpg",
+    sha256: "eab6254406255942c6ebbf2daac033a845c13e6eb8eddcc66fb6e2858bf4eb8f",
+  },
 };
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");

@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="G2 mock: the Rulebook, every rule as a card with a live instrument, its edges, maths and sources, with the visitor's last read marked." />
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="./frame.css" />
+    <title>Ratio: Rules</title>
+    <style>
+      body.app {
+        grid-template-rows: var(--bar-h) 1fr;
+        height: auto;
+        overflow: visible;
+      }
+      @media (min-width: 1024px) {
+        body.app {
+          grid-template-columns: 1fr;
+          height: auto;
+          overflow: visible;
+        }
+      }
+      .page {
+        width: min(100%, 960px);
+        margin: 0 auto;
+        padding: 28px var(--gutter) 80px;
+        display: grid;
+        gap: 20px;
+      }
+      @media (min-width: 768px) {
+        .page {
+          padding: 40px 24px 96px;
+          gap: 24px;
+        }
+      }
+      .page-head {
+        display: grid;
+        gap: 10px;
+        padding-bottom: 8px;
+      }
+      .page-head h1 {
+        font-size: clamp(1.7rem, 4.6vw, 2.4rem);
+        line-height: 1.12;
+        letter-spacing: -0.012em;
+        max-width: 22ch;
+      }
+      .page-head .lede {
+        color: var(--color-cream-muted);
+        max-width: 56ch;
+        font-size: 0.95rem;
+      }
+      /* The last read, marked on every instrument. */
+      .yours-chip {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 12px;
+        padding: 8px 12px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-card);
+        font-size: 0.86rem;
+        width: fit-content;
+      }
+      .yours-chip .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--color-section);
+        flex: none;
+      }
+      .yours-chip [data-numeral] {
+        color: var(--color-cream-muted);
+        font-size: 0.8rem;
+      }
+      .yours-chip button {
+        min-height: 28px;
+        padding: 0 8px;
+        font-size: 0.78rem;
+      }
+
+      /* A rule card: the instrument beside the words. */
+      .rule {
+        display: grid;
+        gap: 16px;
+        padding: 18px 16px 16px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-card);
+      }
+      @media (min-width: 768px) {
+        .rule {
+          grid-template-columns: 256px 1fr;
+          column-gap: 28px;
+          padding: 22px 24px 20px;
+        }
+        .rule.hero {
+          grid-template-columns: 320px 1fr;
+        }
+        .rule .instrument {
+          grid-row: 1 / 3;
+        }
+      }
+      .rule-text {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        min-width: 0;
+      }
+      .rule-eyebrow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+      }
+      .rule-eyebrow .uncal {
+        color: var(--color-borderline);
+      }
+      .rule h2 {
+        font-size: clamp(1.15rem, 2.6vw, 1.35rem);
+        line-height: 1.3;
+        max-width: 38ch;
+      }
+      .yours {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 10px;
+        font-size: 0.88rem;
+      }
+      .yours b {
+        font: 500 0.68rem var(--font-data);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-cream-muted);
+      }
+      .yours [data-ratio] {
+        color: var(--color-tape);
+      }
+      .yours[data-state="golden"] [data-ratio],
+      .yours[data-state="golden"] .state {
+        color: var(--color-section);
+      }
+      .yours[data-state="borderline"] [data-ratio],
+      .yours[data-state="borderline"] .state {
+        color: var(--color-borderline);
+      }
+      .yours .state {
+        font: 500 0.68rem var(--font-data);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-cream-muted);
+      }
+      .drill {
+        border-top: 1px solid var(--color-border);
+        margin-top: 4px;
+      }
+      .drill summary {
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 44px;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+      .drill summary::-webkit-details-marker {
+        display: none;
+      }
+      .drill summary::after {
+        content: "+";
+        font: 400 1.2rem var(--font-data);
+        color: var(--color-cream-muted);
+      }
+      .drill[open] summary::after {
+        content: "\2212";
+      }
+      .drill-body {
+        display: grid;
+        gap: 10px;
+        padding-bottom: 8px;
+      }
+      .drill-body p,
+      .drill-body dd,
+      .drill-body li {
+        font-size: 0.9rem;
+        max-width: var(--measure-reading);
+      }
+      .drill-body b {
+        display: block;
+        font: 500 0.68rem var(--font-data);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--color-cream-muted);
+        margin-bottom: 4px;
+      }
+      .edges {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 16px;
+      }
+      .edges dt {
+        font-size: 0.88rem;
+        color: var(--color-cream-muted);
+      }
+      .edges dd {
+        margin: 0;
+        color: var(--color-tape);
+        font-size: 0.86rem;
+      }
+      .sources {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 4px;
+      }
+
+      /* Instruments: chalk on the lining, the tape for scales and handles,
+         verdigris for the mark and for "yours", red chalk for borderline. */
+      .instrument {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: auto;
+        background: var(--color-surface-raised);
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        touch-action: none;
+        user-select: none;
+      }
+      .instrument .chalk {
+        fill: none;
+        stroke: var(--color-cream);
+        stroke-width: 1.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .instrument .faint {
+        fill: none;
+        stroke: var(--color-cream-muted);
+        stroke-width: 1;
+        stroke-linecap: round;
+      }
+      .instrument .tape {
+        fill: none;
+        stroke: var(--color-tape);
+        stroke-width: 1.4;
+        stroke-linecap: round;
+      }
+      .instrument .handle {
+        fill: var(--color-tape);
+        stroke: var(--color-surface-raised);
+        stroke-width: 2;
+        cursor: grab;
+      }
+      .instrument .mark {
+        fill: none;
+        stroke: var(--color-section);
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+      .instrument .mark-fill {
+        fill: var(--color-section);
+      }
+      .instrument .edge-fill {
+        fill: var(--color-borderline);
+      }
+      .instrument .red {
+        fill: none;
+        stroke: var(--color-borderline);
+        stroke-width: 1.6;
+      }
+      .instrument text {
+        font: 500 9.5px var(--font-data);
+        font-variant-numeric: tabular-nums;
+        fill: var(--color-cream-muted);
+        letter-spacing: 0.04em;
+      }
+      .instrument text.band {
+        font-family: var(--font-structure);
+        font-weight: 500;
+        letter-spacing: 0;
+        font-size: 10px;
+      }
+      .instrument text.n {
+        fill: var(--color-tape);
+        font-size: 11px;
+      }
+      .instrument text.yours {
+        fill: var(--color-section);
+      }
+      .instrument text.red {
+        fill: var(--color-borderline);
+        stroke: none;
+      }
+      .instrument .bar-ref {
+        fill: none;
+        stroke: var(--color-cream-muted);
+        stroke-width: 1;
+      }
+      /* The hue ring behind the harmony instrument: the OKLCH wheel, muted. */
+      .wheel {
+        position: relative;
+      }
+      .wheel .ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 58.6%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        background: conic-gradient(in oklch longer hue, oklch(0.62 0.09 0), oklch(0.62 0.09 360));
+        mask: radial-gradient(circle closest-side, transparent 88%, black 89%, black 100%);
+      }
+      .wheel svg {
+        position: relative;
+      }
+      /* The lightness scale behind value and leg line. */
+      .lscale {
+        fill: none;
+      }
+      .range-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body class="app">
+    <header class="bar">
+      <a class="brand" href="./read.html" aria-label="Ratio, home">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="2" />
+          <g class="mark-plumb">
+            <line x1="12" y1="2" x2="12" y2="14.36" />
+            <circle cx="12" cy="14.36" r="1.7" />
+          </g>
+        </svg>
+        <span class="brand-name">Ratio</span>
+        <span class="brand-eyebrow">reason and proportion</span>
+      </a>
+      <nav class="tabs" aria-label="Surfaces">
+        <a class="tab" href="./read.html">Read</a>
+        <a class="tab" href="./face.html">Face</a>
+        <a class="tab" href="./rules.html" aria-current="page">Rules</a>
+        <a class="tab" href="./card.html">Card</a>
+      </nav>
+      <div class="bar-actions"></div>
+    </header>
+
+    <main class="page">
+      <header class="page-head">
+        <p class="eyebrow">The rulebook · <span data-numeral>ratio-engine/0.4.0</span></p>
+        <h1>Seven rules, each with its maths, its edges and its source.</h1>
+        <p class="lede">Every reading is held against these and nothing else. Drag an instrument to see where a band ends. Your last read in this tab is marked on each one.</p>
+        <p class="yours-chip"><span class="dot" aria-hidden="true"></span><span>Your last read, as worn</span><span data-numeral>12eb · today</span><button class="btn ghost" type="button">Clear</button></p>
+      </header>
+
+      <!-- 1. Proportion: the hero instrument, live. -->
+      <article class="rule hero" aria-labelledby="r-proportion">
+        <div class="instrument-wrap">
+          <svg id="prop" class="instrument" viewBox="0 0 320 440" role="img" aria-label="The proportion instrument: a chalk figure with the tape; the break line can be dragged along the figure and the ratio and band update">
+            <g transform="translate(96 0)">
+              <g class="chalk">
+                <path d="M93 76 Q100 80 107 76 L140 86 L152 98 L147 152 L136 149 L146 217 L54 217 L64 149 L53 152 L48 98 L60 86 Z M54 217 L58 410 M146 217 L142 410 M100 263 V410" />
+                <circle cx="100" cy="44" r="22" />
+                <path d="M93 65 V76 M107 65 V76 M50 102 L44 232 M150 102 L156 232 M50 415 H94 M106 415 H150" />
+              </g>
+              <g class="tape">
+                <path d="M24 22 V420 M17 22 H24 M20 61.8 H24 M20 101.6 H24 M20 141.4 H24 M20 181.2 H24 M17 221 H24 M20 260.8 H24 M20 300.6 H24 M20 340.4 H24 M20 380.2 H24 M17 420 H24" />
+              </g>
+            </g>
+            <!-- Band edges beside the tape. -->
+            <g class="faint">
+              <path d="M62 157.3 H118 M62 197.1 H118 M62 244.9 H118 M62 284.7 H118" stroke-dasharray="2 3" />
+            </g>
+            <g>
+              <text x="86" y="160.5" text-anchor="end">0.34</text>
+              <text x="86" y="200.3" text-anchor="end">0.44</text>
+              <text x="86" y="248.1" text-anchor="end">0.56</text>
+              <text x="86" y="287.9" text-anchor="end">0.66</text>
+              <text x="86" y="93" text-anchor="end" class="band">short top</text>
+              <text x="86" y="181" text-anchor="end" class="band">section</text>
+              <text x="86" y="225" text-anchor="end" class="band">halves</text>
+              <text x="86" y="268" text-anchor="end" class="band">section, below</text>
+              <text x="86" y="356" text-anchor="end" class="band">long top</text>
+            </g>
+            <!-- The golden ticks. -->
+            <path d="M120 174 H132" class="mark" />
+            <path d="M120 268 H132" class="mark" />
+            <!-- Yours: fixed, verdigris. -->
+            <path d="M112 276.7 H128" class="mark" />
+            <text x="266" y="296" text-anchor="end" class="yours">yours 0.64, on the mark</text>
+            <!-- The handle: the break line, dragged along the figure. -->
+            <g id="prop-handle" transform="translate(0 276.7)">
+              <path d="M120 0 H262" class="tape" stroke-width="2" />
+              <circle cx="262" cy="0" r="9" class="handle" />
+              <text id="prop-n" x="258" y="-7" text-anchor="end" class="n">0.64 : 0.36</text>
+            </g>
+          </svg>
+          <input id="prop-range" class="range-hidden" type="range" min="10" max="90" step="2" value="64" aria-label="The break, as a fraction of the height from the crown" />
+        </div>
+        <div class="rule-text">
+          <p class="rule-eyebrow eyebrow"><span>Proportion</span><span>calibrated</span></p>
+          <h2 id="r-proportion">A break near a third (0.333) or the golden section (0.382) of the height reads as composed; near-equal halves read as boxy.</h2>
+          <p class="yours" data-state="golden"><b>Yours</b> <span data-ratio>0.64 : 0.36</span> <span class="state">on the mark · section from below</span> <span id="prop-band" class="muted">Drag the line: <span data-numeral>0.64</span>, section from below.</span></p>
+        </div>
+        <details class="drill" open>
+          <summary>The maths, the edges, the sources</summary>
+          <div class="drill-body">
+            <p><b>Maths</b>The break is the row where the upper garment's colour gives way to the lower's (one change point over the garment rows), as a fraction of the figure from the crown (0) to the soles (1), rounded to 0.02.</p>
+            <div>
+              <b>Edges</b>
+              <dl class="edges">
+                <dt>short top</dt><dd data-numeral>below 0.34</dd>
+                <dt>golden section</dt><dd data-numeral>0.34 to 0.44</dd>
+                <dt>halves</dt><dd data-numeral>0.44 to 0.56</dd>
+                <dt>golden from below</dt><dd data-numeral>0.56 to 0.66</dd>
+                <dt>long top</dt><dd data-numeral>0.66 and above</dd>
+              </dl>
+            </div>
+            <div><b>Sources</b><ul class="sources"><li><a href="https://mathcs.clarku.edu/~djoyce/elements/bookVI/defVI3.html">Euclid, Elements VI, Definition 3 (extreme and mean ratio)</a></li></ul></div>
+          </div>
+        </details>
+      </article>
+
+      <!-- 2. Volume -->
+      <article class="rule" aria-labelledby="r-volume">
+        <svg class="instrument" viewBox="0 0 256 200" role="img" aria-label="The volume instrument: two scales, the upper piece's width over the shoulders and the legs' width at the knee, each with its bands and your values">
+          <text x="14" y="26" class="band">upper piece, × shoulders</text>
+          <g class="tape"><path d="M14 54 H242" /></g>
+          <g class="faint"><path d="M77 46 V62 M140 46 V62" /></g>
+          <text x="77" y="78" text-anchor="middle">1.15</text>
+          <text x="140" y="78" text-anchor="middle">1.40</text>
+          <text x="44" y="40" text-anchor="middle" class="band">fitted</text>
+          <text x="108" y="40" text-anchor="middle" class="band">straight</text>
+          <text x="190" y="40" text-anchor="middle" class="band">loose</text>
+          <circle cx="153" cy="54" r="8" class="handle" />
+          <path d="M153 64 V70" class="mark" />
+          <text x="153" y="94" text-anchor="middle" class="yours">yours 1.45×</text>
+
+          <text x="14" y="124" class="band">both legs at the knee, × shoulders</text>
+          <g class="tape"><path d="M14 152 H242" /></g>
+          <g class="faint"><path d="M79 144 V160 M160 144 V160" /></g>
+          <text x="79" y="176" text-anchor="middle">0.60</text>
+          <text x="160" y="176" text-anchor="middle">0.85</text>
+          <text x="46" y="138" text-anchor="middle" class="band">narrow</text>
+          <text x="120" y="138" text-anchor="middle" class="band">straight</text>
+          <text x="200" y="138" text-anchor="middle" class="band">wide</text>
+          <circle cx="63" cy="152" r="8" class="handle" />
+          <path d="M63 162 V168" class="mark" />
+          <text x="63" y="192" text-anchor="middle" class="yours">yours 0.55×</text>
+        </svg>
+        <div class="rule-text">
+          <p class="rule-eyebrow eyebrow"><span>Volume</span><span class="uncal">calibrated: no, first estimates</span></p>
+          <h2 id="r-volume">One fitted volume against one fuller one keeps a line; two full volumes read as unanchored, two fitted ones as streamlined.</h2>
+          <p class="yours" data-state="golden"><b>Yours</b> <span data-ratio>1.45× · 0.55×</span> <span class="state">on the mark · loose over narrow</span></p>
+        </div>
+        <details class="drill">
+          <summary>The maths, the edges, the sources</summary>
+          <div class="drill-body">
+            <p><b>Maths</b>Fabric width (garment pixels across one row, so stance and arms do not count) of the upper piece halfway down the torso, and of both legs at the knee, each against the distance between the shoulders. Rounded to 0.05.</p>
+            <div><b>Edges</b><dl class="edges"><dt>upper piece: fitted / straight / loose</dt><dd data-numeral>below 1.15 / to 1.4 / above</dd><dt>legs: narrow / straight / wide</dt><dd data-numeral>below 0.6 / to 0.85 / above</dd></dl></div>
+            <div><b>Sources</b><ul class="sources"><li>Tailoring convention: balance a full piece with a fitted one</li></ul></div>
+            <p class="muted">The edges are first estimates. The labelled fixture set (risk R1) sets them, and this line changes to "calibrated" when it has.</p>
+          </div>
+        </details>
+      </article>
+
+      <!-- 3. Leg line -->
+      <article class="rule" aria-labelledby="r-legline">
+        <svg class="instrument" viewBox="0 0 256 200" role="img" aria-label="The leg line instrument: the lower piece and the shoes on a lightness scale; the gap between them against the edge of 0.12">
+          <defs>
+            <linearGradient id="lgrad" x1="0" x2="1"><stop offset="0" stop-color="oklch(0.1 0 0)" /><stop offset="1" stop-color="oklch(0.98 0 0)" /></linearGradient>
+          </defs>
+          <text x="14" y="26" class="band">lightness, lower piece and shoes</text>
+          <rect x="14" y="44" width="228" height="12" rx="3" fill="url(#lgrad)" />
+          <text x="14" y="74">0</text>
+          <text x="242" y="74" text-anchor="end">1</text>
+          <!-- A worked pair: lower piece 0.30, shoes 0.36 (the first look). -->
+          <path d="M82.4 36 V64" class="tape" />
+          <path d="M96.1 36 V64" class="tape" />
+          <circle cx="82.4" cy="50" r="6" class="handle" />
+          <circle cx="96.1" cy="50" r="6" class="handle" />
+          <path d="M82.4 90 H96.1" class="mark" />
+          <path d="M82.4 86 V94 M96.1 86 V94" class="mark" />
+          <text x="89" y="110" text-anchor="middle" class="n">ΔL 0.06</text>
+          <text x="14" y="140" class="band">the leg line runs on below</text>
+          <path d="M14 152 H41.4" class="faint" />
+          <path d="M14 148 V156 M41.4 148 V156" class="faint" />
+          <text x="46" y="156">0.12</text>
+          <text x="14" y="186" class="yours">yours, as worn: no shoes measured</text>
+        </svg>
+        <div class="rule-text">
+          <p class="rule-eyebrow eyebrow"><span>Leg line</span><span class="uncal">calibrated: no, first estimates</span></p>
+          <h2 id="r-legline">Shoes close in value to the lower piece continue the leg line; shoes in strong contrast end it at the ankle.</h2>
+          <p class="yours"><b>Yours</b> <span class="muted">not read as worn: the shoes were not found in the frame. The first look's pair is shown.</span></p>
+        </div>
+        <details class="drill">
+          <summary>The maths, the edges, the sources</summary>
+          <div class="drill-body">
+            <p><b>Maths</b>The OKLab lightness difference between the lower piece and the shoes.</p>
+            <div><b>Edges</b><dl class="edges"><dt>continuous below</dt><dd data-numeral>0.12</dd></dl></div>
+            <div><b>Sources</b><ul class="sources"><li><a href="https://www.gutenberg.org/ebooks/search/?query=wesley+dow+composition">Arthur Wesley Dow, Composition (1899): notan, the arrangement of light and dark</a></li><li><a href="https://bottosson.github.io/posts/oklab/">Björn Ottosson, A perceptual color space for image processing (OKLab, 2020)</a></li></ul></div>
+          </div>
+        </details>
+      </article>
+
+      <!-- 4. Harmony -->
+      <article class="rule" aria-labelledby="r-harmony">
+        <div class="instrument wheel">
+          <div class="ring" aria-hidden="true"></div>
+          <svg viewBox="0 0 256 200" width="100%" role="img" aria-label="The harmony instrument: the OKLCH hue ring with the analogous template's sector and the outfit's hues on it; the hue at 105 degrees sits just outside">
+            <!-- Sector of the analogous template (93.6°), rotated to 2°: an arc on the ring. -->
+            <path d="M128 100 L130.4 31.0 A69 69 0 0 1 196.7 106.7 Z" fill="var(--color-cream-faint)" stroke="var(--color-cream)" stroke-width="1.4" stroke-linejoin="round" />
+            <text x="166" y="64" class="band">V, analogous</text>
+            <!-- The outfit's hues: 0° (share 0.15) inside, 105° just outside, red chalk. -->
+            <circle cx="128" cy="31" r="7" fill="oklch(0.40 0.03 0)" stroke="var(--color-cream)" stroke-width="1.2" />
+            <text x="140" y="26">0°</text>
+            <circle cx="194.6" cy="117.9" r="9" fill="oklch(0.93 0.03 105)" stroke="var(--color-borderline)" stroke-width="2" />
+            <text x="207" y="134" class="red">105°, 11° outside</text>
+            <circle cx="128" cy="100" r="2" class="mark-fill" />
+            <text x="14" y="186" class="yours">yours: V · 105° 0°, borderline fit</text>
+            <text x="14" y="26" class="band">hue ring, OKLCH</text>
+          </svg>
+        </div>
+        <div class="rule-text">
+          <p class="rule-eyebrow eyebrow"><span>Harmony</span><span>calibrated</span></p>
+          <h2 id="r-harmony">Matsuda's hue templates, fitted on the perceptual OKLCH wheel. A palette inside one reads as harmonious.</h2>
+          <p class="yours" data-state="borderline"><b>Yours</b> <span data-ratio>V · 105° 0°</span> <span class="state">on the mark, borderline</span></p>
+        </div>
+        <details class="drill">
+          <summary>The maths, the edges, the sources</summary>
+          <div class="drill-body">
+            <p><b>Maths</b>Each template (monochromatic, complementary, analogous, right-angle, split, double complementary, half wheel) is rotated in 1° steps; its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of 4° or less names the palette.</p>
+            <div><b>Edges</b><dl class="edges"><dt>a colour counts as a neutral below chroma</dt><dd data-numeral>0.02</dd><dt>fit tolerance (area-weighted degrees)</dt><dd data-numeral>4</dd></dl></div>
+            <div><b>Sources</b><ul class="sources"><li><a href="https://igl.ethz.ch/projects/color-harmonization/">Cohen-Or, Sorkine, Gal, Leyvand, Xu, Color Harmonization (SIGGRAPH 2006), after Matsuda's hue templates</a></li><li><a href="https://bottosson.github.io/posts/oklab/">Björn Ottosson, OKLab (2020)</a></li></ul></div>
+          </div>
+        </details>
+      </article>
+
+      <!-- 5. Value -->
+      <article class="rule" aria-labelledby="r-value">
+        <svg class="instrument" viewBox="0 0 256 200" role="img" aria-label="The value instrument: each colour's lightness on one scale, the range between the lightest and the darkest, and the edges at 0.15 and 0.35">
+          <defs>
+            <linearGradient id="lgrad2" x1="0" x2="1"><stop offset="0" stop-color="oklch(0.1 0 0)" /><stop offset="1" stop-color="oklch(0.98 0 0)" /></linearGradient>
+          </defs>
+          <text x="14" y="26" class="band">lightness of each colour</text>
+          <rect x="14" y="44" width="228" height="12" rx="3" fill="url(#lgrad2)" />
+          <text x="14" y="74">0</text>
+          <text x="242" y="74" text-anchor="end">1</text>
+          <!-- Yours: 0.93, 0.19, 0.78, 0.40, 0.70 -->
+          <g class="tape"><path d="M226 36 V64 M57.3 36 V64 M191.8 36 V64 M105.2 36 V64 M173.6 36 V64" /></g>
+          <path d="M57.3 92 H226" class="mark" />
+          <path d="M57.3 88 V96 M226 88 V96" class="mark" />
+          <text x="141" y="112" text-anchor="middle" class="n">range 0.74</text>
+          <text x="14" y="142" class="band">range: low / medium / high</text>
+          <path d="M14 154 H48.2" class="faint" />
+          <path d="M14 150 V158 M48.2 150 V158" class="faint" />
+          <text x="53" y="158">0.15</text>
+          <path d="M100 154 H179.8" class="faint" />
+          <path d="M100 150 V158 M179.8 150 V158" class="faint" />
+          <text x="185" y="158">0.35</text>
+          <text x="14" y="186" class="yours">yours: range 0.74, high, light over dark</text>
+        </svg>
+        <div class="rule-text">
+          <p class="rule-eyebrow eyebrow"><span>Value</span><span>calibrated</span></p>
+          <h2 id="r-value">Lightness carries form before hue does. A darker value below a lighter one grounds a figure; the widest lightness edge draws the eye first.</h2>
+          <p class="yours"><b>Yours</b> <span data-ratio>range 0.74</span> <span class="state">fine · light over dark</span></p>
+        </div>
+        <details class="drill">
+          <summary>The maths, the edges, the sources</summary>
+          <div class="drill-body">
+            <p><b>Maths</b>OKLab lightness of each colour holding at least 5% of the garment area; the range is the widest minus the narrowest. The upper and lower pieces are compared directly.</p>
+            <div><b>Edges</b><dl class="edges"><dt>range: low / medium / high</dt><dd data-numeral>below 0.15 / to 0.35 / above</dd><dt>upper and lower read as one tone within</dt><dd data-numeral>0.08</dd><dt>dark over light becomes advice beyond</dt><dd data-numeral>0.15</dd></dl></div>
+            <div><b>Sources</b><ul class="sources"><li><a href="https://www.gutenberg.org/ebooks/search/?query=wesley+dow+composition">Arthur Wesley Dow, Composition (1899)</a></li><li><a href="https://bottosson.github.io/posts/oklab/">Björn Ottosson, OKLab (2020)</a></li></ul></div>
+          </div>
+        </details>
+      </article>
+
+      <!-- 6. Colour shares -->
+      <article class="rule" aria-labelledby="r-shares">
+        <svg class="instrument" viewBox="0 0 256 200" role="img" aria-label="The shares instrument: the 60-30-10 reference bar with draggable dividers, and your outfit's shares beneath it">
+          <text x="14" y="26" class="band">the reference, 0.60 · 0.30 · 0.10</text>
+          <rect x="14" y="38" width="228" height="18" rx="3" class="bar-ref" />
+          <path d="M150.8 38 V56 M219.2 38 V56" class="chalk" />
+          <circle cx="150.8" cy="47" r="7" class="handle" />
+          <circle cx="219.2" cy="47" r="7" class="handle" />
+          <text x="82" y="72" text-anchor="middle">0.60</text>
+          <text x="185" y="72" text-anchor="middle">0.30</text>
+          <text x="230" y="72" text-anchor="middle">0.10</text>
+          <text x="14" y="112" class="band">yours, by area</text>
+          <rect x="14" y="124" width="57" height="18" fill="oklch(0.93 0.03 105)" />
+          <rect x="71" y="124" width="57" height="18" fill="oklch(0.19 0 0)" />
+          <rect x="128" y="124" width="45.6" height="18" fill="oklch(0.78 0.02 105)" />
+          <rect x="173.6" y="124" width="34.2" height="18" fill="oklch(0.40 0.005 0)" />
+          <rect x="207.8" y="124" width="34.2" height="18" fill="oklch(0.70 0.01 60)" />
+          <rect x="14" y="124" width="228" height="18" rx="3" class="bar-ref" />
+          <text x="42.5" y="158" text-anchor="middle">0.25</text>
+          <text x="99.5" y="158" text-anchor="middle">0.25</text>
+          <text x="150.8" y="158" text-anchor="middle">0.20</text>
+          <text x="190.7" y="158" text-anchor="middle">0.15</text>
+          <text x="225" y="158" text-anchor="middle">0.15</text>
+          <text x="14" y="186" class="yours">yours: 0.25 · 0.25 · 0.20, fine</text>
+        </svg>
+        <div class="rule-text">
+          <p class="rule-eyebrow eyebrow"><span>Colour shares</span><span>calibrated</span></p>
+          <h2 id="r-shares">Colour by area: one dominant, one secondary, one accent, near 0.60 · 0.30 · 0.10. Equal shares compete for the lead.</h2>
+          <p class="yours"><b>Yours</b> <span data-ratio>0.25 · 0.25 · 0.20</span> <span class="state">fine</span></p>
+        </div>
+        <details class="drill">
+          <summary>The maths, the edges, the sources</summary>
+          <div class="drill-body">
+            <p><b>Maths</b>Each colour's share of the garment area, rounded to 0.05.</p>
+            <div><b>Edges</b><dl class="edges"><dt>one colour reads as a column at</dt><dd data-numeral>0.85</dd><dt>two colours compete when within</dt><dd data-numeral>0.12</dd><dt>close to 60-30-10 within (summed difference)</dt><dd data-numeral>0.2</dd></dl></div>
+            <div><b>Sources</b><ul class="sources"><li>Interior design and painting convention, 60-30-10</li><li><a href="https://mathcs.clarku.edu/~djoyce/elements/bookVI/defVI3.html">Euclid, Elements VI, Definition 3</a></li></ul></div>
+          </div>
+        </details>
+      </article>
+
+      <!-- 7. Chroma -->
+      <article class="rule" aria-labelledby="r-chroma">
+        <svg class="instrument" viewBox="0 0 256 200" role="img" aria-label="The chroma instrument: each colour's chroma on one scale, with the neutral edge at 0.02 and the saturated edge at 0.11">
+          <text x="14" y="26" class="band">chroma of each colour, OKLCH</text>
+          <g class="tape"><path d="M14 54 H242" /></g>
+          <text x="14" y="74">0</text>
+          <text x="242" y="74" text-anchor="end">0.25</text>
+          <g class="faint"><path d="M32.2 44 V64 M114.3 44 V64" /></g>
+          <text x="32.2" y="40" text-anchor="middle">0.02</text>
+          <text x="114.3" y="40" text-anchor="middle">0.11</text>
+          <text x="73" y="90" text-anchor="middle" class="band">muted</text>
+          <text x="178" y="90" text-anchor="middle" class="band">saturated</text>
+          <text x="20" y="90" class="band">neutral</text>
+          <!-- Yours: 0.03, 0.00, 0.02, 0.01, 0.00 -->
+          <circle cx="41.4" cy="54" r="6" fill="oklch(0.93 0.03 105)" stroke="var(--color-cream)" stroke-width="1" />
+          <circle cx="32.2" cy="54" r="6" fill="oklch(0.78 0.02 105)" stroke="var(--color-cream)" stroke-width="1" />
+          <circle cx="23.1" cy="54" r="6" fill="oklch(0.40 0.01 0)" stroke="var(--color-cream)" stroke-width="1" />
+          <circle cx="14" cy="54" r="6" fill="oklch(0.19 0 0)" stroke="var(--color-cream)" stroke-width="1" />
+          <text x="14" y="130" class="band">vibration: complements within 0.08 in lightness</text>
+          <circle cx="40" cy="156" r="10" fill="oklch(0.55 0.14 25)" />
+          <circle cx="56" cy="156" r="10" fill="oklch(0.55 0.14 205)" />
+          <text x="74" y="160">both at 0.55: they vibrate</text>
+          <text x="14" y="186" class="yours">yours: 0 saturated, quiet</text>
+        </svg>
+        <div class="rule-text">
+          <p class="rule-eyebrow eyebrow"><span>Chroma</span><span>calibrated</span></p>
+          <h2 id="r-chroma">One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).</h2>
+          <p class="yours"><b>Yours</b> <span data-ratio>0 saturated</span> <span class="state">fine</span></p>
+        </div>
+        <details class="drill">
+          <summary>The maths, the edges, the sources</summary>
+          <div class="drill-body">
+            <p><b>Maths</b>OKLCH chroma of each colour. Vibration: two colours at least 150° apart, both of chroma 0.10 or more, within 0.08 of each other in lightness.</p>
+            <div><b>Edges</b><dl class="edges"><dt>saturated from chroma</dt><dd data-numeral>0.11</dd></dl></div>
+            <div><b>Sources</b><ul class="sources"><li><a href="https://www.albersfoundation.org/">Josef Albers, Interaction of Color (1963)</a></li><li><a href="https://bottosson.github.io/posts/oklab/">Björn Ottosson, OKLab (2020)</a></li></ul></div>
+          </div>
+        </details>
+      </article>
+
+      <footer class="sheet-foot">
+        <span>A voidvision production</span>
+        <a href="../../web/privacy.html">Privacy</a>
+        <span data-numeral>ratio-engine/0.4.0</span>
+      </footer>
+    </main>
+
+    <script>
+      // The proportion instrument: the break follows the hand along the figure,
+      // and the ratio and band update at once (no spring: it is your hand).
+      (function () {
+        var svg = document.getElementById("prop"), handle = document.getElementById("prop-handle"), n = document.getElementById("prop-n"), band = document.getElementById("prop-band"), range = document.getElementById("prop-range");
+        var CROWN = 22, SOLE = 420;
+        var names = [[0.34, "short top"], [0.44, "section"], [0.56, "halves"], [0.66, "section from below"], [1.01, "long top"]];
+        function set(r) {
+          r = Math.round(Math.max(0.1, Math.min(0.9, r)) / 0.02) * 0.02;
+          var y = CROWN + (SOLE - CROWN) * r;
+          handle.setAttribute("transform", "translate(0 " + y.toFixed(1) + ")");
+          n.textContent = r.toFixed(2) + " : " + (1 - r).toFixed(2);
+          var name = "long top";
+          for (var i = 0; i < names.length; i++) if (r < names[i][0]) { name = names[i][1]; break; }
+          band.innerHTML = "Drag the line: <span data-numeral>" + r.toFixed(2) + "</span>, " + name + ".";
+          range.value = Math.round(r * 100);
+        }
+        function at(e) {
+          var b = svg.getBoundingClientRect();
+          return ((e.clientY - b.top) / b.height * 440 - CROWN) / (SOLE - CROWN);
+        }
+        var down = false;
+        svg.addEventListener("pointerdown", function (e) { down = true; svg.setPointerCapture(e.pointerId); set(at(e)); });
+        svg.addEventListener("pointermove", function (e) { if (down) set(at(e)); });
+        svg.addEventListener("pointerup", function () { down = false; });
+        svg.addEventListener("pointercancel", function () { down = false; });
+        range.addEventListener("input", function () { set(range.value / 100); });
+      })();
+    </script>
+  </body>
+</html>

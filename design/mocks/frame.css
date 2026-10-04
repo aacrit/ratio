@@ -1,0 +1,891 @@
+/* The app frame shared by the G2 mocks (design/spec.md): the bar with its
+   four tabs, the stage, the sheet (a side panel from 1024 up), buttons,
+   rows and the chalk figure. Mirrors web/src/style.css where the surface is
+   built, and states the new law (the tab bar, the wardrobe, the
+   instruments) where it is not. Colours come from design/tokens.css only;
+   only transform and opacity move. Mocks are static: on a phone the sheet
+   sits below the stage in flow, where the built sheet rides over it. */
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-weight: 400;
+  margin: 0;
+  text-wrap: balance;
+}
+
+a {
+  color: var(--color-cream);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.eyebrow {
+  font: 500 0.7rem/1.3 var(--font-data);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+.muted {
+  color: var(--color-cream-muted);
+}
+
+/* ---- The frame -------------------------------------------------------------- */
+
+body.app {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: var(--bar-h) auto auto;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  body.app {
+    height: 100dvh;
+    overflow: hidden;
+    grid-template-rows: var(--bar-h) 1fr;
+    grid-template-columns: 1fr var(--split-panel);
+  }
+}
+
+/* ---- The bar: the mark, the name, four tabs, one action ----------------------- */
+
+.bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--color-bg);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--color-cream);
+  min-height: 44px;
+  flex: none;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: 1.4rem;
+  letter-spacing: -0.015em;
+  line-height: 1;
+}
+
+.brand-eyebrow {
+  font: 500 0.62rem/1 var(--font-data);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+@media (max-width: 767px) {
+  .brand-eyebrow {
+    display: none;
+  }
+}
+
+@media (max-width: 419px) {
+  .brand-name {
+    display: none;
+  }
+}
+
+.mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  align-self: center;
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+.mark circle {
+  fill: var(--color-tape);
+  stroke: none;
+}
+
+.mark line {
+  stroke-width: 1.2;
+}
+
+.mark-plumb {
+  transform-box: view-box;
+  transform-origin: 12px 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mark-plumb {
+    animation: plumb var(--dur-plumb) var(--ease-plumb) both;
+  }
+}
+
+@keyframes plumb {
+  from {
+    transform: rotate(calc(var(--plumb-swing) * -1));
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+/* The tabs: four short words, and one chalk underline that glides between
+   them (the `underline` preset). Scrollable if the bar is too narrow. */
+.tabs {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 2px;
+  margin: 0 auto 0 6px;
+  position: relative;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  min-width: 44px;
+  text-decoration: none;
+  color: var(--color-cream-muted);
+  font: 500 0.92rem var(--font-structure);
+  position: relative;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.tab:hover {
+  color: var(--color-cream);
+}
+
+.tab[aria-current="page"] {
+  color: var(--color-cream);
+}
+
+/* In the mock the underline sits under the current tab; in the app one
+   element glides between tabs with --spring-underline. */
+.tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-cream);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--color-cream);
+  outline-offset: -4px;
+  border-radius: var(--radius-control);
+}
+
+.bar-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+/* ---- Buttons: chalk on worsted, settle on press ------------------------------- */
+
+.btn,
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-cream);
+  color: var(--color-bg);
+  font: 600 0.92rem var(--font-structure);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-settle) var(--ease-settle);
+}
+
+.btn:hover,
+button:hover {
+  background: var(--color-cream-hover);
+}
+
+.btn:active,
+button:active {
+  transform: scale(0.97);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--color-cream);
+  border: 1px solid var(--color-border);
+}
+
+.btn.ghost:hover {
+  background: var(--color-cream-faint);
+  border-color: var(--color-cream-muted);
+}
+
+.btn.small {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.84rem;
+}
+
+.btn[disabled],
+button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--color-cream);
+  outline-offset: 2px;
+}
+
+/* ---- The stage --------------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  grid-column: 1;
+  min-height: 56dvh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+@media (min-width: 1024px) {
+  .stage {
+    min-height: 0;
+  }
+}
+
+.stage-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 72% 56% at 50% 36%, var(--light-stage-tone), transparent 72%);
+}
+
+/* The photo well: the photo fitted to the room, with its overlay. */
+.photo-well {
+  position: relative;
+  padding: 12px var(--gutter) 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+@media (min-width: 1024px) {
+  .photo-well {
+    padding: 24px 32px 20px;
+  }
+}
+
+.figure {
+  position: relative;
+  max-width: 100%;
+  max-height: calc(56dvh - 60px);
+  border-radius: 4px;
+  box-shadow: var(--shadow-photo);
+  overflow: hidden;
+  flex: 0 1 auto;
+}
+
+@media (min-width: 1024px) {
+  .figure {
+    max-height: calc(100dvh - var(--bar-h) - var(--stage-foot) - 60px);
+  }
+}
+
+.figure img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: inherit;
+}
+
+.figure .overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Every stroke and numeral over the photo sits on the halo. Strokes are set
+   in px and never scale with the photo. */
+.overlay path,
+.overlay circle,
+.overlay ellipse {
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .halo {
+  stroke: var(--color-halo);
+  fill: none;
+  stroke-linecap: round;
+}
+
+.overlay .tape {
+  stroke: var(--hex-tape);
+  fill: none;
+  stroke-linecap: round;
+}
+
+.overlay .chalk {
+  stroke: var(--hex-chalk);
+  fill: none;
+  stroke-linecap: round;
+}
+
+.overlay .section {
+  stroke: var(--hex-verdigris);
+  fill: none;
+}
+
+.overlay .numeral {
+  font: 500 13px var(--font-data);
+  font-variant-numeric: tabular-nums;
+  fill: var(--hex-tape);
+}
+
+.overlay .label {
+  font: 500 10px var(--font-data);
+  letter-spacing: 0.1em;
+  fill: var(--hex-chalk);
+}
+
+.overlay .box {
+  fill: var(--color-halo);
+}
+
+.stage-foot {
+  padding: 6px var(--gutter) 12px;
+  display: grid;
+  gap: 6px;
+  align-content: end;
+  min-height: var(--stage-foot);
+}
+
+@media (min-width: 1024px) {
+  .stage-foot {
+    padding: 0 32px 16px;
+  }
+}
+
+.read-status {
+  font-size: 0.9rem;
+  max-width: var(--measure-reading);
+}
+
+/* The compare control: a chalk line with a grip. */
+.wipe {
+  appearance: none;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.wipe::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--color-cream-muted);
+  border-radius: 1px;
+}
+
+.wipe::-moz-range-track {
+  height: 2px;
+  background: var(--color-cream-muted);
+  border-radius: 1px;
+}
+
+.wipe::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--color-cream);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 1px var(--color-cream);
+}
+
+.wipe::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-cream);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 1px var(--color-cream);
+}
+
+/* ---- The sheet ----------------------------------------------------------------- */
+
+.sheet {
+  position: relative;
+  z-index: 5;
+  margin-top: -20px;
+  background: var(--color-sheet);
+  border-top: 1px solid var(--edge-sheet);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow: var(--shadow-sheet);
+}
+
+.grip {
+  min-height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  cursor: grab;
+}
+
+.grip:hover,
+.grip:active {
+  background: transparent;
+  transform: none;
+}
+
+.grip-bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-cream-muted);
+}
+
+.sheet-body {
+  padding: 0 var(--gutter) 40px;
+  display: grid;
+  gap: 24px;
+  align-content: start;
+}
+
+@media (min-width: 600px) and (max-width: 1023px) {
+  .sheet-body {
+    padding: 0 24px 48px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sheet {
+    grid-column: 2;
+    margin-top: 0;
+    min-height: 0;
+    border-radius: 0;
+    border-top: none;
+    border-left: 1px solid var(--color-border);
+    box-shadow: none;
+    overflow-y: auto;
+  }
+  .grip {
+    display: none;
+  }
+  .sheet-body {
+    padding: 24px 28px 48px;
+    gap: 28px;
+  }
+}
+
+.sheet-head {
+  display: grid;
+  gap: 12px;
+}
+
+.hero-row {
+  display: grid;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.hero {
+  line-height: 1;
+}
+
+.hero-n {
+  font-size: clamp(2rem, 7vw, 2.6rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--color-tape);
+}
+
+.hero-n[data-state="golden"] {
+  color: var(--color-section);
+}
+
+.hero-n[data-state="borderline"] {
+  color: var(--color-borderline);
+}
+
+.verdict {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: clamp(1.2rem, 3.4vw, 1.45rem);
+  line-height: 1.3;
+  max-width: 34ch;
+}
+
+.palette {
+  display: flex;
+  height: 12px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.palette span {
+  flex-grow: var(--share, 1);
+}
+
+.section-title {
+  margin: 0 0 10px;
+}
+
+/* ---- The argument: measure, then the rule, then the advice ------------------- */
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.row {
+  border-top: 1px solid var(--color-border);
+  padding: 14px 0;
+  display: grid;
+  gap: 10px;
+}
+
+.row-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.row-tt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
+.row-t {
+  font-weight: 600;
+}
+
+.row-s {
+  font: 500 0.68rem var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+.row[data-state="golden"] .row-s {
+  color: var(--color-section);
+}
+
+.row[data-state="borderline"] .row-s {
+  color: var(--color-borderline);
+}
+
+.row-n {
+  color: var(--color-tape);
+  font-size: 0.95rem;
+  flex: none;
+}
+
+.row[data-state="golden"] .row-n {
+  color: var(--color-section);
+}
+
+.row[data-state="borderline"] .row-n,
+.row-borderline b {
+  color: var(--color-borderline);
+}
+
+.row[data-state="waiting"] .row-n,
+.row[data-state="waiting"] .row-t {
+  color: var(--color-cream-muted);
+}
+
+.row-b {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.row-b p {
+  max-width: var(--measure-reading);
+  font-size: 0.92rem;
+}
+
+.row-b b {
+  display: inline-block;
+  min-width: 6.2em;
+  font: 500 0.68rem var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+.row[data-changed] {
+  border-left: 2px solid var(--color-cream);
+  padding-left: 12px;
+}
+
+.row-change {
+  font: 500 0.74rem var(--font-data);
+  letter-spacing: 0.04em;
+  color: var(--color-cream);
+}
+
+.row[data-state="golden"] .row-change {
+  color: var(--color-section);
+}
+
+.credit {
+  font-size: 0.78rem;
+  color: var(--color-cream-muted);
+  max-width: var(--measure-reading);
+}
+
+.hashline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.hashline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reading-hash {
+  font-size: 0.78rem;
+  color: var(--color-cream-muted);
+}
+
+/* ---- Cards inside the sheet: paper on paper ------------------------------------ */
+
+.card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.card-title {
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.card .note {
+  font-size: 0.86rem;
+  color: var(--color-cream-muted);
+  max-width: 48ch;
+}
+
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+/* ---- The chalk figure ---------------------------------------------------------- */
+
+.chalk-figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--color-surface);
+  border-radius: 6px;
+}
+
+.chalk-figure .garment {
+  stroke: none;
+}
+
+.chalk-figure .chalk path,
+.chalk-figure .chalk circle {
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chalk-figure .fig-tape path,
+.chalk-figure .fig-break {
+  stroke: var(--color-tape);
+  stroke-width: 1.4;
+  fill: none;
+}
+
+.chalk-figure .fig-section {
+  stroke: var(--color-cream-muted);
+  stroke-width: 1.4;
+}
+
+.chalk-figure .fig-section.on {
+  stroke: var(--color-section);
+  stroke-width: 2.4;
+}
+
+.chalk-figure .fig-ratio {
+  font: 500 10px var(--font-data);
+  font-variant-numeric: tabular-nums;
+  fill: var(--color-tape);
+}
+
+/* ---- Feedback and the foot ---------------------------------------------------- */
+
+.feedback {
+  border-top: 1px solid var(--color-border);
+  padding-top: 8px;
+}
+
+.feedback summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: 1.1rem;
+}
+
+.feedback summary::-webkit-details-marker {
+  display: none;
+}
+
+.feedback summary::after {
+  content: "+";
+  font: 400 1.2rem var(--font-data);
+  color: var(--color-cream-muted);
+}
+
+.sheet-foot {
+  display: flex;
+  gap: 18px;
+  font-size: 0.8rem;
+  color: var(--color-cream-muted);
+}
+
+/* ---- Mock-only: a state switch for the user-sim, never in the product ---------- */
+
+.mock-states {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 9;
+  font: 500 0.7rem var(--font-data);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+.mock-states summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+}
+
+.mock-states summary::-webkit-details-marker {
+  display: none;
+}
+
+.mock-states div {
+  position: absolute;
+  right: 0;
+  bottom: 36px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.mock-states button {
+  min-height: 32px;
+  font-size: 0.78rem;
+}

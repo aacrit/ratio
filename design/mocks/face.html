@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="G2 mock: the Face surface, a portrait read: the face oval with its thirds and the length to width ratio, hair advice and a portrait note." />
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="./frame.css" />
+    <title>Ratio: Face</title>
+    <style>
+      .tag {
+        position: absolute;
+        padding: 2px 6px;
+        border-radius: 3px;
+        background: var(--color-halo);
+        font: 500 12px var(--font-data);
+        font-variant-numeric: tabular-nums;
+        color: var(--hex-tape);
+        white-space: nowrap;
+      }
+      .tag.hero-tag {
+        font-size: 14px;
+        transform: translate(-100%, -50%);
+      }
+      .tag.third {
+        transform: translate(0, -50%);
+      }
+      .tag.canon {
+        color: var(--hex-chalk);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        transform: translate(-100%, -50%);
+      }
+      .waiting-note {
+        font-size: 0.86rem;
+        color: var(--color-cream-muted);
+        max-width: 48ch;
+      }
+    </style>
+  </head>
+  <body class="app" data-state="read">
+    <header class="bar">
+      <a class="brand" href="./read.html" aria-label="Ratio, home">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="2" />
+          <g class="mark-plumb">
+            <line x1="12" y1="2" x2="12" y2="14.36" />
+            <circle cx="12" cy="14.36" r="1.7" />
+          </g>
+        </svg>
+        <span class="brand-name">Ratio</span>
+        <span class="brand-eyebrow">reason and proportion</span>
+      </a>
+      <nav class="tabs" aria-label="Surfaces">
+        <a class="tab" href="./read.html">Read</a>
+        <a class="tab" href="./face.html" aria-current="page">Face</a>
+        <a class="tab" href="./rules.html">Rules</a>
+        <a class="tab" href="./card.html">Card</a>
+      </nav>
+      <div class="bar-actions">
+        <button class="btn ghost small" type="button">Read another</button>
+      </div>
+    </header>
+
+    <main class="stage" aria-label="The stage">
+      <div class="stage-light" aria-hidden="true"></div>
+      <div class="photo-well">
+        <div class="figure" role="img" aria-label="The sample portrait with the face oval, its three horizontal divisions, the width line and the length to width ratio drawn over it">
+          <img src="../../web/public/samples/durer.jpg" width="2128" height="3000" alt="" />
+          <svg class="overlay" viewBox="0 0 2128 3000" preserveAspectRatio="none" aria-hidden="true">
+            <!-- Haloes under every stroke. -->
+            <g class="halo" stroke-width="5.5">
+              <path d="M700 450 V1245 M650 450 H700 M650 1245 H700 M700 450 H1420 M700 660 H1420 M700 960 H1420 M700 1245 H1420 M818 840 V790 M1305 840 V790 M818 815 H1305" />
+            </g>
+            <!-- The canon: equal thirds, in muted chalk, beside the tape. -->
+            <path d="M672 715 H700 M672 980 H700" class="chalk" stroke-width="1.4" opacity="0.55" />
+            <!-- The oval, fitted to the face: a construction line. -->
+            <ellipse cx="1060" cy="848" rx="246" ry="398" class="chalk" stroke-width="1.2" stroke-dasharray="14 12" opacity="0.6" />
+            <!-- The tape, hairline to chin, and the measured divisions across the face. -->
+            <g class="tape" stroke-width="1.6">
+              <path d="M700 450 V1245 M650 450 H700 M650 1245 H700" />
+              <path d="M700 450 H1420 M700 660 H1420 M700 960 H1420 M700 1245 H1420" />
+              <path d="M818 840 V790 M1305 840 V790 M818 815 H1305" />
+            </g>
+          </svg>
+          <span class="tag hero-tag" style="left: 31.5%; top: 28.2%">1.62×</span>
+          <span class="tag third" style="left: 67.5%; top: 18.5%">0.26</span>
+          <span class="tag third" style="left: 67.5%; top: 27.0%">0.38</span>
+          <span class="tag third" style="left: 67.5%; top: 36.8%">0.36</span>
+          <span class="tag canon" style="left: 31%; top: 23.8%">⅓</span>
+          <span class="tag canon" style="left: 31%; top: 32.7%">⅔</span>
+        </div>
+      </div>
+      <div class="stage-foot"></div>
+    </main>
+
+    <aside class="sheet" aria-label="The reading">
+      <button class="grip" type="button" aria-label="Collapse the reading" aria-expanded="true"><span class="grip-bar"></span></button>
+      <div class="sheet-body">
+        <section class="reading" aria-labelledby="hero-eyebrow">
+          <header class="sheet-head">
+            <div class="hero-row">
+              <p class="hero"><span class="hero-n" data-ratio data-state="golden">1.62×</span></p>
+              <p id="hero-eyebrow" class="eyebrow">Length to width, on the mark</p>
+            </div>
+            <p class="verdict">Width at the sides is what a 1.62× oval asks for, and the hair as worn carries it there.</p>
+          </header>
+
+          <section class="argument" aria-labelledby="reading-title">
+            <h2 id="reading-title" class="eyebrow section-title">The reading</h2>
+            <ol class="rows">
+              <li class="row" data-state="golden">
+                <p class="row-h"><span class="row-tt"><span class="row-t">Volume</span><span class="row-s">on the mark</span></span><span class="row-n" data-ratio>1.62× · sides 2.40×</span></p>
+                <div class="row-b">
+                  <p><b>Measured</b> Face length 1.62× its width (hairline to chin, over the widest line at the cheekbones). Hair 2.40× the face width at the cheekbones, 0.22 of the face length above the hairline.</p>
+                  <p><b>Rule</b> Volume answers proportion: width at the sides shortens the read of a long oval, height at the crown lengthens a short one. Between 1.40 and 1.60 either works.</p>
+                  <p><b>Advice</b> Width at the sides is what a 1.62× oval asks for, and the hair as worn carries it there. Keep the volume at the sides; a cut that stacks height at the crown would stretch the read.</p>
+                </div>
+              </li>
+              <li class="row" data-state="neutral">
+                <p class="row-h"><span class="row-tt"><span class="row-t">Thirds</span><span class="row-s">fine</span></span><span class="row-n" data-ratio>0.26 · 0.38 · 0.36</span></p>
+                <div class="row-b">
+                  <p><b>Measured</b> Hairline to brow 0.26, brow to nose base 0.38, nose base to chin 0.36 of the face length.</p>
+                  <p><b>Rule</b> The canon divides the face into three equal parts: hairline to brow, brow to nose base, nose base to chin. Hair can move the first line; nothing else moves.</p>
+                  <p><b>Advice</b> The upper third is the shortest, so the visible hairline is the one to keep. Hair parted or swept back without a fringe shows the full third, as worn; a fringe would shorten it further.</p>
+                </div>
+              </li>
+              <li class="row" data-state="neutral">
+                <p class="row-h"><span class="row-tt"><span class="row-t">Parting</span><span class="row-s">fine</span></span><span class="row-n" data-ratio>centre · 0.50</span></p>
+                <div class="row-b">
+                  <p><b>Measured</b> The parting meets the hairline at 0.50 of the face width.</p>
+                  <p><b>Rule</b> A centre parting mirrors the two halves of the face and reads as still; a parting at the third (0.33 or 0.67) sets the hair asymmetrically and reads as movement.</p>
+                  <p><b>Advice</b> Centred, with length on both sides, the parting makes the symmetry this portrait is built on. Keep it for a formal portrait; move it to 0.33 for a less formal one.</p>
+                </div>
+              </li>
+              <li class="row" data-state="neutral">
+                <p class="row-h"><span class="row-tt"><span class="row-t">Length</span><span class="row-s">fine</span></span><span class="row-n" data-ratio>0.62 below the chin</span></p>
+                <div class="row-b">
+                  <p><b>Measured</b> The hair ends 0.62 face lengths below the chin, past the shoulder line.</p>
+                  <p><b>Rule</b> Where the hair ends is a horizontal line the eye reads with the chin and the shoulders: at the jaw it widens, at the collarbone it lengthens, below the shoulder it frames.</p>
+                  <p><b>Advice</b> Ending below the shoulders, the hair frames the face and the collar instead of cutting across either. Keep the ends below the shoulder line or above the jaw; between the two, the line competes with the chin.</p>
+                </div>
+              </li>
+              <li class="row" data-state="neutral">
+                <p class="row-h"><span class="row-tt"><span class="row-t">Expression</span><span class="row-s">a portrait note</span></span><span class="row-n" data-ratio>smile 0.04 · eyes 0.62</span></p>
+                <div class="row-b">
+                  <p><b>Measured</b> Blendshape scores, each 0 to 1: mouth smile 0.04, eyes open 0.62, brow raise 0.00. Level gaze at the camera.</p>
+                  <p><b>Rule</b> A note for the portrait, never about the person: what the expression does for the picture. A smile that reaches the eyes reads as warm; a closed mouth and a level gaze read as formal.</p>
+                  <p><b>Advice</b> A level gaze and a closed mouth: the formal portrait. Keep it for that. For a warm headshot, a smile that reaches the eyes, with both scores up.</p>
+                </div>
+              </li>
+              <li class="row" data-state="waiting">
+                <p class="row-h"><span class="row-tt"><span class="row-t">Personal colour</span><span class="row-s">not yet</span></span><span class="row-n">after the accuracy check</span></p>
+                <div class="row-b">
+                  <p class="waiting-note">Hair-to-skin contrast and undertone, as input to a palette and never as a label. It arrives after the skin-tone accuracy check (R2): until the fixture set scores evenly across all ten Monk bands, Ratio does not read skin.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+
+          <p class="credit">Albrecht Dürer, Self-portrait at Twenty-eight (Self-portrait in a fur-trimmed robe), 1500. Alte Pinakothek, Munich. Public domain, via Wikimedia Commons.</p>
+          <div class="hashline">
+            <p class="reading-hash" data-numeral title="Reading hash 5b1dc83e4a9f27016d0e8b2c7a3f9e14">Same photo, same reading. 5b1d · ratio-engine/0.4.0 · face/0.1</p>
+            <div class="hashline-actions">
+              <button class="btn ghost small" type="button">Save as card</button>
+              <button class="btn ghost small" type="button">Keep in my wardrobe</button>
+            </div>
+          </div>
+        </section>
+
+        <details class="feedback">
+          <summary>Tell us what is missing</summary>
+          <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
+        </details>
+
+        <footer class="sheet-foot">
+          <span>A voidvision production</span>
+          <a href="../../web/privacy.html">Privacy</a>
+        </footer>
+      </div>
+    </aside>
+  </body>
+</html>
