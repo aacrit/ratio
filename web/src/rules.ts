@@ -63,7 +63,7 @@ function flash(root: Element, band: number): void {
 }
 
 /** Where a pointer is in an SVG's own units (the instruments scale with their width). */
-function svgPoint(svg: SVGSVGElement, e: PointerEvent): { x: number; y: number } {
+function svgPoint(svg: SVGSVGElement, e: { clientX: number; clientY: number }): { x: number; y: number } {
   const r = svg.getBoundingClientRect();
   const vb = svg.viewBox.baseVal;
   return { x: ((e.clientX - r.left) / r.width) * vb.width, y: ((e.clientY - r.top) / r.height) * vb.height };
@@ -86,6 +86,17 @@ function bindDrag(svg: SVGSVGElement, grab: (p: Point) => boolean, onPoint: (p: 
     svg.setPointerCapture(e.pointerId);
     onPoint(p);
   });
+  // Touch: touch-action on an SVG child is not honoured everywhere, so a
+  // touch that lands on a handle claims the gesture here; any other touch
+  // stays the page's scroll (the reviewer's note on PR #8).
+  svg.addEventListener(
+    "touchstart",
+    (e) => {
+      const t = e.touches[0];
+      if (t && grab(svgPoint(svg, t))) e.preventDefault();
+    },
+    { passive: false },
+  );
   svg.addEventListener("pointermove", (e) => down && onPoint(svgPoint(svg, e)));
   const up = () => (down = false);
   svg.addEventListener("pointerup", up);

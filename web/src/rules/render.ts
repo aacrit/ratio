@@ -101,7 +101,7 @@ const LABELS: Partial<Record<RuleId, string>> = {
   volume: "The volume instrument: two scales, the upper piece's width over the shoulders and both legs' width at the knee, each with its bands; drag a handle to see where a band ends",
   legline: "The leg line instrument: the lightness gap between the lower piece and the shoes, against the edge where the line stops running on; drag the handle to see where it ends",
   value: "The value instrument: the palette's lightness range against its low, medium and high edges, over a lightness scale; drag the handle to see where a band ends",
-  chroma: "The chroma instrument: a colour's chroma against the saturated edge, with your colours marked (a neutral is hollow), and a worked pair of complements at equal lightness; drag the handle to see where a band ends",
+  chroma: "The chroma instrument: a colour's chroma against the saturated edge, with your colours marked (a neutral has a dashed outline), and a worked pair of complements at equal lightness; drag the handle to see where a band ends",
 };
 
 /** A lightness strip from black to white (the gradient's stops come from the token file). */

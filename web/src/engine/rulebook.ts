@@ -5,7 +5,7 @@
 // the method). Band edges here are the same constants the rules use.
 
 import { FIT_TOLERANCE, TEMPLATES } from "./colour-rules";
-import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARES_REFERENCE, SHARE_EDGES, VALUE_GAP_EDGES, VIBRATION } from "./constants";
+import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, neutralChromaAt, SATURATED_CHROMA, SHARES_REFERENCE, SHARE_EDGES, VALUE_GAP_EDGES, VIBRATION } from "./constants";
 
 export interface Source {
   label: string;
@@ -72,7 +72,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
     rule: "Matsuda's hue templates, fitted on the perceptual OKLCH wheel: a few shapes of hues that sit well together. A palette inside one reads as harmonious.",
     maths: `Each template is rotated in 1° steps: ${TEMPLATES.map((t) => `${t.name} (${t.gloss})`).join(", ")}. Its cost is the area-weighted angle by which the outfit's hues fall outside its sectors. The first template, most specific first, with a cost of ${FIT_TOLERANCE}° or less names the palette.`,
     edges: [
-      { name: "a colour counts as a neutral below chroma (rising with lightness to 0.045 at white)", value: NEUTRAL_CHROMA },
+      { name: `a colour counts as a neutral below chroma (rising with lightness to ${neutralChromaAt(1).toFixed(3)} at white)`, value: NEUTRAL_CHROMA },
       { name: "fit tolerance (area-weighted degrees)", value: FIT_TOLERANCE },
     ],
     sources: [HARMONIZATION, OKLAB],
@@ -105,7 +105,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   chroma: {
     title: "Chroma",
     rule: "One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).",
-    maths: `OKLCH chroma of each colour; a colour below the neutral line (chroma ${NEUTRAL_CHROMA}, rising with lightness to 0.045 at white) counts as a neutral and is not read here. Vibration: two colours at least ${VIBRATION.minHueGap}° apart, both of chroma ${VIBRATION.minChroma.toFixed(2)} or more, within ${VIBRATION.maxLightnessGap} of each other in lightness.`,
+    maths: `OKLCH chroma of each colour; a colour below the neutral line (chroma ${NEUTRAL_CHROMA}, rising with lightness to ${neutralChromaAt(1).toFixed(3)} at white) counts as a neutral and is not read here. Vibration: two colours at least ${VIBRATION.minHueGap}° apart, both of chroma ${VIBRATION.minChroma.toFixed(2)} or more, within ${VIBRATION.maxLightnessGap} of each other in lightness.`,
     edges: [{ name: "saturated from chroma", value: SATURATED_CHROMA }],
     sources: [ALBERS, OKLAB],
     calibrated: true,
