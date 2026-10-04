@@ -39,10 +39,17 @@ describe("web/privacy.html, claim by claim", () => {
     }
   });
 
-  it("the last reading stays in this tab's session storage, numbers and labels only, never the photo: only handoff.ts touches it", async () => {
-    expect(text).toContain("this tab keeps that reading's rounded measurements and its results in the browser's session storage");
+  it("the last reading is kept in session storage, numbers and labels only, never the photo; Clear removes it; only handoff.ts touches it", async () => {
+    expect(text).toContain("look is sent or counted, except that a reading took place and that a look was tried, and nothing is kept except as below");
+    expect(text).not.toContain("sent, stored or counted");
+    expect(text).toContain("the browser keeps that reading's rounded measurements, its results and, if you tried a look, the look's title, in session storage");
     expect(text).toContain("never the photo or any of its pixels");
+    expect(text).toContain("It is kept for this tab's session (a browser that restores or duplicates the tab keeps it too); Clear on the Rulebook page removes it");
     expect(text).toContain("It is never sent anywhere");
+    // Clear exists on the Rulebook and calls the one remover.
+    const page = read("web/src/rules.ts");
+    expect(page).toContain('clear.textContent = "Clear";');
+    expect(page).toMatch(/clear\.addEventListener\("click", \(\) => \{\s*clearLastRead\(\);/);
     const src = read(HANDOFF);
     expect(src).not.toMatch(/\b(localStorage|indexedDB)\.|fetch\(|XMLHttpRequest|sendBeacon/);
     expect(src.match(/\bsessionStorage\.\w+/g)).toEqual(["sessionStorage.setItem", "sessionStorage.getItem", "sessionStorage.removeItem"]);
@@ -57,6 +64,7 @@ describe("web/privacy.html, claim by claim", () => {
       bins,
       lines: [{ rule: "proportion", title: "Proportion", measured: "0.50 : 0.50", text: "advice prose", state: "advice", borderline: false }],
     });
+    // "look" is the tried look's title, which the page discloses.
     expect(Object.keys(stored).sort()).toEqual(["bins", "day", "engine", "hash", "lines", "look", "source", "v"]);
     expect(Object.keys(stored.lines[0]).sort()).toEqual(["borderline", "measured", "rule", "state"]);
     expect(Object.keys(stored.bins).sort()).toEqual(["bottom", "fit", "palette", "proportion", "top", "waist"]);

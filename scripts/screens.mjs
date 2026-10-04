@@ -125,6 +125,11 @@ async function run(name, viewport) {
   note(`${name}: card saved (${download.suggestedFilename()})`);
 
   // The Rulebook after the read: the last read in this tab marked on each instrument.
+  // rule_opened is counted from the moment the page loads: none on load, one per rule opened.
+  let ruleOpened = 0;
+  page.on("request", (r) => {
+    if (new URL(r.url()).pathname === "/e" && (r.postData() ?? "").includes("rule_opened")) ruleOpened++;
+  });
   await page.goto(rulesUrl, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
   note(`${name}: rulebook chip: ${(await page.textContent("#yours-chip"))?.replace(/\s+/g, " ").trim()}`);
@@ -134,14 +139,26 @@ async function run(name, viewport) {
   await page.focus('[data-range="proportion"]');
   for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowDown");
   note(`${name}: after 5 x ArrowDown: ${await page.textContent('[data-note="proportion"]')}`);
-  const opened = page.waitForRequest((r) => new URL(r.url()).pathname === "/e" && (r.postData() ?? "").includes("rule_opened"), { timeout: 5_000 }).then(
-    () => true,
-    () => false,
-  );
+  // A press on an instrument away from its handle is the page's, never a new value.
+  const before = await page.textContent('[data-note="volume"]');
+  const vol = await page.$('[data-instrument="volume"]');
+  await vol?.scrollIntoViewIfNeeded();
+  const box = await vol?.boundingBox();
+  if (box) await page.mouse.click(box.x + box.width - 6, box.y + box.height - 6);
+  const after = await page.textContent('[data-note="volume"]');
+  note(`${name}: press away from the volume handles leaves it: ${before === after}`);
+  if (before !== after) errors.push("a press away from a handle moved the volume instrument");
+  if (ruleOpened !== 0) errors.push(`rule_opened sent ${ruleOpened} times on load`);
   await page.click("#rule-proportion summary");
-  note(`${name}: rule_opened sent on opening a drill: ${await opened}`);
-  if (!(await opened)) errors.push("rule_opened was not sent when a drill opened");
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(400);
+  const firstOpen = ruleOpened;
+  // Close and open the same drill again: still counted once for this visit.
+  await page.click("#rule-proportion summary");
+  await page.click("#rule-proportion summary");
+  await page.waitForTimeout(400);
+  note(`${name}: rule_opened on load 0, after the first open ${firstOpen}, after reopening the same drill ${ruleOpened}`);
+  if (firstOpen !== 1) errors.push(`rule_opened sent ${firstOpen} times on opening a drill (want 1)`);
+  if (ruleOpened !== 1) errors.push(`rule_opened sent again on reopening the same drill (${ruleOpened})`);
   await page.screenshot({ path: path.join(out, `${name}-7-rules-drill.png`), fullPage: false });
   note(`${name}: 7-rules-drill`);
   // A surface not built yet opens its drop cloth, never a dead tab.

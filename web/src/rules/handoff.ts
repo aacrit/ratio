@@ -2,8 +2,10 @@
 // Rulebook: "Your last read in this tab is marked on each one"). It is the
 // one thing Ratio keeps in the browser today, and it is small: the binned
 // measurements and the reading's lines (numbers and short labels), never a
-// pixel of the photo. It lives in sessionStorage, so it belongs to this tab
-// and is gone when the tab closes; nothing in it is ever sent.
+// pixel of the photo (plus a tried look's title). It lives in sessionStorage:
+// kept for this tab's session, which a browser that restores or duplicates
+// the tab carries over too; Clear on the Rulebook removes it. Nothing in it
+// is ever sent.
 // web/privacy.html says so, and tests/privacy-page.test.ts pairs the claim
 // with this file, the only one allowed to touch browser storage.
 //

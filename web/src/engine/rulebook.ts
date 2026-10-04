@@ -5,7 +5,7 @@
 // the method). Band edges here are the same constants the rules use.
 
 import { FIT_TOLERANCE, TEMPLATES } from "./colour-rules";
-import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARE_EDGES, VALUE_GAP_EDGES } from "./constants";
+import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARES_REFERENCE, SHARE_EDGES, VALUE_GAP_EDGES, VIBRATION } from "./constants";
 
 export interface Source {
   label: string;
@@ -92,7 +92,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   },
   shares: {
     title: "Colour shares",
-    rule: "Colour by area: one dominant, one secondary, one accent, near 0.60 · 0.30 · 0.10. Equal shares compete for the lead.",
+    rule: `Colour by area: one dominant, one secondary, one accent, near ${SHARES_REFERENCE.map((s) => s.toFixed(2)).join(" · ")}. Equal shares compete for the lead.`,
     maths: "Each colour's share of the garment area, rounded to 0.05.",
     edges: [
       { name: "one colour reads as a column at", value: SHARE_EDGES.column },
@@ -105,7 +105,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   chroma: {
     title: "Chroma",
     rule: "One saturated colour among muted ones reads as a single voice. Complements at equal lightness vibrate where they meet (Albers).",
-    maths: "OKLCH chroma of each colour. Vibration: two colours at least 150° apart, both of chroma 0.10 or more, within 0.08 of each other in lightness.",
+    maths: `OKLCH chroma of each colour; a colour below the neutral line (chroma ${NEUTRAL_CHROMA}, rising with lightness to 0.045 at white) counts as a neutral and is not read here. Vibration: two colours at least ${VIBRATION.minHueGap}° apart, both of chroma ${VIBRATION.minChroma.toFixed(2)} or more, within ${VIBRATION.maxLightnessGap} of each other in lightness.`,
     edges: [{ name: "saturated from chroma", value: SATURATED_CHROMA }],
     sources: [ALBERS, OKLAB],
     calibrated: true,

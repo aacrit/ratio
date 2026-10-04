@@ -6,7 +6,7 @@
 
 import { FIT_TOLERANCE, TEMPLATES, fitTemplate } from "../engine/colour-rules";
 import { hueGap } from "../engine/color";
-import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, NEUTRAL_CHROMA, SATURATED_CHROMA, isNeutral, nearEdge } from "../engine/constants";
+import { CONTRAST_EDGES, FIT_LEGS, FIT_TOP, LEG_LINE_EDGE, SATURATED_CHROMA, SHARES_REFERENCE, isNeutral, nearEdge } from "../engine/constants";
 import { pieces } from "../engine/pieces";
 import type { RuleId } from "../engine/rulebook";
 import { type Bins, PROPORTION_BANDS, PROPORTION_BIN, type ProportionBand } from "../engine/rules";
@@ -20,12 +20,12 @@ export const countWord = (n: number): string => NUMBER_WORDS[n] ?? String(n);
 
 // ---- Proportion: the hero instrument ----------------------------------------
 
-/** What each proportion band is called beside the tape (short; the drill names them in full from RULEBOOK). */
+/** What each proportion band is called beside the tape, in the live note and to a screen reader (short; the drill names them in full from RULEBOOK). */
 export const PROPORTION_LABELS: Record<ProportionBand, string> = {
   "short-top": "short top",
   golden: "section",
   halves: "halves",
-  "golden-long": "section from below",
+  "golden-long": "section, below",
   "long-top": "long top",
 };
 
@@ -106,7 +106,9 @@ export const SCALES: readonly ScaleDef[] = [
   scale({ id: "volume-legs", rule: "volume", title: "both legs at the knee, × shoulders", min: 0.4, max: 1.1, step: 0.05, edges: FIT_LEGS, bands: ["narrow", "straight", "wide"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "Both legs' width at the knee over the shoulders" }),
   scale({ id: "legline", rule: "legline", title: "lightness gap, lower piece to shoes", min: 0, max: 0.5, step: 0.02, edges: [LEG_LINE_EDGE], bands: ["the line runs on", "the line ends at the ankle"], borderlineBin: 0.04, format: (v) => `ΔL ${two(v)}`, label: "The lightness gap between the lower piece and the shoes" }),
   scale({ id: "value", rule: "value", title: "lightness range of the palette", min: 0, max: 1, step: 0.02, edges: CONTRAST_EDGES, bands: ["low", "medium", "high"], borderlineBin: 0.04, format: (v) => `range ${two(v)}`, label: "The lightness range, lightest colour minus darkest" }),
-  scale({ id: "chroma", rule: "chroma", title: "chroma of a colour, OKLCH", min: 0, max: 0.25, step: 0.01, edges: [NEUTRAL_CHROMA, SATURATED_CHROMA], bands: ["neutral", "muted", "saturated"], borderlineBin: 0.01, format: (v) => two(v), label: "A colour's chroma" }),
+  // Chroma: the one edge RULEBOOK states. Whether a colour is a neutral depends on its lightness too
+  // (neutralChromaAt), so the scale draws no fixed neutral band; each of your colours says it itself.
+  scale({ id: "chroma", rule: "chroma", title: "chroma of a colour, OKLCH", min: 0, max: 0.25, step: 0.01, edges: [SATURATED_CHROMA], bands: ["muted", "saturated"], borderlineBin: 0.01, format: (v) => two(v), label: "A colour's chroma" }),
 ];
 
 export const scaleById = (id: string): ScaleDef => {
@@ -205,7 +207,8 @@ export interface YoursValues {
   /** Each colour (at least 5% of the area) on the lightness scale, and the range. */
   value: { ls: number[]; range: number } | null;
   shares: { share: number; L: number; C: number; h: number }[];
-  chroma: { L: number; C: number; h: number }[];
+  /** Each colour's chroma, and whether the engine reads it as a neutral (neutralChromaAt its lightness). */
+  chroma: { L: number; C: number; h: number; neutral: boolean }[];
   harmony: HarmonyFit | null;
 }
 
@@ -221,7 +224,7 @@ export function yoursValues(b: Bins): YoursValues {
     legline: p.lower >= 0 && p.shoes >= 0 ? { lower: b.palette[p.lower].L, shoes: b.palette[p.shoes].L, gap: fix(Math.abs(b.palette[p.lower].L - b.palette[p.shoes].L)) } : null,
     value: ls.length ? { ls, range: fix(Math.max(...ls) - Math.min(...ls)) } : null,
     shares: b.palette.map(({ share, L, C, h }) => ({ share, L, C, h })),
-    chroma: b.palette.map(({ L, C, h }) => ({ L, C, h })),
+    chroma: b.palette.map(({ L, C, h }) => ({ L, C, h, neutral: isNeutral({ L, C }) })),
     harmony: harmonyFit(b.palette),
   };
 }
@@ -237,8 +240,18 @@ export const SCALE_LAYOUT: Partial<Record<RuleId, readonly { id: string; y: numb
   chroma: [{ id: "chroma", y: 56 }],
 };
 
-/** The 60-30-10 reference the shares rule reads against (colour-rules.ts, sharesLine). */
-export const SHARES_REFERENCE: readonly number[] = [0.6, 0.3, 0.1];
+export { SHARES_REFERENCE };
+
+/** The lightness strip's ends: the token gradient runs from --scale-lightness-dark (L 0.1) to --scale-lightness-light (L 0.98). */
+export const LIGHTNESS_STRIP = { from: 0.1, to: 0.98 } as const;
+/** Where a lightness sits on the strip, in the instrument's x (clamped to the strip's ends). */
+export const stripX = (L: number) => SCALE_X.from + (SCALE_X.to - SCALE_X.from) * Math.max(0, Math.min(1, (L - LIGHTNESS_STRIP.from) / (LIGHTNESS_STRIP.to - LIGHTNESS_STRIP.from)));
+
+/** A marked value beyond a scale's ends: the marker sits at the end and says so, so the handle and "Yours" never disagree silently. */
+export const offScale = (v: number, min: number, max: number): "below" | "above" | null => (v < min - 1e-9 ? "below" : v > max + 1e-9 ? "above" : null);
+
+/** A handle is taken only by a press within this many instrument units of it, so a thumb scrolling the page past an instrument never moves it. */
+export const HANDLE_HIT = 22;
 
 /** The harmony instrument's example before a read: Matsuda's Y, set where the mock shows it. */
 export const HARMONY_EXAMPLE = { id: "Y", rot: 65 } as const;

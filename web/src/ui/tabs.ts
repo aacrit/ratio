@@ -7,7 +7,7 @@
 
 const SOON: Record<string, string> = {
   face: "Face arrives after the Rulebook. Read an outfit meanwhile.",
-  card: "Card arrives after the Rulebook. Read an outfit meanwhile.",
+  card: "Card is not built yet. Read an outfit meanwhile.",
 };
 
 export function setupTabs(opts: { onRead?: boolean } = {}): void {

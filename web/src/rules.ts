@@ -9,8 +9,11 @@ import type { RuleId } from "./engine/rulebook";
 import { ENGINE_VERSION } from "./engine/rules";
 import { sendEvent } from "./events";
 import { reducedMotion } from "./motion";
-import { type LastRead, clearLastRead, loadLastRead } from "./rules/handoff";
+import { SATURATED_CHROMA, nearEdge } from "./engine/constants";
+import { type LastRead, clearLastRead, loadLastRead, localDay } from "./rules/handoff";
 import {
+  HANDLE_HIT,
+  PROPORTION_RANGE,
   PROP_GEOM,
   RING,
   SCALE_LAYOUT,
@@ -26,7 +29,9 @@ import {
   scaleById,
   scaleNote,
   scaleX,
+  offScale,
   sectorPath,
+  stripX,
   yoursValues,
 } from "./rules/model";
 import { STATE_WORDS } from "./ui/rows";
@@ -44,6 +49,8 @@ function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<strin
 
 const lch = (c: { L: number; C: number; h: number }) => `oklch(${c.L.toFixed(3)} ${c.C.toFixed(3)} ${c.h})`;
 const f1 = (n: number) => n.toFixed(1);
+/** A marker beyond the instrument's ends says so: the handle stops at the end, "Yours" keeps the real value. */
+const past = (side: "below" | "above" | null) => (side ? ", past the end" : "");
 
 /** Crossing an edge flashes the band's name for --dur-fast (never under reduced motion). */
 function flash(root: Element, band: number): void {
@@ -62,15 +69,24 @@ function svgPoint(svg: SVGSVGElement, e: PointerEvent): { x: number; y: number }
   return { x: ((e.clientX - r.left) / r.width) * vb.width, y: ((e.clientY - r.top) / r.height) * vb.height };
 }
 
-/** Drag on the SVG, or arrow keys on its range control: both call `set`. */
-function bindDrag(svg: SVGSVGElement, onPoint: (p: { x: number; y: number }, first: boolean) => void): void {
+type Point = { x: number; y: number };
+
+/**
+ * A drag that starts only on a handle: `grab` says whether a press landed
+ * within the handle's hit area (HANDLE_HIT). A press anywhere else is the
+ * page's (a thumb scrolling past, touch-action: pan-y), never a new value.
+ * The arrow keys on the range control are the other way to move it.
+ */
+function bindDrag(svg: SVGSVGElement, grab: (p: Point) => boolean, onPoint: (p: Point) => void): void {
   let down = false;
   svg.addEventListener("pointerdown", (e) => {
+    const p = svgPoint(svg, e);
+    if (!grab(p)) return;
     down = true;
     svg.setPointerCapture(e.pointerId);
-    onPoint(svgPoint(svg, e), true);
+    onPoint(p);
   });
-  svg.addEventListener("pointermove", (e) => down && onPoint(svgPoint(svg, e), false));
+  svg.addEventListener("pointermove", (e) => down && onPoint(svgPoint(svg, e)));
   const up = () => (down = false);
   svg.addEventListener("pointerup", up);
   svg.addEventListener("pointercancel", up);
@@ -86,8 +102,10 @@ function setupProportion(): (r: number) => void {
   const note = page?.querySelector<HTMLElement>('[data-note="proportion"]');
   if (!svg || !handle || !readout || !range || !note) return () => {};
   let band = proportionAt(Number(range.value)).band;
+  let at = proportionAt(Number(range.value)).r;
   const set = (raw: number) => {
     const p = proportionAt(raw);
+    at = p.r;
     handle.setAttribute("transform", `translate(0 ${f1(propY(p.r))})`);
     readout.textContent = pairText(p.r);
     note.textContent = proportionNote(p.r);
@@ -100,7 +118,9 @@ function setupProportion(): (r: number) => void {
     }
   };
   range.addEventListener("input", () => set(Number(range.value)));
-  bindDrag(svg, ({ y }) => set((y - PROP_GEOM.crown) / (PROP_GEOM.sole - PROP_GEOM.crown)));
+  // The handle is the break line itself, from the tape to its knob.
+  const grab = ({ x, y }: Point) => Math.abs(y - propY(at)) <= 16 && x >= PROP_GEOM.tapeX - 8 && x <= PROP_GEOM.handleEnd + HANDLE_HIT;
+  bindDrag(svg, grab, ({ y }) => set((y - PROP_GEOM.crown) / (PROP_GEOM.sole - PROP_GEOM.crown)));
   return set;
 }
 
@@ -137,10 +157,18 @@ function setupScales(rule: RuleId): Map<string, (v: number) => void> {
     range.addEventListener("input", () => set(Number(range.value)));
     setters.set(id, set);
   }
-  // A drag moves the scale nearest the hand.
+  // A drag moves the scale whose handle was pressed.
   let active: string | null = null;
-  bindDrag(svg, (p, first) => {
-    if (first || !active) active = layout.reduce((best, l) => (Math.abs(l.y - p.y) < Math.abs(best.y - p.y) ? l : best)).id;
+  const grab = (p: Point) => {
+    const hit = layout.find(({ id, y }) => {
+      const s = scaleById(id);
+      return Math.hypot(p.x - scaleX(s, values.get(id) ?? s.start), p.y - y) <= HANDLE_HIT;
+    });
+    active = hit?.id ?? null;
+    return active !== null;
+  };
+  bindDrag(svg, grab, (p) => {
+    if (!active) return;
     const s = scaleById(active);
     setters.get(active)?.(s.min + ((p.x - SCALE_X.from) / (SCALE_X.to - SCALE_X.from)) * (s.max - s.min));
   });
@@ -208,11 +236,11 @@ function scaleMark(id: string, value: number): void {
   const y = SCALE_LAYOUT[s.rule]?.find((l) => l.id === id)?.y;
   if (!g || y === undefined) return;
   const x = scaleX(s, value);
-  g.append(svgEl("path", { d: `M${f1(x)} ${y + 10} V${y + 16}`, class: "mark" }), svgEl("text", { x: f1(Math.max(34, Math.min(222, x))), y: y + 31, "text-anchor": "middle", class: "yours" }, `yours ${s.format(value)}`));
+  g.append(svgEl("path", { d: `M${f1(x)} ${y + 10} V${y + 16}`, class: "mark" }), svgEl("text", { x: f1(Math.max(34, Math.min(222, x))), y: y + 31, "text-anchor": "middle", class: "yours" }, `yours ${s.format(value)}${past(offScale(value, s.min, s.max))}`));
 }
 
 function stripTick(id: string, L: number, cls: string): number {
-  const x = SCALE_X.from + (SCALE_X.to - SCALE_X.from) * L;
+  const x = stripX(L);
   layer(`${id}-strip`)?.append(svgEl("path", { d: `M${f1(x)} 118 V138`, class: cls }));
   return x;
 }
@@ -236,7 +264,7 @@ function marks(last: LastRead, v: YoursValues): void {
     const names = Array.from(page?.querySelectorAll<SVGTextElement>('[data-instrument="proportion"] text.band') ?? []).map((t) => Number(t.getAttribute("y")));
     const near = names.find((ny) => Math.abs(ny - (y + 3)) < 12);
     const ly = near === undefined ? y + 3 : near > y ? near - 12 : near + 12;
-    pg.append(svgEl("path", { d: `M100 ${f1(y)} H128`, class: "mark" }), svgEl("text", { x: 96, y: f1(ly), "text-anchor": "end", class: "yours" }, `yours ${v.proportion.toFixed(2)}`));
+    pg.append(svgEl("path", { d: `M100 ${f1(y)} H128`, class: "mark" }), svgEl("text", { x: 96, y: f1(ly), "text-anchor": "end", class: "yours" }, `yours ${v.proportion.toFixed(2)}${past(offScale(v.proportion, PROPORTION_RANGE.min, PROPORTION_RANGE.max))}`));
   }
   if (v.volumeTop !== null) scaleMark("volume-top", v.volumeTop);
   if (v.volumeLegs !== null) scaleMark("volume-legs", v.volumeLegs);
@@ -257,8 +285,9 @@ function marks(last: LastRead, v: YoursValues): void {
   const cg = layer("chroma");
   const cs = scaleById("chroma");
   for (const c of v.chroma) {
-    const onEdge = scaleAt(cs, c.C).onEdge && c.C > cs.edges[0];
-    cg?.append(svgEl("circle", { cx: f1(scaleX(cs, c.C)), cy: 56, r: 5, fill: lch(c), class: onEdge ? "dot red-ring" : "dot" }));
+    // A neutral is the engine's call (isNeutral at the colour's lightness), not a band on this scale.
+    const onEdge = !c.neutral && nearEdge(c.C, [SATURATED_CHROMA], cs.borderlineBin);
+    cg?.append(svgEl("circle", { cx: f1(scaleX(cs, c.C)), cy: 56, r: 5, fill: lch(c), class: c.neutral ? "dot neutral" : onEdge ? "dot red-ring" : "dot" }));
   }
   label("chroma", last);
   // Shares: the outfit's bar in its own colours, under the reference.
@@ -325,9 +354,7 @@ function setupYours(proportion: (r: number) => void, scales: Map<string, (v: num
     what.textContent = `Your last read: ${source}${last.look ? ` with ${last.look.charAt(0).toLowerCase()}${last.look.slice(1)}` : ""}`;
     const meta = document.createElement("span");
     meta.dataset.numeral = "";
-    const today = new Date();
-    const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    meta.textContent = `${last.hash.slice(0, 4)} · ${last.day === day ? "today" : last.day}`;
+    meta.textContent = `${last.hash.slice(0, 4)} · ${last.day === localDay() ? "today" : last.day}`;
     const parts: Node[] = [dot, what, meta];
     if (last.engine !== ENGINE_VERSION) {
       const old = document.createElement("span");

@@ -318,13 +318,21 @@ body.rules-page .bar {
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  touch-action: none;
+  /* The page scrolls through an instrument; only a press on a handle's hit
+     area (.hit, below) takes the pointer. */
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
 }
 
-svg.instrument {
+.instrument .hit {
+  fill: transparent;
+  touch-action: none;
   cursor: grab;
+}
+
+.instrument .dot.neutral {
+  stroke-dasharray: 2 2;
 }
 
 .instrument-wrap:focus-within .instrument {

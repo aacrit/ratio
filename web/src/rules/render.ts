@@ -7,9 +7,12 @@
 
 import { TEMPLATES } from "../engine/colour-rules";
 import { RULEBOOK, type RuleEntry, type RuleId } from "../engine/rulebook";
+import { VIBRATION } from "../engine/constants";
 import { ENGINE_VERSION, GOLDEN, PROPORTION_BANDS } from "../engine/rules";
 import {
+  HANDLE_HIT,
   HARMONY_EXAMPLE,
+  LIGHTNESS_STRIP,
   PROPORTION_EDGES,
   PROPORTION_LABELS,
   PROPORTION_RANGE,
@@ -53,10 +56,9 @@ function proportionInstrument(): string {
     return `M${i % 5 === 0 ? 17 : 20} ${f1(y)} H24`;
   }).join(" ");
   const edges = PROPORTION_EDGES.map((e) => `M62 ${f1(propY(e))} H118`).join(" ");
-  // Beside the tape the long name is shortened, as in the mock, so it fits the column.
   const labels = PROPORTION_BANDS.map((b, i) => {
     const y = Math.min(sole - 4, Math.max(crown + 10, propY((b.from + Math.min(1, b.to)) / 2) + 3));
-    return `<text x="86" y="${f1(y)}" text-anchor="end" class="band" data-band="${i}">${esc(b.id === "golden-long" ? "section, below" : PROPORTION_LABELS[b.id])}</text>`;
+    return `<text x="86" y="${f1(y)}" text-anchor="end" class="band" data-band="${i}">${esc(PROPORTION_LABELS[b.id])}</text>`;
   }).join("");
   const golden = [GOLDEN, 1 - GOLDEN].map((g) => `M${tapeX} ${f1(propY(g))} H${tapeX + 12}`).join(" ");
   return `<div class="instrument-wrap">
@@ -67,7 +69,7 @@ function proportionInstrument(): string {
 ${labels}
 <path class="mark" d="${golden}" />
 <g class="yours-layer" data-yours-layer="proportion"></g>
-<g class="prop-handle" data-handle="proportion" transform="translate(0 ${f1(propY(start.r))})"><path d="M${tapeX} 0 H${handleEnd}" class="tape" stroke-width="2" /><circle cx="${handleEnd}" cy="0" r="9" class="handle" /><text x="${handleEnd - 12}" y="-8" text-anchor="end" class="n" data-readout="proportion">${esc(pairText(start.r))}</text></g>
+<g class="prop-handle" data-handle="proportion" transform="translate(0 ${f1(propY(start.r))})"><rect class="hit" x="${tapeX - 8}" y="-16" width="${handleEnd - tapeX + 8 + HANDLE_HIT}" height="32" /><path d="M${tapeX} 0 H${handleEnd}" class="tape" stroke-width="2" /><circle cx="${handleEnd}" cy="0" r="9" class="handle" /><text x="${handleEnd - 12}" y="-8" text-anchor="end" class="n" data-readout="proportion">${esc(pairText(start.r))}</text></g>
 </svg>
 <input class="range-hidden" type="range" data-range="proportion" min="${PROPORTION_RANGE.min}" max="${PROPORTION_RANGE.max}" step="${PROPORTION_RANGE.step}" value="${start.r}" aria-label="The break, as a fraction of the height from the crown" aria-valuetext="${esc(`${pairText(start.r)}, ${start.label}`)}" />
 </div>`;
@@ -88,7 +90,7 @@ function scaleGroup(s: ScaleDef, y: number): string {
   return `<g data-scale="${s.id}"><text x="${SCALE_X.from}" y="${y - 32}" class="band caption">${esc(s.title)}</text>${bands}
 <path class="tape" d="M${SCALE_X.from} ${y} H${SCALE_X.to}" /><path class="faint" d="${edges}" />${edgeText}
 <g class="yours-layer" data-yours-layer="${s.id}"></g>
-<g class="scale-handle" data-handle="${s.id}" transform="translate(${f1(scaleX(s, s.start))} 0)"><circle cx="0" cy="${y}" r="8" class="handle" /></g></g>`;
+<g class="scale-handle" data-handle="${s.id}" transform="translate(${f1(scaleX(s, s.start))} 0)"><circle cx="0" cy="${y}" r="${HANDLE_HIT}" class="hit" /><circle cx="0" cy="${y}" r="8" class="handle" /></g></g>`;
 }
 
 function rangeFor(s: ScaleDef): string {
@@ -99,7 +101,7 @@ const LABELS: Partial<Record<RuleId, string>> = {
   volume: "The volume instrument: two scales, the upper piece's width over the shoulders and both legs' width at the knee, each with its bands; drag a handle to see where a band ends",
   legline: "The leg line instrument: the lightness gap between the lower piece and the shoes, against the edge where the line stops running on; drag the handle to see where it ends",
   value: "The value instrument: the palette's lightness range against its low, medium and high edges, over a lightness scale; drag the handle to see where a band ends",
-  chroma: "The chroma instrument: a colour's chroma against the neutral and saturated edges, and a worked pair of complements at equal lightness; drag the handle to see where a band ends",
+  chroma: "The chroma instrument: a colour's chroma against the saturated edge, with your colours marked (a neutral is hollow), and a worked pair of complements at equal lightness; drag the handle to see where a band ends",
 };
 
 /** A lightness strip from black to white (the gradient's stops come from the token file). */
@@ -107,7 +109,7 @@ function lightnessStrip(id: string, y: number, caption: string): string {
   return `<defs><linearGradient id="ls-${id}" x1="0" x2="1"><stop offset="0" class="ls-dark" /><stop offset="1" class="ls-light" /></linearGradient></defs>
 <text x="${SCALE_X.from}" y="${y - 10}" class="band caption">${esc(caption)}</text>
 <rect x="${SCALE_X.from}" y="${y}" width="${SCALE_X.to - SCALE_X.from}" height="10" rx="3" fill="url(#ls-${id})" />
-<text x="${SCALE_X.from}" y="${y + 24}">0</text><text x="${SCALE_X.to}" y="${y + 24}" text-anchor="end">1</text>
+<text x="${SCALE_X.from}" y="${y + 24}">${LIGHTNESS_STRIP.from.toFixed(2)}</text><text x="${SCALE_X.to}" y="${y + 24}" text-anchor="end">${LIGHTNESS_STRIP.to.toFixed(2)}</text>
 <g class="yours-layer" data-yours-layer="${id}-strip"></g>`;
 }
 
@@ -118,7 +120,7 @@ function scaleInstrument(rule: RuleId): string {
   if (rule === "legline") extra = lightnessStrip("legline", 124, "lightness, lower piece and shoes");
   if (rule === "value") extra = lightnessStrip("value", 124, "lightness of each colour");
   if (rule === "chroma")
-    extra = `<text x="${SCALE_X.from}" y="124" class="band caption">vibration: complements within 0.08 in lightness</text>
+    extra = `<text x="${SCALE_X.from}" y="124" class="band caption">vibration: complements within ${VIBRATION.maxLightnessGap} in lightness</text>
 <circle cx="40" cy="150" r="10" class="vib-a" /><circle cx="56" cy="150" r="10" class="vib-b" /><text x="74" y="154">both at 0.55: they vibrate</text>`;
   return `<div class="instrument-wrap">
 <svg class="instrument" data-instrument="${rule}" viewBox="0 0 256 200" role="img" aria-label="${esc(LABELS[rule] ?? rule)}">

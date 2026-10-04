@@ -35,6 +35,12 @@ export const VALUE_GAP_EDGES: readonly [number, number] = [0.08, 0.15];
 
 export const SHARE_EDGES = { column: 0.85, compete: 0.12, near6030: 0.2 } as const;
 
+/** The 60-30-10 reference: dominant, secondary and accent shares of the garment area. */
+export const SHARES_REFERENCE: readonly [number, number, number] = [0.6, 0.3, 0.1];
+
+/** Albers' vibration: two colours at least this far apart in hue, both at least this chroma, within this lightness of each other. */
+export const VIBRATION = { minHueGap: 150, minChroma: 0.1, maxLightnessGap: 0.08 } as const;
+
 /** True when a binned value sits within half a bin of any edge: a slightly different photo could read the other way. */
 export function nearEdge(value: number, edges: readonly number[], bin: number): boolean {
   return edges.some((e) => Math.abs(value - e) <= bin / 2 + 1e-9);

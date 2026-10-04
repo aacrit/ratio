@@ -12,7 +12,8 @@ import { RULEBOOK, type RuleId } from "../web/src/engine/rulebook";
 import { type Bins, ENGINE_VERSION, PROPORTION_BANDS, readBins } from "../web/src/engine/rules";
 import { legFit, legLine, topFit } from "../web/src/engine/shape-rules";
 import { LAST_READ_KEY, lastReadOf, parseLastRead } from "../web/src/rules/handoff";
-import { PROPORTION_EDGES, RULE_ORDER, SCALES, harmonyFit, proportionAt, proportionNote, scaleAt, scaleById, yoursValues } from "../web/src/rules/model";
+import { HANDLE_HIT, PROPORTION_EDGES, PROPORTION_LABELS, RULE_ORDER, SCALES, SCALE_X, harmonyFit, offScale, proportionAt, proportionNote, scaleAt, scaleById, stripX, yoursValues } from "../web/src/rules/model";
+import { SHARES_REFERENCE, VIBRATION } from "../web/src/engine/constants";
 import { PROVENANCE, UNCALIBRATED_NOTE, esc, renderCard, renderRulebook } from "../web/src/rules/render";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -110,12 +111,12 @@ describe("the proportion instrument reads bands as the engine does", () => {
     expect(proportionAt(0.97).r).toBe(0.9);
     expect(proportionAt(0.4499)).toMatchObject({ r: 0.44, band: "halves", onEdge: true });
     expect(proportionAt(0.383)).toMatchObject({ r: 0.38, band: "golden", label: "section", onEdge: false });
-    expect(proportionAt(0.64)).toMatchObject({ band: "golden-long", label: "section from below" });
+    expect(proportionAt(0.64)).toMatchObject({ band: "golden-long", label: "section, below" });
   });
 
   it("says the live value in plain words", () => {
     expect(proportionNote(0.46)).toBe("Drag the line: 0.46, halves.");
-    expect(proportionNote(0.56)).toBe("Drag the line: 0.56, section from below, on the edge.");
+    expect(proportionNote(0.56)).toBe("Drag the line: 0.56, section, below, on the edge.");
   });
 });
 
@@ -145,6 +146,9 @@ describe("the scale instruments read bands as the engine does", () => {
     for (const v of grid(0, 1, 0.02)) expect(scaleAt(scaleById("value"), v).band).toBe(v < CONTRAST_EDGES[0] ? "low" : v < CONTRAST_EDGES[1] ? "medium" : "high");
     expect(scaleAt(scaleById("chroma"), SATURATED_CHROMA)).toMatchObject({ band: "saturated", onEdge: true });
     expect(scaleAt(scaleById("chroma"), 0.05)).toMatchObject({ band: "muted", onEdge: false });
+    // The chroma scale states only RULEBOOK's edge; a neutral is decided per colour by its lightness.
+    expect(scaleById("chroma").edges).toEqual(RULEBOOK.chroma.edges.map((e) => e.value));
+    expect(scaleAt(scaleById("chroma"), 0.01).band).toBe("muted");
   });
 
   it("every scale starts inside its range, on a step, with one band name per band", () => {
@@ -220,5 +224,55 @@ describe("the hand-off from Read (sessionStorage) ignores bad data", () => {
     const back = parseLastRead(JSON.stringify(withExtra))!;
     expect(back).not.toHaveProperty("pixels");
     expect(back.bins).not.toHaveProperty("photo");
+  });
+});
+
+describe("review fixes: one source for every number and label, handles that do not trap the scroll", () => {
+  const html = renderRulebook();
+
+  it("the 60-30-10 reference and the vibration rule come from constants.ts, in the engine's words and on the page", () => {
+    expect(RULEBOOK.shares.rule).toContain(SHARES_REFERENCE.map((v) => v.toFixed(2)).join(" · "));
+    expect(RULEBOOK.chroma.maths).toContain(`at least ${VIBRATION.minHueGap}° apart`);
+    expect(RULEBOOK.chroma.maths).toContain(`within ${VIBRATION.maxLightnessGap} of each other`);
+    expect(html).toContain(`complements within ${VIBRATION.maxLightnessGap} in lightness`);
+    expect(html).toContain(`the reference, ${SHARES_REFERENCE.map((v) => v.toFixed(2)).join(" · ")}`);
+    expect(read("web/src/engine/colour-rules.ts")).not.toMatch(/a - 0\.6\b|>= 150\b|< 0\.08\b/);
+  });
+
+  it("each proportion band has one short label, the same on the tape, in the note and to a screen reader", () => {
+    for (const b of PROPORTION_BANDS) expect(html).toContain(`>${PROPORTION_LABELS[b.id]}</text>`);
+    expect(proportionNote(0.64)).toContain(PROPORTION_LABELS["golden-long"]);
+  });
+
+  it("a colour is drawn as a neutral by the engine's isNeutral, not by where it sits on the scale", () => {
+    const c = yoursValues(SAMPLE).chroma;
+    expect(c[0]).toMatchObject({ C: 0.03, neutral: true }); // cream: under the neutral line at its lightness
+    expect(c[2]).toMatchObject({ C: 0, neutral: true });
+    expect(c[3]).toMatchObject({ C: 0.11, neutral: false });
+  });
+
+  it("the lightness strip's ticks sit on the gradient's real ends (L 0.10 to 0.98), labelled so", () => {
+    expect(stripX(0.1)).toBe(SCALE_X.from);
+    expect(stripX(0.98)).toBe(SCALE_X.to);
+    expect(stripX(0.54)).toBeCloseTo((SCALE_X.from + SCALE_X.to) / 2, 6);
+    expect(html).toContain(">0.10</text>");
+    expect(html).toContain(">0.98</text>");
+  });
+
+  it("a value past a scale's end is labelled, so the handle and Yours never disagree silently", () => {
+    expect(offScale(2.0, 0.9, 1.8)).toBe("above");
+    expect(offScale(0.05, 0.1, 0.9)).toBe("below");
+    expect(offScale(1.8, 0.9, 1.8)).toBeNull();
+    expect(read("web/src/rules.ts")).toContain("past(offScale(value, s.min, s.max))");
+  });
+
+  it("every handle has a hit area that alone takes the pointer; the instruments let the page scroll", () => {
+    expect(html.match(/class="hit"/g)?.length).toBe(SCALES.length + 1);
+    expect(html).toContain(`r="${HANDLE_HIT}" class="hit"`);
+    const css = read("web/src/rules.css");
+    expect(css).toMatch(/\.instrument \{[^}]*touch-action: pan-y;/);
+    expect(css).toMatch(/\.instrument \.hit \{[^}]*touch-action: none;/);
+    expect(css.match(/touch-action: none;/g)?.length).toBe(1);
+    expect(read("web/src/rules.ts")).toContain("if (!grab(p)) return;");
   });
 });
