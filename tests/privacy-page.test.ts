@@ -48,7 +48,9 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the photo is never stored, not even in this browser: no code path anywhere calls indexedDB", () => {
-    expect(text).toContain("it is never stored: not in a file, not in a database on this site, not anywhere in your browser, not even in this tab");
+    expect(text).toContain(
+      "it is not saved anywhere, even in this tab: not in a file, not in a database on this site, not anywhere else in your browser, unless you choose to download a card, which saves that one image to your device like any download",
+    );
     expect(text).toContain("closing the tab, or reloading the page, clears it, exactly as above");
     expect(text).not.toMatch(/IndexedDB/i);
     for (const dir of ["web/src", "worker/src"]) {
@@ -57,6 +59,14 @@ describe("web/privacy.html, claim by claim", () => {
     // This session's reads are a plain in-memory array: no storage API of any kind.
     const session = read("web/src/session.ts");
     expect(session).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\.|fetch\(|XMLHttpRequest|sendBeacon/);
+  });
+
+  it("the one exception, a downloaded card, really does save to the visitor's own device, not send it anywhere", () => {
+    const card = read("web/src/ui/card.ts");
+    // saveCard hands the browser a plain <a download> click: a local save
+    // the browser itself performs, never a request this site's code sends.
+    expect(card).toMatch(/a\.download\s*=/);
+    expect(card).not.toMatch(/fetch\(|XMLHttpRequest|sendBeacon/);
   });
 
   it("the last reading is kept in session storage, numbers and labels only, never the photo; Clear removes it; only handoff.ts touches it", async () => {

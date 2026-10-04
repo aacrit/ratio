@@ -148,6 +148,24 @@ async function run(name, viewport) {
   await page.click("#try-sample");
   await page.waitForSelector("#reading-hash:not(:empty)", { timeout: 120_000 });
   note(`${name}: sample read in ${Date.now() - tRead} ms (models download included on a cold run)`);
+
+  // T3 re-review: leaving for Rules while the first read's full signature is
+  // still revealing must not strand Read inert when you come back. The hash
+  // (and so the look buttons, already disabled for the reveal) exist the
+  // moment it is set above, well before the multi-second signature finishes,
+  // so clicking Rules here lands well inside it.
+  await page.click("#rules-tab");
+  await page.waitForTimeout(100);
+  await page.click("#read-tab");
+  // The reveal keeps running in the background regardless of which route is
+  // visible; give it time to actually finish before judging the result.
+  await page.waitForFunction(() => document.body.dataset.revealing === undefined, { timeout: 5_000 }).catch(() => {});
+  const heroAfterRaceBack = (await page.textContent("#hero-n"))?.trim();
+  const firstLookDisabledAfterRaceBack = await page.$eval(".look .btn", (b) => b.disabled).catch(() => null);
+  note(`${name}: Rules during the first read's reveal, then back: hero "${heroAfterRaceBack}", Try it disabled: ${firstLookDisabledAfterRaceBack}`);
+  if (!heroAfterRaceBack) errors.push("leaving for Rules during the first read's reveal left the hero numeral empty on return");
+  if (firstLookDisabledAfterRaceBack !== false) errors.push("leaving for Rules during the first read's reveal left Try it disabled on return");
+
   await page.waitForTimeout(3500);
   await shot("2-read");
   note(`${name}: ${await page.textContent("#reading-hash")}`);
@@ -278,6 +296,22 @@ async function run(name, viewport) {
   note(`${name}: Read -> Rules -> Read (in-app): result hidden ${resultHidden}, hash ${hashBefore} -> ${hashAfter}`);
   if (resultHidden || hashAfter !== hashBefore || verdictAfter !== verdictBefore) errors.push("Read -> Rules -> Read did not restore the same read with no re-measure");
 
+  // A row's "Why?" link opens Rules in-app at that rule's card, scrolled to
+  // and focused - and the read underneath must survive it, the same as any
+  // other in-app route change (T3 re-review: "Why? links do a full navigation").
+  await page.click(".row-why");
+  await page.waitForTimeout(500);
+  const whyPath = await page.evaluate(() => location.pathname);
+  const whyFocusedRule = await page.evaluate(() => document.activeElement?.closest(".rule")?.id ?? null);
+  await page.click("#back-to-read");
+  await page.waitForTimeout(500);
+  const resultHiddenAfterWhy = await page.isHidden("#result");
+  const hashAfterWhy = (await page.textContent("#reading-hash"))?.trim();
+  note(`${name}: Why? link: path ${whyPath}, focused rule card: ${whyFocusedRule}; read survives: result hidden ${resultHiddenAfterWhy}, hash unchanged: ${hashAfterWhy === hashAfter}`);
+  if (whyPath !== "/rules") errors.push(`a Why? link did not reach /rules in-app (path: ${whyPath})`);
+  if (!whyFocusedRule) errors.push("a Why? link did not focus its rule card on the Rulebook");
+  if (resultHiddenAfterWhy || hashAfterWhy !== hashAfter) errors.push("clicking a Why? link did not preserve the read underneath it");
+
   // Back/forward between Read and Rules, and between reads, work through popstate.
   await page.click("#rules-tab");
   await page.waitForTimeout(400);
@@ -357,6 +391,25 @@ async function run(name, viewport) {
   const pressedAfterEscape = await page.getAttribute(".look .btn", "aria-pressed");
   note(`${name}: keyboard Escape: first look pressed = ${pressedAfterEscape}`);
   if (pressedAfterEscape !== "false") errors.push("keyboard Escape did not return to the original after trying a look");
+
+  // Shortcuts (and the bar's own action) are Read's: the spec gives Rules
+  // none of its own (T3 re-review: "Shortcuts and the bar work while Rules shows").
+  await page.click("#rules-tab");
+  await page.waitForTimeout(400);
+  let lookTriedOnRules = 0;
+  const onRequestOnRules = (r) => {
+    if (new URL(r.url()).pathname === "/e" && (r.postData() ?? "").includes("look_tried")) lookTriedOnRules++;
+  };
+  page.on("request", onRequestOnRules);
+  await page.keyboard.press("1");
+  await page.waitForTimeout(600);
+  page.off("request", onRequestOnRules);
+  const barActionsHiddenOnRules = await page.isHidden(".bar-actions");
+  note(`${name}: keyboard "1" on Rules: look_tried sent ${lookTriedOnRules} times; .bar-actions hidden: ${barActionsHiddenOnRules}`);
+  if (lookTriedOnRules !== 0) errors.push(`keyboard "1" on Rules sent look_tried (${lookTriedOnRules} times)`);
+  if (!barActionsHiddenOnRules) errors.push(".bar-actions did not hide on the Rules view");
+  await page.click("#back-to-read");
+  await page.waitForTimeout(400);
 
   // Compact: rows collapse to name, band and the numeral; a row opens on tap or Enter.
   const firstRowOpenBefore = await page.evaluate(() => getComputedStyle(document.querySelector(".row .row-b")).display);

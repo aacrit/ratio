@@ -397,16 +397,17 @@ export function setupRulebook(root: HTMLElement): { refreshYours: () => void } {
     // "Back to your reading" (R-09: Read -> Rules -> Read restores the last
     // read, with no re-measure): Read's own in-memory session does the
     // actual restoring, when this tab still has one; failing that, Read
-    // falls back to the same hand-off's chalk-figure restore. Either way
-    // the link's target is this read's own hash. Set first, before anything
-    // below that could throw on an unexpected shape: the link must never
-    // stay hidden just because a mark failed to draw.
-    if (back) {
-      back.hidden = !last;
-      if (last) back.href = `/#r=${last.hash.slice(0, 4)}`;
-    }
-    // The outfit as worn is marked first; a tried look is the second marker.
+    // falls back to the same hand-off's chalk-figure restore. The outfit
+    // as worn is marked first; a tried look is the second marker.
     const worn = last ? wornOf(last) : null;
+    if (back) {
+      // Always the as-worn hash: a tried look is never kept as its own
+      // session entry, so linking to last.hash (which is the tried look's
+      // hash when a look was tried last) would look up a read the session
+      // store has never heard of and silently fail to restore anything.
+      back.hidden = !last || !worn;
+      if (worn) back.href = `/#r=${worn.hash.slice(0, 4)}`;
+    }
     const look = last ? lookOf(last) : null;
     const v = worn ? yoursValues(worn.bins) : null;
     yoursLines(last, v);

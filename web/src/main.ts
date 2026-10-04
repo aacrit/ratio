@@ -23,7 +23,7 @@ import { othersCopy } from "./engine/person";
 import { Figure, showPhoto } from "./overlay";
 import type { Pixels } from "./engine/resample";
 import type { AdviceLine, Bins } from "./engine/rules";
-import { readBins } from "./engine/rules";
+import { ENGINE_VERSION, readBins } from "./engine/rules";
 import { type Look, suggestLooks } from "./engine/looks";
 import { lookPhrase } from "./engine/verdict";
 import type { Read } from "./read";
@@ -217,6 +217,13 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
   // still settling when a newer one starts must not finish its work over
   // the newer read's (main.ts review: "stale showRead").
   let showGen = 0;
+  // A separate token for the URL alone. Route changes (Read <-> Rules) must
+  // not cancel an in-flight showRead's visual tail - only stop it writing a
+  // URL for a read that is no longer the route showing (T3 re-review: "leaving
+  // for Rules during the reveal breaks Read" - bumping showGen there made the
+  // tail bail before re-enabling the look buttons, landing the rows, or
+  // updating the strip, so returning to Read showed an inert, half-drawn one).
+  let urlGen = 0;
 
   /**
    * Shows a read already in hand: either a freshly measured one, or one
@@ -227,6 +234,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
    */
   const showRead = async (read: Read, opts: { sourceCredit: string | null; quick: boolean; push: boolean }): Promise<void> => {
     const gen = ++showGen;
+    const urlGenAtStart = urlGen;
     const sourceCredit = opts.sourceCredit;
     chalkRestore.hidden = true;
     showPhoto(canvas, read.display);
@@ -336,7 +344,9 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     else countTo(heroN, read.reading.lines[0].measured);
     rendered.land();
     renderStrip(sessionStrip, sessionReads(), read.hash, (index) => void selectAndShow(index));
-    setUrlHash(read.hash, opts.push);
+    // Skip only the URL write when a route change happened mid-reveal: the
+    // visual tail above still finishes, so Read is never left inert.
+    if (urlGenAtStart === urlGen) setUrlHash(read.hash, opts.push);
   };
 
   const selectAndShow = async (index: number): Promise<void> => {
@@ -382,7 +392,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
       heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
       heroN.textContent = lines[0].measured;
       heroEyebrow.textContent = heroEyebrowOf(lines);
-      verdict.textContent = (tried ? `Trying ${lookPhrase(tried.moves)}: ` : "") + verdictOf(lines, tried ? [] : looks);
+      verdict.textContent = (tried ? `Trying ${lookPhrase(tried.moves)}: ` : "") + verdictOf(lines, tried ? [] : looks, b);
       paletteSlot.replaceChildren(paletteStrip(b));
       chalkRestoreFigure.replaceChildren(chalkFigure(b, { label: "The chalk figure in the outfit's measured colours; the photo is gone until you read it again" }));
       renderRows(rows, lines, b, { borderlineSlot }).land();
@@ -439,16 +449,33 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
   };
 
   addEventListener("popstate", () => {
+    // A history entry whose pathname is "/rules" always means Rules, however
+    // it was reached (the Rules tab, a Why? link, or back/forward through
+    // either): show it and stop, independent of whatever hash the entry
+    // also carries, since none of this route's history entries use one.
     if (location.pathname === "/rules") {
       showRulesRoute(false);
       return;
     }
+    // Any other pathname is the Read route's own "/" or "/#r=<hash4>".
+    // Coming from Rules, switch the view first; the hash (if any) below is
+    // what then picks which read to show on it.
     if (onRules) showReadRoute(false);
     const m = /^#r=([0-9a-f]{4})$/.exec(location.hash);
     if (!m) return;
     const idx = findSessionReadByHash4(m[1]);
     const rec = idx >= 0 ? selectSessionRead(idx) : null;
-    if (rec) void showRead(rec.read, { sourceCredit: rec.sourceCredit, quick: true, push: false });
+    if (rec) {
+      void showRead(rec.read, { sourceCredit: rec.sourceCredit, quick: true, push: false });
+    } else if (current) {
+      // This session keeps at most MAX_KEPT reads: back/forward can land on
+      // a hash for one since dropped. Land on what is actually still shown
+      // and correct the URL to match it, rather than strand the address bar
+      // on a hash forward/back can never resolve again.
+      setUrlHash(current.read.hash, false);
+    } else {
+      history.replaceState({}, "", "/");
+    }
   });
 
   let busy = false;
@@ -473,10 +500,11 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
         status.dataset.state = "error";
         // The read survives a failed re-read (R-09): the failed attempt's
         // own onPhoto already drew its (unread) photo over the current
-        // one's; put the current read's own photo back rather than leave
-        // the stage showing a photo that was never actually read.
+        // one's. showPhoto alone would put the bare photo back but lose
+        // the measurement overlay (plumb line, marks); figure.paint()
+        // redraws both, exactly as they stood before the failed attempt.
         if (current) {
-          showPhoto(canvas, current.read.display);
+          current.figure.paint();
           document.body.dataset.state = "read";
         } else showCloth();
         return;
@@ -696,9 +724,12 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     // A read's reveal may still be in flight (e.g. the popstate handler's own
     // quick re-show after a "back"); its tail would otherwise call
     // setUrlHash(..., false) once it finishes, replaceState-ing this route's
-    // URL back to "/#r=..." after we've already left for Rules. Invalidate it,
-    // the same way showChalkRestore does.
-    showGen++;
+    // URL back to "/#r=..." after we've already left for Rules. Bump urlGen,
+    // not showGen: the reveal's own visual tail (re-enabling the look
+    // buttons, landing the rows, updating the strip) must still finish, only
+    // its URL write is stale now.
+    urlGen++;
+    closeMenu(false); // the read menu is Read's own action; Rules has none (T3 re-review)
     ensureRulebook();
     rulebookApi?.refreshYours();
     onRules = true;
@@ -710,12 +741,16 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     rulesTab.setAttribute("aria-current", "page");
     tabsApi?.setActive(rulesTab);
     document.title = "Rulebook · Ratio";
+    // A Why? link's own rAF below focuses the specific rule card instead,
+    // overriding this a moment later; plain arrivals at Rules land here.
+    rulesView.querySelector<HTMLElement>("#rulebook-h1")?.focus({ preventScroll: true });
     if (push) history.pushState({ route: "rules" }, "", "/rules");
   };
   const showReadRoute = (push: boolean): void => {
-    // Same reasoning as showRulesRoute: a stale in-flight showRead must not
-    // be allowed to touch the URL once we've routed away from it.
-    showGen++;
+    // Same reasoning as showRulesRoute: a stale in-flight showRead's URL
+    // write must not run once we've routed away from it, but its visual
+    // tail still must.
+    urlGen++;
     onRules = false;
     rulesView.hidden = true;
     document.body.classList.remove("rules-page");
@@ -725,13 +760,22 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     readTab.setAttribute("aria-current", "page");
     tabsApi?.setActive(readTab);
     document.title = "Ratio";
+    // A no-op when #result (and so #sheet-head) is still hidden, as it is
+    // before any read: nothing to focus back onto yet.
+    $<HTMLElement>("sheet-head")?.focus({ preventScroll: true });
     if (push) history.pushState({ route: "read" }, "", current ? `/#r=${hash4(current.read.hash)}` : "/");
   };
+  // A plain left-click, no modifier: anything else (middle-click, Ctrl/Cmd-
+  // click to open a new tab, Shift-click for a new window) is left alone to
+  // do what the browser normally does with a real <a href> (T3 re-review).
+  const isPlainClick = (e: MouseEvent): boolean => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
   rulesTab.addEventListener("click", (e) => {
+    if (!isPlainClick(e)) return;
     e.preventDefault();
     if (!onRules) showRulesRoute(true);
   });
   readTab.addEventListener("click", (e) => {
+    if (!isPlainClick(e)) return;
     e.preventDefault();
     if (onRules) showReadRoute(true);
   });
@@ -739,6 +783,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
   // are real links, `/#r=<hash4>` or `/`: without this they would do a full
   // navigation, which is exactly what T3's in-app Rules is for not doing.
   rulesView.addEventListener("click", (e) => {
+    if (!isPlainClick(e)) return;
     const a = (e.target as HTMLElement).closest("a");
     const href = a?.getAttribute("href") ?? "";
     const m = /^\/#r=([0-9a-f]{4})$/.exec(href);
@@ -748,6 +793,28 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     const rec = m ? selectSessionRead(findSessionReadByHash4(m[1])) : null;
     if (rec) void showRead(rec.read, { sourceCredit: rec.sourceCredit, quick: true, push: true });
     else history.pushState({ route: "read" }, "", "/");
+  });
+  // "Why?" links (a row's or a look's) point at one rule card on the
+  // Rulebook, `/rules#rule-<id>`. Caught document-wide, since they appear in
+  // the Read view itself, not only within Rules. Opens Rules in-app, then
+  // scrolls to and focuses that card, the same place a real navigation to
+  // the URL would land - without a full page load throwing the in-flight
+  // read away (T3 re-review: "Why? links do a full navigation").
+  document.addEventListener("click", (e) => {
+    if (!isPlainClick(e)) return;
+    const a = (e.target as HTMLElement).closest("a");
+    const href = a?.getAttribute("href") ?? "";
+    if (!href.startsWith("/rules#")) return;
+    e.preventDefault();
+    const id = href.slice("/rules".length);
+    showRulesRoute(true);
+    requestAnimationFrame(() => {
+      const target = rulesView.querySelector<HTMLElement>(id);
+      if (!target) return;
+      target.scrollIntoView({ block: "start" });
+      if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+      target.focus({ preventScroll: true });
+    });
   });
 
   // ---- Keyboard, for heavy use (T3) --------------------------------------------
@@ -810,15 +877,20 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
       download: () => void downloadCard(saveTop, saveNote),
       help: openHelp,
     };
-    // No shortcut fires while a "not built yet" cloth (Face, Card) is open:
-    // body.dataset.soon is set exactly then (ui/tabs.ts).
-    const guarded: ShortcutHandlers = Object.fromEntries(Object.entries(handlers).map(([k, fn]) => [k, (...args: unknown[]) => document.body.dataset.soon === undefined && (fn as (...a: unknown[]) => void)(...args)])) as unknown as ShortcutHandlers;
+    // No shortcut fires while a "not built yet" cloth (Face, Card) is open
+    // (body.dataset.soon is set exactly then, ui/tabs.ts), or while Rules
+    // shows: the spec gives Rules no action of its own (T3 re-review).
+    const guarded: ShortcutHandlers = Object.fromEntries(Object.entries(handlers).map(([k, fn]) => [k, (...args: unknown[]) => document.body.dataset.soon === undefined && !onRules && (fn as (...a: unknown[]) => void)(...args)])) as unknown as ShortcutHandlers;
     setupShortcuts(guarded);
   }
 
   // ---- This tab's session: restore on load, with no re-measure ------------------
 
   (() => {
+    // A direct visit or reload at /rules: show Rules itself, not a read
+    // restore. This session's memory is always empty this early anyway
+    // (see the next comment), so there is no read this visit could be
+    // restoring regardless.
     if (location.pathname === "/rules") {
       showRulesRoute(false);
       return;
@@ -834,9 +906,12 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     if (toShow) void showRead(toShow.read, { sourceCredit: toShow.sourceCredit, quick: true, push: false });
     else {
       // Nothing in memory (a genuine reload, or a direct visit): fall back
-      // to the photo-free hand-off, shown as the chalk figure, if any.
+      // to the photo-free hand-off, shown as the chalk figure, if any -
+      // but only when it is still readable by this build's engine: bins
+      // from an older engine version are not a promise this one can keep
+      // "same photo, same reading" on.
       const last = loadLastRead();
-      if (last) showChalkRestore(last);
+      if (last && last.engine === ENGINE_VERSION) showChalkRestore(last);
     }
   })();
 

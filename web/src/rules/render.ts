@@ -223,7 +223,7 @@ export function renderRulebook(): string {
   const ids = RULE_ORDER.filter((id) => id in RULEBOOK);
   return `<header class="page-head">
 <p class="eyebrow">The rulebook · <span data-numeral>${esc(ENGINE_VERSION)}</span></p>
-<h1>${esc(countWord(ids.length))} rules, each with its maths, its edges and its source.</h1>
+<h1 id="rulebook-h1" tabindex="-1">${esc(countWord(ids.length))} rules, each with its maths, its edges and its source.</h1>
 <p class="lede plain">${esc(PLAIN_LEDE)}</p>
 <p class="lede">${esc(LEDE)}</p>
 <p class="lede provenance">${esc(PROVENANCE)}</p>

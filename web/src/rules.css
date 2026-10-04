@@ -16,6 +16,13 @@ body.rules-page .bar {
   top: 0;
 }
 
+/* Rules has no action of its own (design/spec.md): the Read bar's "Read my
+   outfit" button (and the menu it opens) stay off it entirely, not merely
+   unreachable by keyboard. */
+body.rules-page .bar-actions {
+  display: none;
+}
+
 .rulebook {
   width: min(100%, 960px);
   margin: 0 auto;
