@@ -143,9 +143,13 @@
       }
       .look-actions {
         display: flex;
-        flex-wrap: wrap;
         gap: 6px;
         justify-content: end;
+        flex: none;
+      }
+      .look .look-changes {
+        flex: 1;
+        min-width: 0;
       }
       .look .btn[aria-pressed="true"] {
         background: transparent;
