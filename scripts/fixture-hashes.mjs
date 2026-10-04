@@ -138,6 +138,12 @@ async function main() {
     try {
       const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       const page = await context.newPage();
+      // Diagnostic only: when a browser cannot run the models, the page's own
+      // console and uncaught errors say why (a WASM instantiation failure, a
+      // missing capability, a blocked fetch), printed so a known limit in the
+      // lock is backed by a real reason, never a guess.
+      page.on("console", (m) => { if (m.type() === "error") console.log(`fixture-hashes: ${name} console: ${m.text()}`); });
+      page.on("pageerror", (e) => console.log(`fixture-hashes: ${name} pageerror: ${e}`));
       results[name] = {};
       for (const [id, file] of Object.entries(files)) {
         try {
