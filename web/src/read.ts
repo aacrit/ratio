@@ -4,7 +4,7 @@
 // origin; the photo itself never leaves the tab.
 
 import { readingHash } from "./engine/hash";
-import { type MeasureFailure, type OutfitMeasure, measureOutfit } from "./engine/measure";
+import { type Mask, type MeasureFailure, type OutfitMeasure, measureOutfit } from "./engine/measure";
 import { extractPalette, type Swatch } from "./engine/palette";
 import { downsample, type Pixels } from "./engine/resample";
 import { type OutfitReading, readOutfit } from "./engine/rules";
@@ -12,6 +12,8 @@ import { decode, see } from "./vision";
 
 export interface Read {
   pixels: Pixels;
+  /** The segmenter's categories, kept in the tab for "try it" (never sent anywhere). */
+  mask: Mask;
   measure: OutfitMeasure;
   palette: Swatch[];
   reading: OutfitReading;
@@ -48,5 +50,5 @@ export async function readPhoto(file: Blob): Promise<Read | ReadFailure> {
   const palette = extractPalette(pixels, seen.mask, measure);
   const reading = readOutfit(measure, palette);
   const hash = await readingHash({ engine: reading.engine, bins: reading.bins });
-  return { pixels, measure, palette, reading, hash };
+  return { pixels, mask: seen.mask, measure, palette, reading, hash };
 }

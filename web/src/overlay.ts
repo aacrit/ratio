@@ -218,16 +218,20 @@ export class Figure {
     );
   }
 
-  /** Glides the break to the waist (on) or back to where it was measured (off). */
-  showTuck(on: boolean): void {
+  /**
+   * Glides the break to a look's proportion (head 0 to feet 1), or back to
+   * where it was measured (null). The measured break stays as a faint chalk
+   * line while a look is shown, so before and after are both on screen.
+   */
+  showBreakAt(ratio: number | null): void {
     const s = this.scene;
     if (this.m.breakRow === null) return;
     this.tuckAnim?.cancel();
     const from = s.breakRow ?? this.m.breakRow;
-    const to = on ? this.m.waistRow : this.m.breakRow;
-    s.ghostRow = on ? this.m.breakRow : null;
+    const to = ratio === null ? this.m.breakRow : this.m.top + this.h * ratio;
+    s.ghostRow = ratio === null ? null : this.m.breakRow;
     s.near = false;
-    const toRatio = on ? this.reading.bins.waist : (this.reading.bins.proportion ?? 0);
+    const toRatio = ratio ?? this.reading.bins.proportion ?? 0;
     const fromRatio = s.label ?? toRatio;
     this.tuckAnim = spring(springToken("glide"), 0, 1, (t) => {
       s.breakRow = from + (to - from) * t;
@@ -236,8 +240,36 @@ export class Figure {
     });
     const anim = this.tuckAnim;
     void anim.done.then(() => {
-      s.near = on ? Math.abs(toRatio - GOLDEN) <= 0.02 : this.reading.lines[0].state === "golden";
+      s.near = Math.abs(toRatio - GOLDEN) <= 0.02;
       this.draw();
     });
+  }
+
+  /** Shows the tuck the proportion advice describes (on), or the outfit as worn. */
+  showTuck(on: boolean): void {
+    this.showBreakAt(on ? this.reading.bins.waist : null);
+  }
+
+  /**
+   * Cross-fades the photo to another version of itself (a tried look's
+   * recolour, or the photo as worn). Same size, same overlay on top.
+   */
+  async setPhoto(pixels: Pixels): Promise<void> {
+    const next = new OffscreenCanvas(pixels.width, pixels.height);
+    next.getContext("2d")?.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
+    const prev = this.photo;
+    const mix = new OffscreenCanvas(pixels.width, pixels.height);
+    const c = mix.getContext("2d");
+    await tween(numberToken("--dur-morph") || 360, (t) => {
+      if (!c) return;
+      c.globalAlpha = 1;
+      c.drawImage(prev, 0, 0);
+      c.globalAlpha = t;
+      c.drawImage(next, 0, 0);
+      this.photo = mix;
+      this.draw();
+    });
+    this.photo = next;
+    this.draw();
   }
 }

@@ -15,7 +15,7 @@ import type { Swatch } from "./palette";
 
 export { NEUTRAL_CHROMA };
 
-export const ENGINE_VERSION = "ratio-engine/0.2.1";
+export const ENGINE_VERSION = "ratio-engine/0.3.0";
 
 export const GOLDEN = 0.382;
 export const PROPORTION_BIN = 0.02;
@@ -120,12 +120,21 @@ export interface OutfitReading {
   lines: AdviceLine[];
 }
 
-export function readOutfit(m: OutfitMeasure, palette: Swatch[]): OutfitReading {
-  const bins = binsOf(m, palette);
-  const rawBreak = m.breakRow === null ? null : (m.breakRow - m.top) / (m.bottom - m.top);
+/**
+ * Applies the whole rulebook to a set of bins. The read of a photo and every
+ * suggested look (looks.ts) go through here, so a suggestion is judged by
+ * exactly the rules that judged the outfit.
+ */
+export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
   const lines = [proportionLine(bins, rawBreak)];
   if (bins.palette.length) {
     lines.push(harmonyLine(bins.palette, bins.waist), valueLine(bins.palette, bins.top.L, bins.bottom.L), sharesLine(bins.palette), chromaLine(bins.palette, bins.waist));
   }
-  return { engine: ENGINE_VERSION, bins, lines };
+  return lines;
+}
+
+export function readOutfit(m: OutfitMeasure, palette: Swatch[]): OutfitReading {
+  const bins = binsOf(m, palette);
+  const rawBreak = m.breakRow === null ? null : (m.breakRow - m.top) / (m.bottom - m.top);
+  return { engine: ENGINE_VERSION, bins, lines: readBins(bins, rawBreak) };
 }

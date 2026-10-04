@@ -122,3 +122,29 @@ export function extractPalette(pixels: Pixels, mask: Mask, fig: Figure): Swatch[
   return swatches.map((s) => ({ ...s, share: s.share / kept })).sort((p, q) => q.share - p.share);
 }
 
+
+/**
+ * Which swatch each pixel belongs to (-1 for none): the same box, the same
+ * categories and the same nearest-colour rule as extractPalette, so "try it"
+ * recolours exactly the pixels the palette was measured from.
+ */
+export function assignPixels(pixels: Pixels, mask: Mask, fig: Figure, swatches: Swatch[]): Int8Array {
+  const W = mask.width;
+  const out = new Int8Array(W * mask.height).fill(-1);
+  if (!swatches.length) return out;
+  const pad = (fig.right - fig.left) * 0.35;
+  const x0 = Math.max(0, Math.floor(fig.left - pad)), x1 = Math.min(W - 1, Math.ceil(fig.right + pad));
+  const y0 = Math.max(0, Math.floor(fig.top)), y1 = Math.min(mask.height - 1, Math.ceil(fig.bottom));
+  const centres = swatches.map((s) => s.lab);
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) {
+      const cat = mask.data[y * W + x];
+      if (cat !== CATEGORY.clothes && cat !== CATEGORY.other) continue;
+      const i = (y * W + x) * 4;
+      const lab = srgbToOklab(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
+      // A pixel far from every swatch (a dropped speck) is left as it is.
+      const k = nearest(lab, centres);
+      out[y * W + x] = deltaE(lab, centres[k]) < 0.2 ? k : -1;
+    }
+  return out;
+}

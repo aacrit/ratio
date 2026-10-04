@@ -202,6 +202,22 @@ textarea:focus-visible,
   cursor: pointer;
 }
 
+/* The chalk figure waits at the side of the drop cloth (stacked on phones). */
+@media (min-width: 640px) {
+  .drop {
+    grid-template-columns: 120px 1fr;
+    column-gap: 28px;
+  }
+  .drop-figure {
+    grid-row: 1 / span 3;
+  }
+}
+
+.drop-figure {
+  width: 120px;
+  max-width: 100%;
+}
+
 .drop[data-over] {
   border-style: solid;
   border-color: var(--color-cream);
@@ -419,6 +435,206 @@ body[data-state="measuring"] .read-status {
 .reading-hash {
   font-size: 0.8rem;
   color: var(--color-cream-muted);
+}
+
+/* A row a tried look changed: a chalk rule at its edge, and the change said in words. */
+.row[data-changed] {
+  border-left: 2px solid var(--color-cream);
+  padding-left: 12px;
+}
+
+.row-change {
+  font: 500 0.78rem var(--font-data);
+  letter-spacing: 0.04em;
+  color: var(--color-cream);
+}
+
+.row[data-state="golden"] .row-change {
+  color: var(--color-section);
+}
+
+/* ---- Trying a look ------------------------------------------------------------ */
+
+.trying {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.trying-text {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.trying-title {
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: 1.2rem;
+  line-height: 1.3;
+}
+
+.trying-note {
+  font-size: 0.85rem;
+  color: var(--color-cream-muted);
+  max-width: 48ch;
+}
+
+/* The chalk figure: one standard figure for everyone, in the look's colours. */
+.chalk-figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--color-surface-raised);
+  border-radius: 6px;
+}
+
+.chalk-figure .garment {
+  stroke: none;
+}
+
+.chalk-figure .chalk path,
+.chalk-figure .chalk circle {
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chalk-figure .belt {
+  stroke: var(--color-cream);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.chalk-figure .fig-tape path,
+.chalk-figure .fig-break {
+  stroke: var(--color-tape);
+  stroke-width: 1.4;
+  fill: none;
+}
+
+.chalk-figure .fig-section {
+  stroke: var(--color-cream-muted);
+  stroke-width: 1.4;
+}
+
+.chalk-figure .fig-section.on {
+  stroke: var(--color-section);
+  stroke-width: 2.4;
+}
+
+.chalk-figure .fig-ratio {
+  font: 500 10px var(--font-data);
+  font-variant-numeric: tabular-nums;
+  fill: var(--color-tape);
+}
+
+/* ---- Looks to try ------------------------------------------------------------ */
+
+.looks {
+  display: grid;
+  gap: 12px;
+}
+
+.looks-intro {
+  color: var(--color-cream-muted);
+  max-width: var(--measure-reading);
+}
+
+.look-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.look {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  justify-items: start;
+  padding: 18px 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.look-h {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.look-n {
+  font: 500 0.85rem var(--font-data);
+  color: var(--color-cream-muted);
+}
+
+.look-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-weight: 400;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.look-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.look-swatches:empty {
+  display: none;
+}
+
+.chip-swatch {
+  width: 28px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
+}
+
+.look-moves,
+.look-changes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.look-changes li {
+  font: 400 0.8rem var(--font-data);
+  color: var(--color-cream-muted);
+}
+
+.look-changes b {
+  font-family: var(--font-structure);
+  font-weight: 600;
+  color: var(--color-cream);
+}
+
+.look-changes li[data-to="golden"] {
+  color: var(--color-section);
+}
+
+.look .btn[aria-pressed="true"] {
+  background: transparent;
+  color: var(--color-cream);
+  border: 1px solid var(--color-cream);
 }
 
 /* ---- Feedback and footer ---------------------------------------------------- */

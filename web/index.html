@@ -30,6 +30,7 @@
       <section class="read" aria-labelledby="read-title">
         <h2 id="read-title" class="visually-hidden">Read an outfit</h2>
         <label class="drop" id="drop" for="photo">
+          <span id="drop-figure" class="drop-figure" aria-hidden="true"></span>
           <span class="drop-title">Drop a full-length photo. It stays in this tab.</span>
           <span class="drop-note">One person, standing, head to feet, facing the camera. Adults only. Ratio reads the outfit: proportion and colour.</span>
           <span class="btn drop-btn">Read this photo</span>
@@ -46,6 +47,15 @@
             <canvas id="figure" class="figure" role="img" aria-label="Your photo with the tape, the break line and the golden-section mark drawn over it"></canvas>
           </div>
           <div class="read-col">
+            <div id="trying" class="trying" hidden>
+              <div id="trial" class="trial"></div>
+              <div class="trying-text">
+                <p class="eyebrow">Trying a look</p>
+                <p class="trying-title"></p>
+                <p class="trying-note">Colour changes are shown on your photo, in the tab. A tuck or a belt is shown on the chalk figure and by the break mark, never painted onto the photo.</p>
+                <button class="btn ghost trying-back" type="button">As worn</button>
+              </div>
+            </div>
             <p id="verdict" class="verdict"></p>
             <div id="palette-slot"></div>
             <ol id="advice" class="rows"></ol>
@@ -55,6 +65,12 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <section id="looks" class="looks" aria-labelledby="looks-title" hidden>
+        <h2 id="looks-title">Looks to try</h2>
+        <p class="looks-intro"></p>
+        <ol id="look-list" class="look-list"></ol>
       </section>
 
       <section class="card" id="feedback-card">

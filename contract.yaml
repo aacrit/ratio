@@ -155,6 +155,8 @@ events:
     # Placeholder: rename to the product's core success event at Spark
     # (scripts/lint-events.mjs fails the gate until then).
     - "reading_completed"
+    # A suggested look was tried in the tab (counted, never the look itself).
+    - look_tried
     - feedback_received
     - rate_limiter_error
   # Counted only by the Worker code that does the thing being counted; /e
