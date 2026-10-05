@@ -471,6 +471,16 @@ async function run(name, viewport) {
     if (pathAfter !== "/rules") errors.push(`a read finishing while Rules showed changed the URL to ${pathAfter}`);
     if (!rulesShowing) errors.push("a read finishing while Rules showed switched the view away from Rules");
     if (backHref !== `/#r=${newHash4}`) errors.push(`the Rulebook's Back link names ${backHref}, not the read that just finished (/#r=${newHash4})`);
+    // T3 review 4: browser Back from here lands on the same read the Back link names.
+    await page.goBack();
+    await page.waitForTimeout(600);
+    const pathOnBack = await page.evaluate(() => location.pathname + location.hash);
+    const hashOnBack = hash4Of(await page.textContent("#reading-hash"));
+    note(`${name}: browser Back after a read finished on Rules: url ${pathOnBack}, read on screen ${hashOnBack}`);
+    if (pathOnBack !== `/#r=${newHash4}` || hashOnBack !== newHash4) errors.push(`browser Back from Rules went to ${pathOnBack} (read ${hashOnBack}), not the read the Back link names (/#r=${newHash4})`);
+    await page.goForward();
+    await page.waitForTimeout(600);
+    if ((await page.evaluate(() => location.pathname)) !== "/rules") errors.push("browser Forward did not return to /rules");
     await page.click("#back-to-read");
     await page.waitForTimeout(600);
     // Two distinct reads in this session now: the strip shows both.
@@ -586,6 +596,7 @@ async function run(name, viewport) {
   note(`${name}: Card tab with a read on screen: "${cardTabTitle?.trim()}", preview image shown: ${cardPreviewImg}`);
   if (cardTabTitle?.trim() !== "This read, as a card.") errors.push(`Card tab did not preview this read (showed "${cardTabTitle}")`);
   if (!cardPreviewImg) errors.push("Card tab's preview image did not render");
+  await page.waitForTimeout(500); // let the tab underline finish sliding to Card before the shot
   await page.screenshot({ path: path.join(out, `${name}-15-card-preview.png`), fullPage: false });
   note(`${name}: 15-card-preview`);
   await page.click('.tabs [data-soon="card"]'); // close it

@@ -11,3 +11,13 @@ export function readTail(s: { onRules: boolean; urlGenAtStart: number; urlGen: n
   if (s.onRules) return "refresh-rules";
   return s.urlGenAtStart === s.urlGen ? "write-url" : "none";
 }
+
+// The `/rules` history entry records which read sat below it (`below`, a
+// hash4, or null for none). A read that finishes on Rules needs its own
+// `/#r=` entry under `/rules` when that is not already it, so browser Back
+// and "Back to your reading" land on the same read (T3 review 4). In the
+// plain Read to Rules flow the entry below is already this read: no extra
+// history entry.
+export function readBelowRules(state: unknown, hash4: string): boolean {
+  return (state as { below?: unknown } | null)?.below !== hash4;
+}

@@ -4,7 +4,7 @@
 // scripts/screens.mjs, which drives the real build.
 
 import { describe, expect, it } from "vitest";
-import { readTail } from "../web/src/ui/route";
+import { readBelowRules, readTail } from "../web/src/ui/route";
 import { type RowLike, rowOpen, syncRowsExpanded } from "../web/src/ui/rows";
 
 describe("readTail: what a finished read does with the address bar", () => {
@@ -16,6 +16,18 @@ describe("readTail: what a finished read does with the address bar", () => {
   it("never writes /#r= over /rules: a read that finishes while Rules shows refreshes the Rulebook's chip and Back link instead", () => {
     expect(readTail({ onRules: true, urlGenAtStart: 3, urlGen: 3 })).toBe("refresh-rules");
     expect(readTail({ onRules: true, urlGenAtStart: 3, urlGen: 4 })).toBe("refresh-rules");
+  });
+});
+
+describe("readBelowRules: Back from Rules lands on the read the Back link names", () => {
+  it("asks for the new read's entry under /rules when the entry below names another read, or none", () => {
+    expect(readBelowRules({ route: "rules", below: "6e48" }, "ef1b")).toBe(true);
+    expect(readBelowRules({ route: "rules", below: null }, "ef1b")).toBe(true);
+    expect(readBelowRules(null, "ef1b")).toBe(true);
+  });
+
+  it("adds nothing in the plain Read to Rules flow, where the entry below already names this read", () => {
+    expect(readBelowRules({ route: "rules", below: "ef1b" }, "ef1b")).toBe(false);
   });
 });
 

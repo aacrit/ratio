@@ -40,7 +40,7 @@ import { paletteStrip, renderRows } from "./ui/rows";
 import { Sheet } from "./ui/sheet";
 import { type ShortcutHandlers, SHORTCUT_LIST, setupShortcuts } from "./ui/shortcuts";
 import { renderStrip } from "./ui/strip";
-import { readTail } from "./ui/route";
+import { readBelowRules, readTail } from "./ui/route";
 import { type TabsApi, setupTabs } from "./ui/tabs";
 import { type LastRead, lastReadOf, loadLastRead, saveLastRead, wornOf } from "./rules/handoff";
 import { addSessionRead, findSessionReadByHash4, hash4, selectSessionRead, type SessionRead, sessionReads, stepSessionRead } from "./session";
@@ -350,7 +350,16 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     // that finishes while Rules shows never writes `/#r=` over `/rules`; it
     // refreshes the Rulebook's chip and Back link instead (ui/route.ts).
     const tail = readTail({ onRules, urlGenAtStart, urlGen });
-    if (tail === "refresh-rules") rulebookApi?.refreshYours();
+    if (tail === "refresh-rules") {
+      rulebookApi?.refreshYours();
+      // Browser Back must land where the Back link points: put this read's
+      // entry under /rules when the one there names another read (route.ts).
+      const h4 = hash4(read.hash);
+      if (readBelowRules(history.state, h4)) {
+        history.replaceState({ r: h4 }, "", `/#r=${h4}`);
+        history.pushState({ route: "rules", below: h4 }, "", "/rules");
+      }
+    }
     else if (tail === "write-url") setUrlHash(read.hash, opts.push);
   };
 
@@ -764,7 +773,10 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     // A Why? link's own rAF below focuses the specific rule card instead,
     // overriding this a moment later; plain arrivals at Rules land here.
     rulesView.querySelector<HTMLElement>("#rulebook-h1")?.focus({ preventScroll: true });
-    if (push) history.pushState({ route: "rules" }, "", "/rules");
+    if (push) {
+      const below = location.pathname === "/" ? (/^#r=([0-9a-f]{4})$/.exec(location.hash)?.[1] ?? null) : null;
+      history.pushState({ route: "rules", below }, "", "/rules");
+    }
   };
   const showReadRoute = (push: boolean): void => {
     // Same reasoning as showRulesRoute: a stale in-flight showRead's URL
@@ -793,6 +805,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     if (!isPlainClick(e)) return;
     e.preventDefault();
     if (!onRules) showRulesRoute(true);
+    else tabsApi?.setActive(rulesTab); // closes a Face/Card cloth opened over Rules
   });
   readTab.addEventListener("click", (e) => {
     if (!isPlainClick(e)) return;
@@ -811,7 +824,10 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     e.preventDefault();
     showReadRoute(false);
     const rec = m ? selectSessionRead(findSessionReadByHash4(m[1])) : null;
-    if (rec) void showRead(rec.read, { sourceCredit: rec.sourceCredit, quick: true, push: true });
+    // Already on screen: re-showing would rebuild the looks and drop a look
+    // being tried (the same guard as popstate). Only the URL moves.
+    if (rec && rec.id === current?.read.hash) history.pushState({ r: m?.[1] }, "", href);
+    else if (rec) void showRead(rec.read, { sourceCredit: rec.sourceCredit, quick: true, push: true });
     else history.pushState({ route: "read" }, "", "/");
   });
   // "Why?" links (a row's or a look's) point at one rule card on the
