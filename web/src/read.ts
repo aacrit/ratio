@@ -13,7 +13,7 @@ import { extractPalette, type Swatch } from "./engine/palette";
 import { type Side, isolatePerson } from "./engine/person";
 import { downsample, type Pixels } from "./engine/resample";
 import { type OutfitReading, readOutfit } from "./engine/rules";
-import { DecoderLoadError } from "./decode";
+import { DecodeRefusedError, DecoderLoadError } from "./decode";
 import { decode, see } from "./vision";
 
 /** The long side the photo is shown at: three times the reading size, enough for a 1280 stage at 2x. */
@@ -42,13 +42,16 @@ export interface Read {
   hash: string;
 }
 
-export type ReadFailure = MeasureFailure | "not_an_image" | "models_failed";
+export type ReadFailure = MeasureFailure | "not_an_image" | "cmyk_jpeg" | "animated_webp" | "damaged_photo" | "models_failed";
 
 export const FAILURE_COPY: Record<ReadFailure, string> = {
   no_figure: "No full figure found. Use a photo of one person standing, head to feet, facing the camera.",
   feet_not_in_frame: "The feet are out of frame. Proportion is measured head to foot, so the whole figure needs to be in the photo. Hair, makeup and expression reads arrive in a later release.",
   no_clothes: "The garments could not be told apart from the background. A plainer background and even light help.",
   not_an_image: "That file could not be opened as a photo. JPEG, PNG and WebP work.",
+  cmyk_jpeg: "This JPEG uses CMYK colour; save it as RGB and try again.",
+  animated_webp: "This WebP is animated; save one frame as a still photo and try again.",
+  damaged_photo: "This photo could not be decoded; the file may be damaged. Save or export it again and try once more.",
   models_failed: "The measuring models did not load. Check the connection and try again; they download once, then stay in the browser.",
 };
 
@@ -57,18 +60,25 @@ export interface ReadHooks {
   onPhoto?: (display: Pixels) => void;
 }
 
+/** The failure a decode error is shown as. */
+export function decodeFailure(e: unknown): ReadFailure {
+  // The decoder is downloaded like the models: when it cannot load, the
+  // file was never the problem, so the visitor is not told it was.
+  if (e instanceof DecoderLoadError) {
+    console.error("ratio: the decoder failed to load:", e.cause ?? e);
+    return "models_failed";
+  }
+  // A JPEG, PNG or WebP its decoder refused: said as what it is, never "not a photo".
+  if (e instanceof DecodeRefusedError) return e.reason === "damaged" ? "damaged_photo" : e.reason;
+  return "not_an_image";
+}
+
 export async function readPhoto(file: Blob, hooks: ReadHooks = {}): Promise<Read | ReadFailure> {
   let full: Pixels;
   try {
     full = await decode(file);
   } catch (e) {
-    // The decoder is downloaded like the models: when it cannot load, the
-    // file was never the problem, so the visitor is not told it was.
-    if (e instanceof DecoderLoadError) {
-      console.error("ratio: the decoder failed to load:", e.cause ?? e);
-      return "models_failed";
-    }
-    return "not_an_image";
+    return decodeFailure(e);
   }
   const display = downsample(full, DISPLAY_SIZE);
   hooks.onPhoto?.(display);

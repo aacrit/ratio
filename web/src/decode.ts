@@ -61,13 +61,79 @@ function load(format: Format): Promise<Decoder> {
   return ready[format];
 }
 
+/** Why a decoder refused a file in a format it knows: the variants a visitor can fix are named. */
+export type DecodeRefusal = "cmyk_jpeg" | "animated_webp" | "damaged";
+
+/** A JPEG, PNG or WebP file its decoder would not turn into pixels. */
+export class DecodeRefusedError extends Error {
+  constructor(
+    readonly reason: DecodeRefusal,
+    options?: { cause?: unknown },
+  ) {
+    super(`the decoder refused the file (${reason})`, options);
+  }
+}
+
+/** True when the view covers the whole of its own buffer, so nothing else (no decoder's memory, no other file) lives in it. */
+export const ownsBuffer = (a: ArrayBufferView): boolean => a.byteOffset === 0 && a.buffer.byteLength === a.byteLength;
+
+/**
+ * Names the variant of a recognised format that its decoder refuses: a JPEG
+ * whose frame has four components (CMYK or YCCK, which MozJPEG cannot turn
+ * into RGB) or an animated WebP (libwebp's still decoder refuses it).
+ * Anything else is "damaged".
+ */
+export function whyRefused(b: Uint8Array, format: Format): DecodeRefusal {
+  if (format === "jpeg") {
+    let at = 2;
+    while (at + 4 <= b.length && b[at] === 0xff) {
+      const marker = b[at + 1];
+      if (marker === 0xff) {
+        at += 1;
+        continue;
+      }
+      if (marker === 0xda || marker === 0xd9) break;
+      const len = (b[at + 2] << 8) | b[at + 3];
+      if (len < 2) break;
+      // SOF0..SOF15, less DHT (C4), JPG (C8) and DAC (CC): the frame header, whose 8th byte is the component count.
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return at + 9 < b.length && b[at + 9] === 4 ? "cmyk_jpeg" : "damaged";
+      }
+      at += 2 + len;
+    }
+    return "damaged";
+  }
+  if (format === "webp") {
+    // VP8X's animation flag, or an ANIM chunk anywhere in the file.
+    if (b.length > 20 && String.fromCharCode(b[12], b[13], b[14], b[15]) === "VP8X" && b[20] & 0x02) return "animated_webp";
+    let at = 12;
+    while (at + 8 <= b.length) {
+      if (String.fromCharCode(b[at], b[at + 1], b[at + 2], b[at + 3]) === "ANIM") return "animated_webp";
+      const len = b[at + 4] | (b[at + 5] << 8) | (b[at + 6] << 16) | (b[at + 7] << 24);
+      if (len < 0) break;
+      at += 8 + len + (len & 1);
+    }
+  }
+  return "damaged";
+}
+
 /** Decodes a JPEG, PNG or WebP file to RGBA pixels, exactly as stored (no rotation, no colour profile). */
 export async function decodePixels(bytes: Uint8Array<ArrayBuffer>): Promise<Pixels> {
   const format = sniff(bytes);
   if (!format) throw new Error("not a JPEG, PNG or WebP file");
   const decoder = await load(format);
-  const img = await decoder(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-  if (!img || img.width < 1 || img.height < 1 || img.data.length !== img.width * img.height * 4) throw new Error("the decoder returned no pixels");
-  // A copy: the decoder may hand back a view of its own memory.
-  return { width: img.width, height: img.height, data: new Uint8ClampedArray(img.data) };
+  // The file's own buffer when the view is all of it (a File's arrayBuffer() always is): no second copy of the file.
+  const input = ownsBuffer(bytes) ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  let img: Awaited<ReturnType<Decoder>> | null;
+  try {
+    img = await decoder(input);
+  } catch (e) {
+    throw new DecodeRefusedError(whyRefused(bytes, format), { cause: e });
+  }
+  if (!img || img.width < 1 || img.height < 1 || img.data.length !== img.width * img.height * 4) throw new DecodeRefusedError(whyRefused(bytes, format));
+  // The decoders hand back pixels in a buffer of their own (MozJPEG, libwebp
+  // and the png crate's glue all copy out of WebAssembly memory), so they
+  // are kept as they are; a view into a larger buffer (a decoder's memory)
+  // is copied, so the pixels never alias it.
+  return { width: img.width, height: img.height, data: ownsBuffer(img.data) ? img.data : new Uint8ClampedArray(img.data) };
 }
