@@ -40,6 +40,7 @@ import { paletteStrip, renderRows } from "./ui/rows";
 import { Sheet } from "./ui/sheet";
 import { type ShortcutHandlers, SHORTCUT_LIST, setupShortcuts } from "./ui/shortcuts";
 import { renderStrip } from "./ui/strip";
+import { readTail } from "./ui/route";
 import { type TabsApi, setupTabs } from "./ui/tabs";
 import { type LastRead, lastReadOf, loadLastRead, saveLastRead, wornOf } from "./rules/handoff";
 import { addSessionRead, findSessionReadByHash4, hash4, selectSessionRead, type SessionRead, sessionReads, stepSessionRead } from "./session";
@@ -74,7 +75,7 @@ interface Current {
   read: Read;
 }
 
-function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<HTMLElement | null> } | undefined {
+function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<HTMLElement | null>; readAction: () => void } | undefined {
   const input = $<HTMLInputElement>("photo");
   const stage = $<HTMLElement>("stage");
   const cloth = $<HTMLElement>("drop");
@@ -345,8 +346,12 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     rendered.land();
     renderStrip(sessionStrip, sessionReads(), read.hash, (index) => void selectAndShow(index));
     // Skip only the URL write when a route change happened mid-reveal: the
-    // visual tail above still finishes, so Read is never left inert.
-    if (urlGenAtStart === urlGen) setUrlHash(read.hash, opts.push);
+    // visual tail above still finishes, so Read is never left inert. A read
+    // that finishes while Rules shows never writes `/#r=` over `/rules`; it
+    // refreshes the Rulebook's chip and Back link instead (ui/route.ts).
+    const tail = readTail({ onRules, urlGenAtStart, urlGen });
+    if (tail === "refresh-rules") rulebookApi?.refreshYours();
+    else if (tail === "write-url") setUrlHash(read.hash, opts.push);
   };
 
   const selectAndShow = async (index: number): Promise<void> => {
@@ -465,7 +470,11 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     if (!m) return;
     const idx = findSessionReadByHash4(m[1]);
     const rec = idx >= 0 ? selectSessionRead(idx) : null;
-    if (rec) {
+    if (rec && rec.id === current?.read.hash) {
+      // Already on screen (Back from Rules to the read it left): re-showing
+      // would rebuild the looks and drop a look being tried.
+      return;
+    } else if (rec) {
       void showRead(rec.read, { sourceCredit: rec.sourceCredit, quick: true, push: false });
     } else if (current) {
       // This session keeps at most MAX_KEPT reads: back/forward can land on
@@ -486,6 +495,9 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     document.body.dataset.state = "measuring";
     status.textContent = "Measuring.";
     status.removeAttribute("data-state");
+    // Where a failed read returns to: the read on screen (current), else the
+    // chalk restore if that is what showed, else the drop cloth.
+    const fromChalk = current === null && !chalkRestore.hidden;
     try {
       const { read, copy } = await reader.read(file, (display: Pixels) => {
         // The photo shows the moment it is decoded; the models are still at work.
@@ -500,11 +512,19 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
         status.dataset.state = "error";
         // The read survives a failed re-read (R-09): the failed attempt's
         // own onPhoto already drew its (unread) photo over the current
-        // one's. showPhoto alone would put the bare photo back but lose
-        // the measurement overlay (plumb line, marks); figure.paint()
-        // redraws both, exactly as they stood before the failed attempt.
+        // one's, at that photo's size and aspect ratio. figure.restore()
+        // puts the canvas back to the current read's size, then redraws the
+        // photo and its overlay exactly as they stood before the attempt.
+        // From the chalk restore, the chalk figure comes back, with
+        // whatever look was being tried on it untouched.
         if (current) {
-          current.figure.paint();
+          current.figure.restore();
+          document.body.dataset.state = "read";
+        } else if (fromChalk) {
+          well.hidden = true;
+          delete well.dataset.in;
+          cloth.hidden = true;
+          chalkRestore.hidden = false;
           document.body.dataset.state = "read";
         } else showCloth();
         return;
@@ -959,7 +979,12 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     return wrap;
   };
 
-  return { cardPreview };
+  /** The Face/Card cloth's "Read an outfit": on Rules, route back to Read in-app (the cloth itself is already closed). */
+  const readAction = (): void => {
+    if (onRules) showReadRoute(true);
+  };
+
+  return { cardPreview, readAction };
 }
 
 function setupFeedback(): void {
@@ -1018,7 +1043,9 @@ sendEvent("page_view");
 setThemeColor();
 setupDropFigure();
 let cardPreviewFn: (() => Promise<HTMLElement | null>) | null = null;
-const tabsApi = setupTabs({ onRead: true, dynamic: { card: () => cardPreviewFn?.() ?? Promise.resolve(null) } });
+let readActionFn: (() => void) | null = null;
+const tabsApi = setupTabs({ onRead: true, dynamic: { card: () => cardPreviewFn?.() ?? Promise.resolve(null) }, onReadAction: () => readActionFn?.() });
 const readApi = setupRead(tabsApi);
 cardPreviewFn = readApi?.cardPreview ?? null;
+readActionFn = readApi?.readAction ?? null;
 setupFeedback();

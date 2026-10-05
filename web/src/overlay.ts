@@ -141,6 +141,21 @@ export class Figure {
   }
 
   /**
+   * Puts this figure back on its canvas after something else drew there (a
+   * failed re-read's photo, shown the moment it decoded, R-09): the canvas
+   * size and aspect ratio go back to this read's photo before the repaint,
+   * since paint() alone draws at this read's scale into whatever size the
+   * other photo left behind.
+   */
+  restore(): void {
+    const { width, height } = this.photo;
+    this.element.width = width;
+    this.element.height = height;
+    this.element.style.aspectRatio = `${width} / ${height}`;
+    this.paint();
+  }
+
+  /**
    * Paints the scene. On screen by default; into another context (the saved
    * card) with `still`, which draws the look whole and no wipe.
    */

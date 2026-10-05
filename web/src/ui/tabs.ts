@@ -19,10 +19,16 @@ export interface TabsOptions {
    * result of null falls back to the plain SOON line.
    */
   dynamic?: Partial<Record<string, () => Promise<HTMLElement | null> | HTMLElement | null>>;
+  /**
+   * Called after the cloth's "Read an outfit" closes it (with onRead): the
+   * page routes to Read from wherever it is, so on Rules it switches to Read
+   * in-app rather than only closing the cloth over the Rulebook.
+   */
+  onReadAction?: () => void;
 }
 
 export interface TabsApi {
-  /** Moves the underline to `tab` (or hides it for null), closing any open "not built yet" drop cloth first. Main.ts calls this when it switches Read <-> Rules in-app. */
+  /** Moves the underline to `tab` (or hides it for null), closing any open "not built yet" drop cloth first, and records it as the route's tab: closing a cloth later returns the underline there. Main.ts calls this when it switches Read <-> Rules in-app. */
   setActive(tab: HTMLElement | null): void;
 }
 
@@ -36,6 +42,9 @@ export function setupTabs(opts: TabsOptions = {}): TabsApi {
   line.setAttribute("aria-hidden", "true");
   nav.append(line);
 
+  // The tab of the route showing (Read or Rules), and the tab the underline
+  // is under now: a cloth's tab while one is open, the route's tab otherwise.
+  let route: HTMLElement | null = home;
   let at: HTMLElement | null = home;
   const place = () => {
     if (!at) {
@@ -77,7 +86,7 @@ export function setupTabs(opts: TabsOptions = {}): TabsApi {
     open = null;
     cloth.hidden = true;
     delete document.body.dataset.soon;
-    at = home;
+    at = route;
     place();
   };
   const show = async (tab: HTMLElement) => {
@@ -115,11 +124,13 @@ export function setupTabs(opts: TabsOptions = {}): TabsApi {
       });
     }
   }
-  // On Read, "Read an outfit" is already here: close the cloth, keep the read.
+  // On Read, "Read an outfit" is already here: close the cloth, keep the
+  // read. From Rules, the page routes back to Read (onReadAction).
   if (opts.onRead)
     action.addEventListener("click", (e) => {
       e.preventDefault();
       close();
+      opts.onReadAction?.();
       home?.focus();
     });
   // Capture phase: this must claim Escape before the page's own shortcuts
@@ -142,6 +153,7 @@ export function setupTabs(opts: TabsOptions = {}): TabsApi {
   return {
     setActive(tab: HTMLElement | null): void {
       if (open) close();
+      route = tab;
       at = tab;
       place();
     },

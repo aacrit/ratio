@@ -70,7 +70,19 @@ export const adviceLabel = (line: AdviceLine): string => (line.state === "unread
 export const stateLabel = (line: AdviceLine): string => (line.borderline ? `${STATE_WORDS[line.state]}, borderline` : STATE_WORDS[line.state]);
 
 /** A row is open (its Measured/Rule/Advice showing) when compact mode is off, or when it has been opened. */
-const isRowOpen = (li: HTMLElement): boolean => document.body.dataset.compact === undefined || li.dataset.open !== undefined;
+export const rowOpen = (compact: boolean, opened: boolean): boolean => !compact || opened;
+const isRowOpen = (li: HTMLElement): boolean => rowOpen(document.body.dataset.compact !== undefined, li.dataset.open !== undefined);
+
+/** Just enough of a row for syncRowsExpanded: its data-open flag and its head button. */
+export interface RowLike {
+  dataset: { open?: string };
+  querySelector(sel: ".row-h"): { setAttribute(name: string, value: string): void } | null;
+}
+
+/** Re-says every row head's aria-expanded after Compact is toggled, so it matches what the CSS now shows. */
+export function syncRowsExpanded(rows: Iterable<RowLike>, compact: boolean): void {
+  for (const li of rows) li.querySelector(".row-h")?.setAttribute("aria-expanded", String(rowOpen(compact, li.dataset.open !== undefined)));
+}
 
 const BORDERLINE_EXPLAIN = "This measurement sits on the edge between two bands, so a slightly different photo may read the other way. Both readings apply.";
 

@@ -5,6 +5,8 @@
 // product (web/privacy.html discloses it; tests/privacy-page.test.ts pairs
 // the claim with this file).
 
+import { syncRowsExpanded } from "./rows";
+
 const KEY = "ratio:compact";
 
 export function loadCompact(): boolean {
@@ -24,13 +26,14 @@ export function saveCompact(on: boolean): void {
   }
 }
 
-/** Wires a toggle button: reflects and flips `document.body.dataset.compact`, remembered per device. */
+/** Wires a toggle button: reflects and flips `document.body.dataset.compact`, remembered per device. Every row head's aria-expanded is re-said to match. */
 export function setupCompact(button: HTMLButtonElement): void {
   const apply = (on: boolean) => {
     if (on) document.body.dataset.compact = "";
     else delete document.body.dataset.compact;
     button.setAttribute("aria-pressed", String(on));
     button.textContent = on ? "Compact: on" : "Compact";
+    syncRowsExpanded(document.querySelectorAll<HTMLElement>(".row"), on);
   };
   apply(loadCompact());
   button.addEventListener("click", () => {
