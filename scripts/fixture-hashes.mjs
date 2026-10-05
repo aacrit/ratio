@@ -17,6 +17,13 @@
 // "ratio:last-read"): the same bins, parsed back through that file's own
 // validator, so a malformed reading cannot pass as a match by accident.
 //
+// Every fixture is read in a fresh browser context (empty sessionStorage),
+// so the page's restore of the last reading (main.ts, T3) has nothing to
+// restore, and the reading taken is the one this upload produced: the
+// page's reading_completed event for it, then a hash that differs from the
+// one on screen before setInputFiles. Two different fixtures that come back
+// with one hash fail both the check and --update.
+//
 // Usage:
 //   node scripts/fixture-hashes.mjs [base-url]
 //     [--update]                 rewrite the lock; only when every browser
@@ -24,6 +31,9 @@
 //     [--browsers=chromium,...]  which engines to launch (default: all
 //                                 three; local smoke runs should pass
 //                                 --browsers=chromium only, never update)
+//     [--allow-unsupported <b>]  with --update only: let the lock record a
+//                                 browser it lists as ok as unsupported
+//                                 (a reviewed decision, never automatic)
 //
 // Playwright is its own launch here (npm install --no-save playwright in
 // the workflow), never an MCP browser session.
@@ -34,17 +44,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "playwright";
 import { SAMPLES } from "./fetch-models.mjs";
+import { allFailedAlike, duplicateHashes, parseArgs, refusedDowngrades } from "./lib/fixture-check.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const lockPath = path.join(repoRoot, "fixtures.lock.json");
 
-const args = process.argv.slice(2);
-const update = args.includes("--update");
-const base = args.find((a) => !a.startsWith("--")) ?? "http://localhost:4173";
-const browsersArg = args.find((a) => a.startsWith("--browsers="));
+const parsed = parseArgs(process.argv.slice(2));
+const update = parsed.update;
+const base = parsed.base ?? "http://localhost:4173";
+const allowUnsupported = parsed.allowUnsupported;
 const ENGINES = { chromium, firefox, webkit };
-const browserNames = browsersArg ? browsersArg.slice("--browsers=".length).split(",").filter(Boolean) : ["chromium", "firefox", "webkit"];
-for (const b of browserNames) if (!(b in ENGINES)) throw new Error(`fixture-hashes: unknown browser "${b}"`);
+const browserNames = parsed.browsers ?? ["chromium", "firefox", "webkit"];
+for (const b of [...browserNames, ...allowUnsupported]) if (!(b in ENGINES)) throw new Error(`fixture-hashes: unknown browser "${b}"`);
+if (allowUnsupported.length && !update) throw new Error("fixture-hashes: --allow-unsupported only means something with --update");
 
 // By URL and SHA-256, same pins scripts/screens.mjs uses for p1/p2, and the
 // same sample fetch-models.mjs stages for the first visit. Never in git.
@@ -82,16 +94,51 @@ async function stageFixture(id) {
   return file;
 }
 
-/** Reads one fixture in one open page and returns the reading handoff.ts already validates (web/src/rules/handoff.ts). */
-async function readFixture(page, file) {
+/**
+ * Reads one fixture in a page of its own fresh context and returns the
+ * reading handoff.ts already validates (web/src/rules/handoff.ts). The
+ * reading must be this upload's: `readings` counts the page's
+ * reading_completed events (sent once per completed read, never for a
+ * restore), and the hash on screen and in the hand-off must differ from
+ * whatever stood there before the file went in.
+ */
+async function readFixture(page, readings, file) {
   await page.goto(base, { waitUntil: "networkidle" });
+  const before = await page.evaluate(() => ({
+    text: document.getElementById("reading-hash")?.textContent ?? "",
+    stored: (() => {
+      try {
+        return JSON.parse(sessionStorage.getItem("ratio:last-read") ?? "null")?.hash ?? null;
+      } catch {
+        return null;
+      }
+    })(),
+  }));
+  const countBefore = readings.count;
   await page.setInputFiles("#photo", file);
-  await Promise.race([
-    page.waitForSelector("#reading-hash:not(:empty)", { timeout: 150_000 }),
-    page.waitForSelector('#read-status[data-state="error"]', { timeout: 150_000 }),
+  const outcome = await Promise.race([
+    readings.next(countBefore, 150_000).then(() => "read"),
+    page.waitForSelector('#read-status[data-state="error"]', { timeout: 150_000 }).then(() => "error"),
   ]);
-  const errorText = await page.evaluate(() => document.getElementById("read-status")?.getAttribute("data-state") === "error" ? document.getElementById("read-status")?.textContent ?? "read failed" : null);
-  if (errorText) throw new Error(errorText);
+  if (outcome === "error") {
+    throw new Error((await page.textContent("#read-status").catch(() => null)) || "read failed");
+  }
+  // reading_completed is sent just before the read is shown; wait for the
+  // reading it announced to land on screen and in the hand-off.
+  await page.waitForFunction(
+    (b) => {
+      const text = document.getElementById("reading-hash")?.textContent ?? "";
+      let stored = null;
+      try {
+        stored = JSON.parse(sessionStorage.getItem("ratio:last-read") ?? "null")?.hash ?? null;
+      } catch {
+        return false;
+      }
+      return !!text && text !== b.text && !!stored && stored !== b.stored && text.includes(stored.slice(0, 4));
+    },
+    before,
+    { timeout: 30_000 },
+  );
   const raw = await page.evaluate(() => sessionStorage.getItem("ratio:last-read"));
   if (!raw) throw new Error("no reading handed to sessionStorage (ratio:last-read) after a completed read");
   const last = JSON.parse(raw);
@@ -150,12 +197,6 @@ async function probeCapabilities(page) {
   return `${seen.map((s) => `${s.where}: OffscreenCanvas ${s.offscreenCanvas ? "yes" : "no"}, WebGL2 on it ${s.offscreenWebgl2 === true ? "yes" : s.offscreenWebgl2 || "no"}`).join("; ")} (${process.platform}, ${ua})`;
 }
 
-/** True when every fixture failed with the same kind of error in this browser: it cannot run the models at all, not a per-photo bug. */
-function allFailedAlike(resultsForBrowser) {
-  const errors = Object.values(resultsForBrowser).map((r) => r.error);
-  return errors.every((e) => e) && new Set(errors).size <= Object.keys(FIXTURES).length && errors.length === Object.keys(FIXTURES).length;
-}
-
 function deepDiff(a, b, prefix = "") {
   const out = [];
   if (a === b) return out;
@@ -187,40 +228,70 @@ async function main() {
   for (const name of browserNames) {
     const browser = await ENGINES[name].launch();
     try {
-      const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-      // The static preview has no Worker, so /e (the reading_completed count,
-      // CLAUDE.md) would answer 404 on every read: answered here as the
-      // Worker does, so the log carries only real failures.
-      await context.route("**/e", (route) => route.fulfill({ status: 204 }));
-      const page = await context.newPage();
-      // Diagnostic only: when a browser cannot run the models, the page's own
-      // console and uncaught errors say why (a WASM instantiation failure, a
-      // missing capability, a blocked fetch), printed so a known limit in the
-      // lock is backed by a real reason, never a guess.
-      const onConsole = async (m) => {
-        if (m.type() !== "error") return;
-        console.log(`fixture-hashes: ${name} console: ${await describeConsole(m)}`);
-      };
-      page.on("console", onConsole);
-      // The read runs in a module worker: its console reaches the page in
-      // Chromium only, so each worker is listened to as well.
-      page.on("worker", (w) => w.on("console", onConsole));
-      page.on("pageerror", (e) => console.log(`fixture-hashes: ${name} pageerror: ${e.stack ?? e}`));
-      // A 404 names its URL, so a missing file is never a mystery in the log.
-      context.on("response", (r) => { if (r.status() >= 400) console.log(`fixture-hashes: ${name} ${r.status()} ${r.url()}`); });
-      context.on("requestfailed", (r) => r.url().endsWith("/e") || console.log(`fixture-hashes: ${name} request failed: ${r.url()} (${r.failure()?.errorText})`));
       results[name] = {};
-      for (const [id, file] of Object.entries(files)) {
+      const ids = Object.keys(files);
+      for (const [n, [id, file]] of Object.entries(files).entries()) {
+        // A fresh context per fixture: its own empty sessionStorage, so no
+        // earlier fixture's reading can be restored and taken for this one.
+        const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
         try {
-          results[name][id] = await readFixture(page, file);
+        // The static preview has no Worker, so /e (the reading_completed count,
+        // CLAUDE.md) would answer 404 on every read: answered here as the
+        // Worker does, so the log carries only real failures. It also counts
+        // this page's completed reads, the signal readFixture waits on.
+        const readings = {
+          count: 0,
+          waiters: [],
+          next(after, timeout) {
+            return new Promise((resolve, reject) => {
+              if (this.count > after) return resolve();
+              const t = setTimeout(() => reject(new Error(`no reading_completed within ${timeout / 1000} s`)), timeout);
+              t.unref?.();
+              this.waiters.push(() => this.count > after && (clearTimeout(t), resolve(), true));
+            });
+          },
+        };
+        await context.route("**/e", (route) => {
+          let body = null;
+          try {
+            body = route.request().postDataJSON();
+          } catch {}
+          if (body?.name === "reading_completed") {
+            readings.count++;
+            readings.waiters = readings.waiters.filter((w) => !w());
+          }
+          return route.fulfill({ status: 204 });
+        });
+        const page = await context.newPage();
+        // Diagnostic only: when a browser cannot run the models, the page's own
+        // console and uncaught errors say why (a WASM instantiation failure, a
+        // missing capability, a blocked fetch), printed so a known limit in the
+        // lock is backed by a real reason, never a guess.
+        const onConsole = async (m) => {
+          if (m.type() !== "error") return;
+          console.log(`fixture-hashes: ${name} console: ${await describeConsole(m)}`);
+        };
+        page.on("console", onConsole);
+        // The read runs in a module worker: its console reaches the page in
+        // Chromium only, so each worker is listened to as well.
+        page.on("worker", (w) => w.on("console", onConsole));
+        page.on("pageerror", (e) => console.log(`fixture-hashes: ${name} pageerror: ${e.stack ?? e}`));
+        // A 404 names its URL, so a missing file is never a mystery in the log.
+        context.on("response", (r) => { if (r.status() >= 400) console.log(`fixture-hashes: ${name} ${r.status()} ${r.url()}`); });
+        context.on("requestfailed", (r) => r.url().endsWith("/e") || console.log(`fixture-hashes: ${name} request failed: ${r.url()} (${r.failure()?.errorText})`));
+        try {
+          results[name][id] = await readFixture(page, readings, file);
         } catch (e) {
           results[name][id] = { error: e.message };
         }
+        // When nothing read, ask the read worker itself what it has: the
+        // reason recorded in the lock is then a measured capability, never the
+        // visitor-facing copy.
+        if (n === ids.length - 1 && Object.values(results[name]).every((r) => r.error)) probes[name] = await probeCapabilities(page);
+        } finally {
+          await context.close();
+        }
       }
-      // When nothing read, ask the read worker itself what it has: the
-      // reason recorded in the lock is then a measured capability, never the
-      // visitor-facing copy.
-      if (Object.values(results[name]).every((r) => r.error)) probes[name] = await probeCapabilities(page);
     } finally {
       await browser.close();
     }
@@ -247,7 +318,7 @@ async function main() {
   const problems = [];
   const unsupported = {};
   for (const name of browserNames) {
-    if (allFailedAlike(results[name])) {
+    if (allFailedAlike(results[name], Object.keys(FIXTURES).length)) {
       const reason = probes[name] ?? Object.values(results[name])[0]?.error ?? "could not run the models";
       unsupported[name] = `unsupported: ${reason}`;
       const recorded = lock?.browsers?.[name];
@@ -307,11 +378,34 @@ async function main() {
     }
   }
 
+  // Three different photos cannot share one reading: a shared hash means a
+  // fixture's reading was not its own (a restored or stale read). Never a
+  // pass, never written to the lock.
+  for (const name of supported) {
+    for (const d of duplicateHashes(results[name])) {
+      failed = true;
+      problems.push(`${name}: ${d}`);
+    }
+  }
+  if (lock && !update) {
+    for (const d of duplicateHashes(lock.fixtures ?? {})) {
+      failed = true;
+      problems.push(`fixtures.lock.json: ${d}`);
+    }
+  }
+
+  if (update) {
+    for (const b of refusedDowngrades(lock?.browsers, Object.keys(unsupported), allowUnsupported)) {
+      failed = true;
+      problems.push(`${b}: fixtures.lock.json enforces it as ok, and it could not run any fixture; recording it as unsupported is a reviewed decision: pass --allow-unsupported ${b} to make it`);
+    }
+  }
+
   if (problems.length) console.error(`fixture-hashes: disagreement found\n${problems.map((p) => `  - ${p}`).join("\n")}`);
 
   if (update) {
     if (failed) {
-      console.error("fixture-hashes: --update refused; the browsers above do not agree, so there is nothing true to write");
+      console.error("fixture-hashes: --update refused; the problems above mean there is nothing true to write");
       process.exit(1);
     }
     // Browsers not run here keep what the lock said about them (WebKit is
