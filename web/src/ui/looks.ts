@@ -8,10 +8,11 @@
 
 import { readingHash } from "../engine/hash";
 import { type Look, suggestLooks } from "../engine/looks";
-import { verdictOf as engineVerdict, looksIntroOf } from "../engine/verdict";
+import { lookPhrase, looksIntroOf, verdictOf as engineVerdict } from "../engine/verdict";
 import { shownColour } from "../engine/constants";
 import { colourLabel } from "../engine/names";
 import { ENGINE_VERSION, type LineState } from "../engine/rules";
+import { reducedMotion } from "../motion";
 import type { Figure } from "../overlay";
 import type { Read } from "../read";
 import type { Reader } from "../reader";
@@ -35,18 +36,35 @@ export interface LooksDeps {
   verdict: HTMLElement;
   trying: HTMLElement;
   trial: HTMLElement;
+  /** A visible aria-live line that says what changed ("Trying: navy for the lower piece"). */
+  announce: HTMLElement;
   paletteSlot: HTMLElement;
   hash: HTMLElement;
   /** The compare control over the photo: as worn on the left, the look on the right. */
   wipe: HTMLInputElement;
   /** Rows extras for the reading as worn (the tuck button). */
   asWornExtras: () => Parameters<typeof renderRows>[3];
+  /** Where the one borderline marker for whatever is shown now is rendered. */
+  borderlineSlot: HTMLElement;
   onTried: () => void;
   /** Whatever is now on screen, as worn (look null) or a tried look: the Rulebook marks it. */
   onShown?: (shown: Shown, look: string | null) => void;
 }
 
+/** The verdict reads as a judgement of a tried look, never of the outfit itself: "Trying navy for the lower piece: Works...". */
+const tryingPrefix = (look: Look | null): string => (look ? `Trying ${lookPhrase(look.moves)}: ` : "");
+
+/** Scrolls the summary (the verdict) into view if a tried look pushed it off-screen; smooth unless reduced motion. */
+function keepSummaryInView(verdict: HTMLElement): void {
+  const r = verdict.getBoundingClientRect();
+  if (r.top >= 0 && r.bottom <= innerHeight) return;
+  verdict.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "nearest" });
+}
+
 const changeText = (from: LineState, to: LineState) => `${STATE_WORDS[from]} → ${STATE_WORDS[to]}`;
+
+/** One "Show original" listener per read: each setupLooks call aborts the previous read's before adding its own. */
+const backControllers = new WeakMap<HTMLButtonElement, AbortController>();
 
 function swatchChip(m: { L: number; C: number; h: number }): HTMLElement {
   const c = shownColour(m);
@@ -127,12 +145,13 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   /** The recoloured photo for each look, computed once in the worker. */
   const recoloured = new Map<string, Promise<Parameters<Figure["setLook"]>[0]>>();
 
-  const setHead = (lines: Read["reading"]["lines"], fromLines: Read["reading"]["lines"], bins: Read["reading"]["bins"]) => {
+  const setHead = (lines: Read["reading"]["lines"], fromLines: Read["reading"]["lines"], bins: Read["reading"]["bins"], tried: Look | null) => {
     countTo(d.heroN, lines[0].measured, fromLines[0].measured);
     d.heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
     d.heroEyebrow.textContent = heroEyebrowOf(lines);
-    // As worn, the verdict names the best look; on a tried look, it judges that look.
-    d.verdict.textContent = verdictOf(lines, lines === read.reading.lines ? looks : [], bins);
+    // As worn, the verdict names the best look; on a tried look, it judges that look and says so up front, never as a verdict on the outfit itself.
+    d.verdict.textContent = tryingPrefix(tried) + verdictOf(lines, tried ? [] : looks, bins);
+    keepSummaryInView(d.verdict);
   };
 
   const asWorn = async () => {
@@ -140,19 +159,22 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     current = null;
     shown = asWornShown;
     d.onShown?.(shown, null);
-    buttons.forEach((b) => {
+    buttons.forEach((b, id) => {
       b.setAttribute("aria-pressed", "false");
       b.textContent = "Try it";
+      const look = looks.find((l) => l.id === id);
+      if (look) b.setAttribute("aria-label", `Try ${lookPhrase(look.moves)}`);
     });
     cards.forEach((c) => delete c.dataset.on);
     d.trying.hidden = true;
     d.trial.replaceChildren();
+    d.announce.textContent = "Showing the outfit as worn.";
     d.figure.showBreakAt(null);
     d.figure.setLook(null);
     d.wipe.hidden = true;
     document.body.dataset.compare = "off";
-    setHead(read.reading.lines, from, read.reading.bins);
-    renderRows(d.rows, read.reading.lines, read.reading.bins, { beforeMeasured: new Map(from.map((l) => [l.rule, l.measured])), ...d.asWornExtras() }).land();
+    setHead(read.reading.lines, from, read.reading.bins, null);
+    renderRows(d.rows, read.reading.lines, read.reading.bins, { borderlineSlot: d.borderlineSlot, ...d.asWornExtras() }).land();
     d.paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
     d.hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
   };
@@ -167,7 +189,14 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     current = look.id;
     buttons.forEach((b, id) => {
       b.setAttribute("aria-pressed", String(id === look.id));
-      b.textContent = id === look.id ? "As worn" : "Try it";
+      if (id === look.id) {
+        b.textContent = "Show original";
+        b.setAttribute("aria-label", "Show original");
+      } else {
+        b.textContent = "Try it";
+        const other = looks.find((l) => l.id === id);
+        if (other) b.setAttribute("aria-label", `Try ${lookPhrase(other.moves)}`);
+      }
     });
     cards.forEach((c, id) => (id === look.id ? (c.dataset.on = "") : delete c.dataset.on));
     // The photo: colour moves only. The chalk figure: the whole look.
@@ -201,10 +230,12 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     d.trying.hidden = false;
     const title = d.trying.querySelector<HTMLElement>(".trying-title");
     if (title) title.textContent = look.title;
-    setHead(look.lines, from, look.bins);
+    const phrase = lookPhrase(look.moves);
+    d.announce.textContent = `Trying: ${phrase}`;
+    setHead(look.lines, from, look.bins, look);
     // On a phone the sheet drops to half so the photo and the wipe are in view.
     if (!d.sheet.isWide) d.sheet.snap("half");
-    renderRows(d.rows, look.lines, look.bins, { before, beforeMeasured: new Map(from.map((l) => [l.rule, l.measured])) }).land();
+    renderRows(d.rows, look.lines, look.bins, { before, borderlineSlot: d.borderlineSlot }).land();
     d.paletteSlot.replaceChildren(paletteStrip(look.bins, "The look's palette"));
     const hh = await readingHash({ engine: ENGINE_VERSION, bins: look.bins });
     // A look the photo shows only in part says so on the card, naming the parts on the chalk figure.
@@ -217,7 +248,17 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     await landed;
   };
 
-  d.trying.querySelector<HTMLButtonElement>(".trying-back")?.addEventListener("click", () => void (pending = asWorn()));
+  const back = d.trying.querySelector<HTMLButtonElement>(".trying-back");
+  if (back) {
+    back.textContent = "Show original";
+    // The button is static HTML, reused read after read: without this, each
+    // read's setupLooks call would add one more listener on top of the
+    // last's, and a click would call every previous read's asWorn() too.
+    backControllers.get(back)?.abort();
+    const ac = new AbortController();
+    backControllers.set(back, ac);
+    back.addEventListener("click", () => void (pending = asWorn()), { signal: ac.signal });
+  }
 
   d.list.replaceChildren(
     ...looks.map((look, i) => {
@@ -254,13 +295,24 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
       button.className = "btn";
       button.textContent = "Try it";
       button.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-label", `Try ${lookPhrase(look.moves)}`);
       button.addEventListener("click", () => void (pending = tryLook(look)));
       buttons.set(look.id, button);
       cards.set(look.id, li);
 
+      const why = document.createElement("a");
+      why.className = "look-why";
+      why.href = `/rules#rule-${look.changes[0]?.rule ?? "proportion"}`;
+      why.textContent = "Why?";
+      why.setAttribute("aria-label", `Why: ${look.title}, on the Rulebook`);
+
+      const actions = document.createElement("div");
+      actions.className = "look-actions";
+      actions.append(why, button);
+
       const foot = document.createElement("div");
       foot.className = "look-foot";
-      foot.append(changes, button);
+      foot.append(changes, actions);
       li.append(head, moves, foot);
       return li;
     }),

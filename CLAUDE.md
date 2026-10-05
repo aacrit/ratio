@@ -57,9 +57,11 @@ language is law in `design/BRAND.md`.
   writes, unless a charter amendment adds a surface that needs them.
 - **Telemetry is aggregate counts only.** `/e` bumps a same-day, same-name
   counter in `event_counts`; there is no per-visit row, no anonymous id, and
-  no cookie or local storage. No third-party analytics script (including
-  Cloudflare Web Analytics) is added by default; adding one needs a charter
-  amendment and a V3 check.
+  this counting itself uses no cookie or local storage (Compact mode's one
+  on/off choice in localStorage is a separate, disclosed UI preference, not
+  telemetry: `web/privacy.html`, `tests/privacy-page.test.ts`). No
+  third-party analytics script (including Cloudflare Web Analytics) is
+  added by default; adding one needs a charter amendment and a V3 check.
 - **Success event.** `contract.yaml`'s success_event is the product's core
   action completing, sent from where it completes, and the one count
   `CHARTER.md`'s kill criteria name. Never page views or feedback.

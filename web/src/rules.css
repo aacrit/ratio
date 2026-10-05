@@ -16,6 +16,13 @@ body.rules-page .bar {
   top: 0;
 }
 
+/* Rules has no action of its own (design/spec.md): the Read bar's "Read my
+   outfit" button (and the menu it opens) stay off it entirely, not merely
+   unreachable by keyboard. */
+body.rules-page .bar-actions {
+  display: none;
+}
+
 .rulebook {
   width: min(100%, 960px);
   margin: 0 auto;
@@ -84,6 +91,12 @@ body.rules-page .bar {
   min-height: 32px;
   padding: 0 10px;
   font-size: 0.8rem;
+}
+
+/* "Back to your reading": a sibling of the chip, never wiped when the chip
+   rebuilds its own content (it is replaced wholesale on every read change). */
+.back-to-read-row {
+  margin: 0;
 }
 
 /* A rule card: the instrument beside the words (above them on a phone). */
