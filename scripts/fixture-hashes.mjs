@@ -150,6 +150,28 @@ async function probeCapabilities(page) {
   return `${seen.map((s) => `${s.where}: OffscreenCanvas ${s.offscreenCanvas ? "yes" : "no"}, WebGL2 on it ${s.offscreenWebgl2 === true ? "yes" : s.offscreenWebgl2 || "no"}`).join("; ")} (${process.platform}, ${ua})`;
 }
 
+/**
+ * Diagnostic: the browser's own decode of the file (no colour conversion),
+ * as a short SHA-256 of its RGBA pixels. When two engines disagree, equal
+ * digests put the cause after decoding (the models or our arithmetic),
+ * different ones put it in the decoder.
+ */
+async function decodeDigest(page, file) {
+  const b64 = readFileSync(file).toString("base64");
+  return page
+    .evaluate(async (b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }), { imageOrientation: "from-image", colorSpaceConversion: "none" });
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0);
+      const data = ctx.getImageData(0, 0, bitmap.width, bitmap.height, { colorSpace: "srgb" }).data;
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+      return `${bitmap.width}x${bitmap.height} ${[...digest.slice(0, 6)].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+    }, b64)
+    .catch((e) => `decode failed: ${e.message}`);
+}
+
 /** True when every fixture failed with the same kind of error in this browser: it cannot run the models at all, not a per-photo bug. */
 function allFailedAlike(resultsForBrowser) {
   const errors = Object.values(resultsForBrowser).map((r) => r.error);
@@ -185,12 +207,7 @@ async function main() {
   /** @type {Record<string, string>} */
   const probes = {};
   for (const name of browserNames) {
-    // Firefox refuses WebGL on a machine with no GPU (the Linux CI image):
-    // MediaPipe needs a WebGL2 context in the read worker even on the CPU
-    // delegate, only to hand it the photo's pixels, so the blocklist is
-    // overridden here. It changes no arithmetic: the models still run on
-    // the CPU, and a texture upload of RGBA8 pixels is exact.
-    const browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "webgl.force-enabled": true } } : {});
+    const browser = await ENGINES[name].launch();
     try {
       const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       // The static preview has no Worker, so /e (the reading_completed count,
@@ -218,6 +235,7 @@ async function main() {
       for (const [id, file] of Object.entries(files)) {
         try {
           results[name][id] = await readFixture(page, file);
+          results[name][id].decoded = await decodeDigest(page, file);
         } catch (e) {
           results[name][id] = { error: e.message };
         }
@@ -238,6 +256,7 @@ async function main() {
   for (const name of browserNames) {
     for (const [id, r] of Object.entries(results[name])) {
       console.log(`fixture-hashes: reading ${name}/${id}: ${r.error ? `ERROR: ${r.error}` : JSON.stringify({ engine: r.engine, hash: r.hash, bins: r.bins, lines: r.lines, paletteLabel: r.paletteLabel })}`);
+      if (r.decoded) console.log(`fixture-hashes: decoded ${name}/${id}: ${r.decoded}`);
     }
   }
 

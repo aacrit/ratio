@@ -27,11 +27,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            browsers: chromium,firefox
-            install: chromium firefox
+            browsers: chromium
+            install: chromium
           - os: macos-latest
-            browsers: chromium,webkit
-            install: chromium webkit
+            browsers: chromium,firefox,webkit
+            install: chromium firefox webkit
     name: determinism (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
