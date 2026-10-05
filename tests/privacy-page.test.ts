@@ -47,15 +47,17 @@ describe("web/privacy.html, claim by claim", () => {
     }
   });
 
-  it("the photo is never stored, not even in this browser: no code path anywhere calls indexedDB", () => {
+  it("Ratio never writes the photo to storage, not even in this browser: no code path calls indexedDB, the Cache API or navigator.storage", () => {
     expect(text).toContain(
-      "it is never written to storage of any kind, even in this browser: not to a file, not to a database on this site, not to your browser's storage, unless you choose to download a card, which saves that one image to your device like any download",
+      "Ratio never writes it to storage, even in this browser: not to a file, not to a database on this site, not to your browser's storage, unless you choose to download a card, which saves that one image to your device like any download",
     );
     expect(text).toContain("closing the tab, or reloading the page, clears it, exactly as above");
     expect(text).not.toMatch(/IndexedDB/i);
     for (const dir of ["web/src", "worker/src"]) {
       for (const f of tsFiles(dir)) expect(read(f), f).not.toMatch(/\bindexedDB\b/);
     }
+    // Nor any other store the browser offers a page: the Cache API or the origin's file system.
+    for (const f of tsFiles("web/src")) expect(read(f), f).not.toMatch(/\bcaches\.|\bnavigator\.storage\b/);
     // This session's reads are a plain in-memory array: no storage API of any kind.
     const session = read("web/src/session.ts");
     expect(session).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\.|fetch\(|XMLHttpRequest|sendBeacon/);
