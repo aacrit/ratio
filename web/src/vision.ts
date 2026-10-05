@@ -15,6 +15,9 @@
 // it.
 
 import { FilesetResolver, ImageSegmenter, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { decodePixels } from "./decode";
+import { extractColourProfile, parseProfile, toSrgb } from "./engine/icc";
+import { orient, readOrientation } from "./engine/orient";
 import type { Landmark, Mask } from "./engine/measure";
 import type { Pixels } from "./engine/resample";
 
@@ -114,17 +117,27 @@ export async function see(pixels: Pixels): Promise<Seen> {
   }
 }
 
-/** Decodes a photo file upright (EXIF orientation applied) into full-size pixels. */
-export async function decode(file: Blob): Promise<Pixels> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+/** Inflates a zlib stream (a PNG's iCCP profile); null when it is not one. */
+async function inflate(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer> | null> {
   try {
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) throw new Error("this browser cannot read the photo's pixels");
-    ctx.drawImage(bitmap, 0, 0);
-    const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height, { colorSpace: "srgb" });
-    return { width: img.width, height: img.height, data: img.data };
-  } finally {
-    bitmap.close();
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch {
+    return null;
   }
+}
+
+/**
+ * Decodes a photo file upright into full-size sRGB pixels, all by our own
+ * code (decode.ts, engine/orient.ts, engine/icc.ts): the browser's decoder
+ * is never used, so the same file gives the same pixels in every engine.
+ */
+export async function decode(file: Blob): Promise<Pixels> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const raw = await decodePixels(bytes);
+  const found = extractColourProfile(bytes);
+  const icc = found?.deflated ? await inflate(found.icc) : (found?.icc ?? null);
+  const profile = icc ? parseProfile(icc) : null;
+  if (profile) toSrgb(raw, profile);
+  return orient(raw, readOrientation(bytes));
 }

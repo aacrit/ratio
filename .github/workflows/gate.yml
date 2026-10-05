@@ -6,7 +6,67 @@ on:
     branches: [main]
 
 jobs:
+  # R3 (docs/RISKS.md): the same photo must give the same reading hash in
+  # Chromium, Firefox and WebKit. This has no GitHub branch-protection
+  # required-check configured (none is, in this repo; see docs/DECISIONS.md),
+  # so it is wired in as a real prerequisite of the `gate` job below via
+  # `needs`, in the same workflow file, rather than left advisory the way
+  # `screens.yml` is. A red or skipped `determinism` means `gate` never runs,
+  # so it can never go green, and /ship's "wait for the gate check" holds.
+  #
+  # Two runners. MediaPipe needs a WebGL2 context in the read worker even on
+  # the CPU delegate (it uploads the photo as a texture), and Linux WebKit
+  # gives a worker's OffscreenCanvas none (the page has one): WebKit is read
+  # on macOS, where it runs as Safari users run it. Chromium is read on both,
+  # so an x86 and an ARM processor are held to the same hashes too. Each leg
+  # compares with fixtures.lock.json, so all of them agree with each other.
+  # The repo is public, so macOS minutes cost nothing (budget.yaml).
+  determinism:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            browsers: chromium
+            install: chromium
+          - os: macos-latest
+            browsers: chromium,firefox,webkit
+            install: chromium firefox webkit
+    name: determinism (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      # One install, pinned to the version screens.yml already uses.
+      - run: npm install --no-save playwright@1.63.0
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
+          key: playwright-1.63.0-${{ runner.os }}-${{ matrix.install }}
+      - run: npx playwright install --with-deps ${{ matrix.install }}
+      # Stages the models (scripts/fetch-models.mjs runs as part of the build).
+      - run: npm run build
+      - name: Fixture hashes match fixtures.lock.json (${{ matrix.browsers }})
+        run: |
+          (cd web && npx vite preview --outDir ../dist --port 4173 --strictPort > ../preview.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf http://localhost:4173/ > /dev/null && break; sleep 1; done
+          node scripts/fixture-hashes.mjs http://localhost:4173 --browsers=${{ matrix.browsers }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: determinism-preview-log-${{ matrix.os }}
+          path: preview.log
+          retention-days: 14
+
   gate:
+    needs: [determinism]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

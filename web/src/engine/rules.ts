@@ -20,7 +20,7 @@ import type { Swatch } from "./palette";
 
 export { NEUTRAL_CHROMA };
 
-export const ENGINE_VERSION = "ratio-engine/0.7.0";
+export const ENGINE_VERSION = "ratio-engine/0.9.0";
 
 export const GOLDEN = 0.382;
 export const PROPORTION_BIN = 0.02;
