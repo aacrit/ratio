@@ -6,7 +6,9 @@
 // and saves a card. The Rulebook (/rules) is shot before the read and after
 // it, when the read is marked on its instruments ("yours"), with a drill
 // open and the keyboard on the proportion instrument; then the Face tab's
-// "not yet built" drop cloth. Every image lands in screens/ for the workflow to upload;
+// "not yet built" drop cloth. Heavy use (T3) is shot too: the read menu, a
+// failed re-read, a read finishing on Rules, the session strip, the
+// shortcuts sheet, Compact on and the Card tab's preview. Every image lands in screens/ for the workflow to upload;
 // the Chief of Staff brings them into Claude for review.
 //
 // The page is an app frame (design/BRAND.md, Stage and sheet): on the phone
@@ -160,10 +162,16 @@ async function run(name, viewport) {
   // The reveal keeps running in the background regardless of which route is
   // visible; give it time to actually finish before judging the result.
   await page.waitForFunction(() => document.body.dataset.revealing === undefined, { timeout: 5_000 }).catch(() => {});
+  // The hero counts up from 0 (ui/count.ts sets data-counting while it
+  // does): wait for the count to land, then hold it to the value measured,
+  // which the first row states in full, so a mid-count "0.00 : 0.00" fails.
+  await page.waitForSelector("#hero-n:not(:empty):not([data-counting])", { timeout: 5_000 }).catch(() => {});
   const heroAfterRaceBack = (await page.textContent("#hero-n"))?.trim();
+  const firstRowMeasured = (await page.textContent(".row .row-n"))?.trim();
   const firstLookDisabledAfterRaceBack = await page.$eval(".look .btn", (b) => b.disabled).catch(() => null);
-  note(`${name}: Rules during the first read's reveal, then back: hero "${heroAfterRaceBack}", Try it disabled: ${firstLookDisabledAfterRaceBack}`);
+  note(`${name}: Rules during the first read's reveal, then back: hero "${heroAfterRaceBack}" (first row measured "${firstRowMeasured}"), Try it disabled: ${firstLookDisabledAfterRaceBack}`);
   if (!heroAfterRaceBack) errors.push("leaving for Rules during the first read's reveal left the hero numeral empty on return");
+  else if (heroAfterRaceBack !== firstRowMeasured) errors.push(`leaving for Rules during the first read's reveal left the hero at "${heroAfterRaceBack}", not the measured "${firstRowMeasured}"`);
   if (firstLookDisabledAfterRaceBack !== false) errors.push("leaving for Rules during the first read's reveal left Try it disabled on return");
 
   await page.waitForTimeout(3500);
@@ -335,6 +343,9 @@ async function run(name, viewport) {
   await page.waitForSelector("#read-menu:not([hidden])", { timeout: 5_000 });
   const menuOpened = await page.isVisible("#read-menu");
   note(`${name}: read menu opens from the bar's action: ${menuOpened}`);
+  await page.waitForTimeout(300); // the menu's entrance transition
+  await page.screenshot({ path: path.join(out, `${name}-3m-read-menu.png`), fullPage: false });
+  note(`${name}: 3m-read-menu`);
   if (!menuOpened) errors.push("the read menu did not open from the bar's action");
   // Arrow keys move within it.
   const firstFocused = await page.evaluate(() => document.activeElement?.textContent?.trim());
@@ -392,6 +403,98 @@ async function run(name, viewport) {
   note(`${name}: keyboard Escape: first look pressed = ${pressedAfterEscape}`);
   if (pressedAfterEscape !== "false") errors.push("keyboard Escape did not return to the original after trying a look");
 
+  // T3 re-review 3: a failed re-read of a photo with a different aspect
+  // ratio (a wide, empty image: it decodes, so its photo is drawn at once,
+  // then no person is found) must put the read on screen back at its own
+  // size and aspect ratio, not leave the failed photo's canvas behind.
+  const stageState = () =>
+    page.evaluate(() => {
+      const c = document.getElementById("figure");
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 97) sum = (sum + d[i] * (i % 251)) % 1_000_000_007;
+      return { w: c.width, h: c.height, aspect: c.style.aspectRatio, sum };
+    });
+  const wideBlank = Buffer.from(
+    await page.evaluate(() => {
+      const c = document.createElement("canvas");
+      c.width = 1200;
+      c.height = 300;
+      const ctx = c.getContext("2d");
+      const img = ctx.createImageData(c.width, c.height);
+      img.data.fill(128);
+      ctx.putImageData(img, 0, 0);
+      return c.toDataURL("image/png").split(",")[1];
+    }),
+    "base64",
+  );
+  const unreadable = { name: "wide-empty.png", mimeType: "image/png", buffer: wideBlank };
+  await page.waitForTimeout(600); // let the return to the original settle before the stage is fingerprinted
+  const beforeFail = await stageState();
+  const hashBeforeFail = (await page.textContent("#reading-hash"))?.trim();
+  await page.setInputFiles("#photo", unreadable);
+  await page.waitForSelector('#read-status[data-state="error"]', { timeout: 120_000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  const afterFail = await stageState();
+  const failStatus = (await page.textContent("#read-status"))?.trim();
+  const hashAfterFail = (await page.textContent("#reading-hash"))?.trim();
+  note(`${name}: failed re-read of a 1200x300 image: status "${failStatus}"; canvas ${beforeFail.w}x${beforeFail.h} (${beforeFail.aspect}) -> ${afterFail.w}x${afterFail.h} (${afterFail.aspect}), pixels same: ${beforeFail.sum === afterFail.sum}, hash unchanged: ${hashAfterFail === hashBeforeFail}`);
+  await shot("10-failed-reread");
+  if (!failStatus) errors.push("the empty wide image did not fail to read (no error status), so the failed re-read case did not run");
+  if (afterFail.w !== beforeFail.w || afterFail.h !== beforeFail.h || afterFail.aspect !== beforeFail.aspect) errors.push(`a failed re-read left the canvas at ${afterFail.w}x${afterFail.h} (${afterFail.aspect}), not the read's own ${beforeFail.w}x${beforeFail.h} (${beforeFail.aspect})`);
+  if (afterFail.sum !== beforeFail.sum) errors.push("a failed re-read did not repaint the read on screen as it stood before");
+  if (hashAfterFail !== hashBeforeFail || (await page.isHidden("#result"))) errors.push("a failed re-read did not keep the read on screen");
+
+  // T3 re-review 3: a read that finishes while Rules shows must not write
+  // /#r= over /rules; the Rulebook's chip and Back link name it instead.
+  let p1File = null;
+  try {
+    p1File = await photo("p1");
+  } catch (e) {
+    errors.push(`photo p1 could not be staged: ${e.message}`);
+  }
+  if (p1File) {
+    await page.setInputFiles("#photo", p1File);
+    await page.click("#rules-tab"); // measuring takes seconds: Rules shows well before it ends
+    await page.waitForFunction((h) => document.getElementById("reading-hash")?.textContent?.trim() !== h, hashBeforeFail, { timeout: 120_000 }).catch(() => {});
+    await page.waitForFunction(() => document.body.dataset.revealing === undefined, { timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    const hash4Of = (text) => /reading\. ([0-9a-f]{4})/.exec(text ?? "")?.[1] ?? null;
+    const newHash4 = hash4Of(await page.textContent("#reading-hash"));
+    const pathAfter = await page.evaluate(() => location.pathname + location.hash);
+    const rulesShowing = await page.isVisible("#rulebook-view");
+    const backHref = await page.getAttribute("#back-to-read", "href");
+    const chip = (await page.textContent("#yours-chip"))?.replace(/\s+/g, " ").trim();
+    note(`${name}: a read finishing on Rules: url ${pathAfter}, Rules showing ${rulesShowing}, new hash ${newHash4}, Back link ${backHref}, chip "${chip}"`);
+    await shot("11-read-finished-on-rules");
+    if (!newHash4 || newHash4 === hash4Of(hashBeforeFail)) errors.push("the p1 read did not finish while Rules showed, so that case did not run");
+    if (pathAfter !== "/rules") errors.push(`a read finishing while Rules showed changed the URL to ${pathAfter}`);
+    if (!rulesShowing) errors.push("a read finishing while Rules showed switched the view away from Rules");
+    if (backHref !== `/#r=${newHash4}`) errors.push(`the Rulebook's Back link names ${backHref}, not the read that just finished (/#r=${newHash4})`);
+    await page.click("#back-to-read");
+    await page.waitForTimeout(600);
+    // Two distinct reads in this session now: the strip shows both.
+    if (phone) {
+      await snap("full");
+      await page.waitForTimeout(500);
+    }
+    const stripVisible = await page.isVisible("#session-strip");
+    note(`${name}: session strip after two reads: visible ${stripVisible}, ${await page.$$eval("#session-strip button", (b) => b.length)} entries`);
+    if (!stripVisible) errors.push("the session strip did not show after two different reads");
+    await shot("12-session-strip");
+  }
+
+  // The shortcuts sheet: opened by its button, closed by Escape.
+  await page.click("#shortcuts-help");
+  await page.waitForTimeout(300);
+  const sheetShown = await page.isVisible("#shortcuts-sheet");
+  await page.screenshot({ path: path.join(out, `${name}-13-shortcuts.png`), fullPage: false });
+  note(`${name}: 13-shortcuts (shown: ${sheetShown})`);
+  if (!sheetShown) errors.push("the Shortcuts button did not open the shortcuts sheet");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  if (!(await page.isHidden("#shortcuts-sheet"))) errors.push("Escape did not close the shortcuts sheet");
+
   // Shortcuts (and the bar's own action) are Read's: the spec gives Rules
   // none of its own (T3 re-review: "Shortcuts and the bar work while Rules shows").
   await page.click("#rules-tab");
@@ -408,8 +511,41 @@ async function run(name, viewport) {
   note(`${name}: keyboard "1" on Rules: look_tried sent ${lookTriedOnRules} times; .bar-actions hidden: ${barActionsHiddenOnRules}`);
   if (lookTriedOnRules !== 0) errors.push(`keyboard "1" on Rules sent look_tried (${lookTriedOnRules} times)`);
   if (!barActionsHiddenOnRules) errors.push(".bar-actions did not hide on the Rules view");
-  await page.click("#back-to-read");
-  await page.waitForTimeout(400);
+
+  // T3 re-review 3: the Face cloth opened on Rules. Closing it returns the
+  // underline to Rules (the route showing), not Read; its "Read an outfit"
+  // routes back to Read in-app.
+  const underlineUnder = () =>
+    page.evaluate(() => {
+      const line = document.querySelector(".tab-underline")?.getBoundingClientRect();
+      if (!line) return null;
+      const mid = line.left + line.width / 2;
+      const tab = [...document.querySelectorAll("nav.tabs .tab")].find((t) => {
+        const r = t.getBoundingClientRect();
+        return mid >= r.left && mid <= r.right;
+      });
+      return tab?.id || tab?.getAttribute("data-soon") || null;
+    });
+  await page.click('.tabs [data-soon="face"]');
+  await page.waitForTimeout(600);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(600);
+  const underlineAfterClose = await underlineUnder();
+  const stillOnRules = (await page.evaluate(() => location.pathname)) === "/rules" && (await page.isVisible("#rulebook-view"));
+  note(`${name}: Face cloth closed on Rules: underline under ${underlineAfterClose}, still on Rules ${stillOnRules}`);
+  if (underlineAfterClose !== "rules-tab") errors.push(`closing the Face cloth on Rules put the underline under ${underlineAfterClose}, not Rules`);
+  if (!stillOnRules) errors.push("closing the Face cloth on Rules left Rules");
+  await page.click('.tabs [data-soon="face"]');
+  await page.waitForTimeout(600);
+  await page.click("#soon a.btn");
+  await page.waitForTimeout(600);
+  const pathAfterClothRead = await page.evaluate(() => location.pathname);
+  const rulesHiddenAfterClothRead = await page.isHidden("#rulebook-view");
+  const resultShownAfterClothRead = await page.isVisible("#result");
+  const underlineAfterClothRead = await underlineUnder();
+  note(`${name}: "Read an outfit" on the Face cloth over Rules: path ${pathAfterClothRead}, Rules hidden ${rulesHiddenAfterClothRead}, read shown ${resultShownAfterClothRead}, underline under ${underlineAfterClothRead}`);
+  if (pathAfterClothRead !== "/" || !rulesHiddenAfterClothRead || !resultShownAfterClothRead) errors.push(`"Read an outfit" on the Face cloth over Rules did not route back to Read (path ${pathAfterClothRead})`);
+  if (underlineAfterClothRead !== "read-tab") errors.push(`after "Read an outfit" from Rules the underline sat under ${underlineAfterClothRead}, not Read`);
 
   // Compact: rows collapse to name, band and the numeral; a row opens on tap or Enter.
   const firstRowOpenBefore = await page.evaluate(() => getComputedStyle(document.querySelector(".row .row-b")).display);
@@ -417,6 +553,14 @@ async function run(name, viewport) {
   await page.waitForTimeout(200);
   const compactOn = await page.evaluate(() => document.body.dataset.compact !== undefined);
   const firstRowOpenAfterCompact = await page.evaluate(() => getComputedStyle(document.querySelector(".row .row-b")).display);
+  // aria-expanded must follow the toggle: every unopened row now says collapsed.
+  const expandedAfterCompact = await page.$$eval(".row .row-h", (hs) => hs.map((h) => h.getAttribute("aria-expanded")));
+  if (expandedAfterCompact.some((v) => v !== "false")) errors.push(`after turning Compact on, row heads still say aria-expanded ${expandedAfterCompact.join(",")}`);
+  if (phone) {
+    await snap("full");
+    await page.waitForTimeout(500);
+  }
+  await shot("14-compact");
   await page.click(".row .row-h");
   await page.waitForTimeout(200);
   const firstRowOpenAfterTap = await page.evaluate(() => getComputedStyle(document.querySelector(".row .row-b")).display);
@@ -426,6 +570,9 @@ async function run(name, viewport) {
   if (firstRowOpenAfterTap === "none") errors.push("tapping a row's head in Compact did not open it");
   await page.click("#compact-toggle"); // back off, so the rest of this run reads the rows as usual
   await page.waitForTimeout(200);
+  const expandedAfterCompactOff = await page.$$eval(".row .row-h", (hs) => hs.map((h) => h.getAttribute("aria-expanded")));
+  note(`${name}: Compact row heads aria-expanded: on ${expandedAfterCompact.join(",")}; off ${expandedAfterCompactOff.join(",")}`);
+  if (expandedAfterCompactOff.some((v) => v !== "true")) errors.push(`after turning Compact off, row heads say aria-expanded ${expandedAfterCompactOff.join(",")}`);
 
   // The Card tab, with a read on screen, previews this read instead of "not built yet".
   // tabs.ts shows the generic #soon-title synchronously, then swaps in
@@ -439,6 +586,8 @@ async function run(name, viewport) {
   note(`${name}: Card tab with a read on screen: "${cardTabTitle?.trim()}", preview image shown: ${cardPreviewImg}`);
   if (cardTabTitle?.trim() !== "This read, as a card.") errors.push(`Card tab did not preview this read (showed "${cardTabTitle}")`);
   if (!cardPreviewImg) errors.push("Card tab's preview image did not render");
+  await page.screenshot({ path: path.join(out, `${name}-15-card-preview.png`), fullPage: false });
+  note(`${name}: 15-card-preview`);
   await page.click('.tabs [data-soon="card"]'); // close it
   await page.waitForTimeout(300);
 
@@ -513,6 +662,19 @@ async function run(name, viewport) {
     note(`${name}: trying a look on the chalk restore: verdict "${triedOnChalk}"`);
     if (!triedOnChalk?.startsWith("Trying")) errors.push("trying a look on the chalk restore did not prefix the verdict");
   }
+  // A failed read from the chalk restore returns to the chalk restore, with
+  // the look being tried still tried, never to the drop cloth.
+  const verdictBeforeChalkFail = (await page.textContent("#verdict"))?.trim();
+  await page.setInputFiles("#photo", unreadable);
+  await page.waitForSelector('#read-status[data-state="error"]', { timeout: 120_000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  const chalkBack = await page.isVisible("#chalk-restore");
+  const clothShown = await page.isVisible("#drop");
+  const wellShown = await page.isVisible("#photo-well");
+  const verdictAfterChalkFail = (await page.textContent("#verdict"))?.trim();
+  note(`${name}: failed read from the chalk restore: chalk restore shown ${chalkBack}, drop cloth shown ${clothShown}, photo well shown ${wellShown}, verdict kept ${verdictAfterChalkFail === verdictBeforeChalkFail}`);
+  if (!chalkBack || clothShown || wellShown) errors.push("a failed read from the chalk restore did not return to the chalk restore");
+  if (verdictAfterChalkFail !== verdictBeforeChalkFail) errors.push("a failed read from the chalk restore changed the reading shown");
   // A plain page.reload() of Read itself: the same fallback, not a crash.
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(600);
