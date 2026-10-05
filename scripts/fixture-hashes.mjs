@@ -101,6 +101,55 @@ async function readFixture(page, file) {
   return { engine: last.engine, hash: last.hash, bins: last.bins, lines: last.lines, paletteLabel, verdict };
 }
 
+/**
+ * A console message as text, with every argument serialised where it lives
+ * (page or worker): an Error's name, message and stack, never the
+ * "JSHandle@object" Firefox and WebKit print for a non-primitive.
+ */
+async function describeConsole(m) {
+  const parts = await Promise.all(
+    m.args().map((h) =>
+      h
+        .evaluate((v) => {
+          if (v instanceof Error) return `${v.name}: ${v.message}${v.stack ? `\n${v.stack}` : ""}`;
+          if (v && typeof v === "object") {
+            try {
+              return JSON.stringify(v, Object.getOwnPropertyNames(v));
+            } catch {
+              return String(v);
+            }
+          }
+          return String(v);
+        })
+        .catch(() => null),
+    ),
+  );
+  return parts.length && parts.every((p) => p !== null) ? parts.join(" ") : m.text();
+}
+
+/**
+ * What the read worker (and the page) can offer MediaPipe: tasks-vision
+ * uploads every input image as a WebGL2 texture, on the CPU delegate too
+ * (vision.ts), from an OffscreenCanvas when it is given one in a worker.
+ */
+async function probeCapabilities(page) {
+  const probe = () => {
+    const out = { where: typeof document === "undefined" ? "worker" : "page", offscreenCanvas: typeof OffscreenCanvas !== "undefined" };
+    try {
+      out.offscreenWebgl2 = out.offscreenCanvas ? !!new OffscreenCanvas(1, 1).getContext("webgl2") : false;
+    } catch (e) {
+      out.offscreenWebgl2 = `throws ${e}`;
+    }
+    return out;
+  };
+  const seen = [];
+  for (const target of [...page.workers(), page]) {
+    seen.push(await target.evaluate(probe).catch((e) => ({ where: "?", error: String(e) })));
+  }
+  const ua = await page.evaluate(() => navigator.userAgent).catch(() => "?");
+  return `${seen.map((s) => `${s.where}: OffscreenCanvas ${s.offscreenCanvas ? "yes" : "no"}, WebGL2 on it ${s.offscreenWebgl2 === true ? "yes" : s.offscreenWebgl2 || "no"}`).join("; ")} (${process.platform}, ${ua})`;
+}
+
 /** True when every fixture failed with the same kind of error in this browser: it cannot run the models at all, not a per-photo bug. */
 function allFailedAlike(resultsForBrowser) {
   const errors = Object.values(resultsForBrowser).map((r) => r.error);
@@ -133,17 +182,33 @@ async function main() {
 
   /** @type {Record<string, Record<string, any>>} */
   const results = {};
+  /** @type {Record<string, string>} */
+  const probes = {};
   for (const name of browserNames) {
     const browser = await ENGINES[name].launch();
     try {
       const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      // The static preview has no Worker, so /e (the reading_completed count,
+      // CLAUDE.md) would answer 404 on every read: answered here as the
+      // Worker does, so the log carries only real failures.
+      await context.route("**/e", (route) => route.fulfill({ status: 204 }));
       const page = await context.newPage();
       // Diagnostic only: when a browser cannot run the models, the page's own
       // console and uncaught errors say why (a WASM instantiation failure, a
       // missing capability, a blocked fetch), printed so a known limit in the
       // lock is backed by a real reason, never a guess.
-      page.on("console", (m) => { if (m.type() === "error") console.log(`fixture-hashes: ${name} console: ${m.text()}`); });
-      page.on("pageerror", (e) => console.log(`fixture-hashes: ${name} pageerror: ${e}`));
+      const onConsole = async (m) => {
+        if (m.type() !== "error") return;
+        console.log(`fixture-hashes: ${name} console: ${await describeConsole(m)}`);
+      };
+      page.on("console", onConsole);
+      // The read runs in a module worker: its console reaches the page in
+      // Chromium only, so each worker is listened to as well.
+      page.on("worker", (w) => w.on("console", onConsole));
+      page.on("pageerror", (e) => console.log(`fixture-hashes: ${name} pageerror: ${e.stack ?? e}`));
+      // A 404 names its URL, so a missing file is never a mystery in the log.
+      context.on("response", (r) => { if (r.status() >= 400) console.log(`fixture-hashes: ${name} ${r.status()} ${r.url()}`); });
+      context.on("requestfailed", (r) => console.log(`fixture-hashes: ${name} request failed: ${r.url()} (${r.failure()?.errorText})`));
       results[name] = {};
       for (const [id, file] of Object.entries(files)) {
         try {
@@ -152,6 +217,10 @@ async function main() {
           results[name][id] = { error: e.message };
         }
       }
+      // When nothing read, ask the read worker itself what it has: the
+      // reason recorded in the lock is then a measured capability, never the
+      // visitor-facing copy.
+      if (Object.values(results[name]).every((r) => r.error)) probes[name] = await probeCapabilities(page);
     } finally {
       await browser.close();
     }
@@ -174,7 +243,7 @@ async function main() {
   const unsupported = {};
   for (const name of browserNames) {
     if (allFailedAlike(results[name])) {
-      const reason = Object.values(results[name])[0]?.error ?? "could not run the models";
+      const reason = probes[name] ?? Object.values(results[name])[0]?.error ?? "could not run the models";
       unsupported[name] = `unsupported: ${reason}`;
       console.warn(`fixture-hashes: ${name} could not run any fixture (${reason}); recorded as a known limit, excluded from agreement`);
     }
