@@ -1,97 +1,323 @@
 {
-  "engine": "ratio-engine/0.7.0",
+  "engine": "ratio-engine/0.8.0",
   "fixtures": {
     "sample": {
       "url": "https://upload.wikimedia.org/wikipedia/commons/e/ed/Jacques-Louis_David_-_Napoleon_in_his_Study_-_WGA6093.jpg",
       "sha256": "2443631a3bd6ba673be324419f7b5ccee52f62cdb4d85679c6454a3f92c44c18",
-      "hash": "6e487d28c1fe",
+      "engine": "ratio-engine/0.8.0",
+      "hash": "2da65dd48973",
       "bins": {
         "proportion": 0.64,
         "waist": 0.36,
-        "top": { "L": 0.92, "C": 0.03, "h": 0 },
-        "bottom": { "L": 0.56, "C": 0.01, "h": 0 },
+        "top": {
+          "L": 0.92,
+          "C": 0.03,
+          "h": 0
+        },
+        "bottom": {
+          "L": 0.56,
+          "C": 0.01,
+          "h": 0
+        },
         "palette": [
-          { "L": 0.94, "C": 0.03, "h": 0, "share": 0.45, "y": 0.4 },
-          { "L": 0.18, "C": 0, "h": 0, "share": 0.2, "y": 0.35 },
-          { "L": 0.72, "C": 0.03, "h": 0, "share": 0.2, "y": 0.5 },
-          { "L": 0.56, "C": 0.01, "h": 0, "share": 0.05, "y": 0.8 },
-          { "L": 0.42, "C": 0, "h": 0, "share": 0.05, "y": 0.85 },
-          { "L": 0.22, "C": 0, "h": 0, "share": 0.05, "y": 1 }
+          {
+            "L": 0.94,
+            "C": 0.03,
+            "h": 0,
+            "share": 0.45,
+            "y": 0.4
+          },
+          {
+            "L": 0.18,
+            "C": 0,
+            "h": 0,
+            "share": 0.2,
+            "y": 0.35
+          },
+          {
+            "L": 0.72,
+            "C": 0.03,
+            "h": 0,
+            "share": 0.2,
+            "y": 0.5
+          },
+          {
+            "L": 0.56,
+            "C": 0.01,
+            "h": 0,
+            "share": 0.05,
+            "y": 0.8
+          },
+          {
+            "L": 0.42,
+            "C": 0,
+            "h": 0,
+            "share": 0.05,
+            "y": 0.85
+          },
+          {
+            "L": 0.22,
+            "C": 0,
+            "h": 0,
+            "share": 0.05,
+            "y": 1
+          }
         ],
-        "fit": { "top": 1.7, "legs": 0.25 }
+        "fit": {
+          "top": 1.7,
+          "legs": 0.25
+        }
       },
       "lines": [
-        { "rule": "proportion", "measured": "0.64 : 0.36", "state": "golden", "borderline": false },
-        { "rule": "volume", "measured": "1.70× · 0.25×", "state": "golden", "borderline": false },
-        { "rule": "legline", "measured": "ΔL 0.34", "state": "neutral", "borderline": false },
-        { "rule": "harmony", "measured": "neutrals", "state": "golden", "borderline": false },
-        { "rule": "value", "measured": "range 0.76", "state": "neutral", "borderline": false },
-        { "rule": "shares", "measured": "0.45 · 0.25 · 0.20", "state": "neutral", "borderline": false },
-        { "rule": "chroma", "measured": "0 saturated", "state": "neutral", "borderline": false }
+        {
+          "rule": "proportion",
+          "measured": "0.64 : 0.36",
+          "state": "golden",
+          "borderline": false
+        },
+        {
+          "rule": "volume",
+          "measured": "1.70× · 0.25×",
+          "state": "golden",
+          "borderline": false
+        },
+        {
+          "rule": "legline",
+          "measured": "ΔL 0.34",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "harmony",
+          "measured": "neutrals",
+          "state": "golden",
+          "borderline": false
+        },
+        {
+          "rule": "value",
+          "measured": "range 0.76",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "shares",
+          "measured": "0.45 · 0.25 · 0.20",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "chroma",
+          "measured": "0 saturated",
+          "state": "neutral",
+          "borderline": false
+        }
       ],
       "paletteLabel": "The outfit's palette: white 0.45, black 0.25, stone 0.20, grey 0.05, charcoal 0.05"
     },
     "p1": {
       "url": "https://upload.wikimedia.org/wikipedia/commons/7/74/140111-Stacie-Anaka.jpg",
       "sha256": "1572c1bdfe4dce1ca0b0a248dfa775c8ce23bd78d29d80c2668dbfb90a61bc58",
-      "hash": "ef1b3b57cfe7",
+      "engine": "ratio-engine/0.8.0",
+      "hash": "e2e331d187ee",
       "bins": {
         "proportion": 0.5,
         "waist": 0.38,
-        "top": { "L": 0.28, "C": 0.01, "h": 0 },
-        "bottom": { "L": 0.26, "C": 0.04, "h": 345 },
+        "top": {
+          "L": 0.28,
+          "C": 0.01,
+          "h": 0
+        },
+        "bottom": {
+          "L": 0.26,
+          "C": 0.04,
+          "h": 340
+        },
         "palette": [
-          { "L": 0.18, "C": 0.01, "h": 0, "share": 0.6, "y": 0.35 },
-          { "L": 0.32, "C": 0.07, "h": 345, "share": 0.3, "y": 0.65 },
-          { "L": 0.4, "C": 0.01, "h": 0, "share": 0.05, "y": 0.65 },
-          { "L": 0.66, "C": 0.14, "h": 35, "share": 0.05, "y": 0.95 }
+          {
+            "L": 0.18,
+            "C": 0.01,
+            "h": 0,
+            "share": 0.6,
+            "y": 0.35
+          },
+          {
+            "L": 0.32,
+            "C": 0.07,
+            "h": 345,
+            "share": 0.3,
+            "y": 0.65
+          },
+          {
+            "L": 0.4,
+            "C": 0.01,
+            "h": 0,
+            "share": 0.05,
+            "y": 0.65
+          },
+          {
+            "L": 0.66,
+            "C": 0.14,
+            "h": 35,
+            "share": 0.05,
+            "y": 0.95
+          }
         ],
-        "fit": { "top": null, "legs": 0.4 },
+        "fit": {
+          "top": null,
+          "legs": 0.4
+        },
         "fitWhy": "arms",
         "front": true
       },
       "lines": [
-        { "rule": "proportion", "measured": "0.50 : 0.50", "state": "advice", "borderline": false },
-        { "rule": "volume", "measured": "not read · 0.40×", "state": "neutral", "borderline": false },
-        { "rule": "legline", "measured": "ΔL 0.34", "state": "neutral", "borderline": false },
-        { "rule": "harmony", "measured": "V · 345° 35°", "state": "golden", "borderline": false },
-        { "rule": "value", "measured": "range 0.48", "state": "neutral", "borderline": false },
-        { "rule": "shares", "measured": "0.60 · 0.30 · 0.05", "state": "golden", "borderline": false },
-        { "rule": "chroma", "measured": "1 saturated", "state": "golden", "borderline": false }
+        {
+          "rule": "proportion",
+          "measured": "0.50 : 0.50",
+          "state": "advice",
+          "borderline": false
+        },
+        {
+          "rule": "volume",
+          "measured": "not read · 0.40×",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "legline",
+          "measured": "ΔL 0.34",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "harmony",
+          "measured": "V · 345° 35°",
+          "state": "golden",
+          "borderline": false
+        },
+        {
+          "rule": "value",
+          "measured": "range 0.48",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "shares",
+          "measured": "0.60 · 0.30 · 0.05",
+          "state": "golden",
+          "borderline": false
+        },
+        {
+          "rule": "chroma",
+          "measured": "1 saturated",
+          "state": "golden",
+          "borderline": false
+        }
       ],
       "paletteLabel": "The outfit's palette: black 0.60, wine (345°) 0.30, charcoal 0.05, coral (35°) 0.05"
     },
     "p2": {
       "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/20140118115458IMG_4996_-_Yukicon_2014_-_matiast1.jpg/960px-20140118115458IMG_4996_-_Yukicon_2014_-_matiast1.jpg",
       "sha256": "25ad81fea0000ff70bd86f3908cb32969368f1c587d9963ae02786e3dfb732ae",
-      "hash": "bca01f31f2a1",
+      "engine": "ratio-engine/0.8.0",
+      "hash": "8b9fc21c7d93",
       "bins": {
         "proportion": null,
         "waist": 0.38,
-        "top": { "L": 0.34, "C": 0.01, "h": 0 },
-        "bottom": { "L": 0.36, "C": 0.02, "h": 0 },
+        "top": {
+          "L": 0.34,
+          "C": 0.01,
+          "h": 0
+        },
+        "bottom": {
+          "L": 0.36,
+          "C": 0.02,
+          "h": 0
+        },
         "palette": [
-          { "L": 0.26, "C": 0.01, "h": 0, "share": 0.55, "y": 0.45 },
-          { "L": 0.38, "C": 0.02, "h": 0, "share": 0.35, "y": 0.6 },
-          { "L": 0.94, "C": 0.01, "h": 0, "share": 0.05, "y": 0.35 },
-          { "L": 0.88, "C": 0.04, "h": 0, "share": 0.05, "y": 0.95 }
+          {
+            "L": 0.26,
+            "C": 0.01,
+            "h": 0,
+            "share": 0.55,
+            "y": 0.45
+          },
+          {
+            "L": 0.38,
+            "C": 0.02,
+            "h": 0,
+            "share": 0.35,
+            "y": 0.6
+          },
+          {
+            "L": 0.94,
+            "C": 0.01,
+            "h": 0,
+            "share": 0.05,
+            "y": 0.35
+          },
+          {
+            "L": 0.88,
+            "C": 0.04,
+            "h": 0,
+            "share": 0.05,
+            "y": 0.95
+          }
         ],
-        "fit": { "top": 0.9, "legs": 0.45 },
+        "fit": {
+          "top": 0.9,
+          "legs": 0.45
+        },
         "fitOneSide": true
       },
       "lines": [
-        { "rule": "proportion", "measured": "one column", "state": "neutral", "borderline": false },
-        { "rule": "volume", "measured": "0.90× · 0.45×", "state": "neutral", "borderline": true },
-        { "rule": "legline", "measured": "ΔL 0.50", "state": "neutral", "borderline": false },
-        { "rule": "harmony", "measured": "neutrals", "state": "golden", "borderline": false },
-        { "rule": "value", "measured": "range 0.68", "state": "neutral", "borderline": false },
-        { "rule": "shares", "measured": "0.55 · 0.35 · 0.05", "state": "golden", "borderline": false },
-        { "rule": "chroma", "measured": "0 saturated", "state": "neutral", "borderline": false }
+        {
+          "rule": "proportion",
+          "measured": "one column",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "volume",
+          "measured": "0.90× · 0.45×",
+          "state": "neutral",
+          "borderline": true
+        },
+        {
+          "rule": "legline",
+          "measured": "ΔL 0.50",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "harmony",
+          "measured": "neutrals",
+          "state": "golden",
+          "borderline": false
+        },
+        {
+          "rule": "value",
+          "measured": "range 0.68",
+          "state": "neutral",
+          "borderline": false
+        },
+        {
+          "rule": "shares",
+          "measured": "0.55 · 0.35 · 0.05",
+          "state": "golden",
+          "borderline": false
+        },
+        {
+          "rule": "chroma",
+          "measured": "0 saturated",
+          "state": "neutral",
+          "borderline": false
+        }
       ],
       "paletteLabel": "The outfit's palette: black 0.55, charcoal 0.35, white 0.05, stone 0.05"
     }
   },
   "browsers": {
-    "chromium": "ok"
+    "chromium": "ok",
+    "firefox": "ok"
   }
 }

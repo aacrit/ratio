@@ -15,6 +15,7 @@
 // it.
 
 import { FilesetResolver, ImageSegmenter, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { parseProfile, splitColourProfile, toSrgb } from "./engine/icc";
 import type { Landmark, Mask } from "./engine/measure";
 import type { Pixels } from "./engine/resample";
 
@@ -114,17 +115,38 @@ export async function see(pixels: Pixels): Promise<Seen> {
   }
 }
 
-/** Decodes a photo file upright (EXIF orientation applied) into full-size pixels. */
+/** Inflates a zlib stream (a PNG's iCCP profile); null when it is not one. */
+async function inflate(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer> | null> {
+  try {
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decodes a photo file upright (EXIF orientation applied) into full-size
+ * sRGB pixels. The browser decodes the file with its colour profile cut out
+ * (engines convert profiles differently, so the same photo gave three
+ * different buffers); the profile is then applied by engine/icc.ts.
+ */
 export async function decode(file: Blob): Promise<Pixels> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const split = splitColourProfile(new Uint8Array(await file.arrayBuffer()));
+  const bitmap = await createImageBitmap(new Blob([split.bytes], { type: file.type }), { imageOrientation: "from-image", colorSpaceConversion: "none" });
+  let pixels: Pixels;
   try {
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("this browser cannot read the photo's pixels");
     ctx.drawImage(bitmap, 0, 0);
     const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height, { colorSpace: "srgb" });
-    return { width: img.width, height: img.height, data: img.data };
+    pixels = { width: img.width, height: img.height, data: img.data };
   } finally {
     bitmap.close();
   }
+  const icc = split.icc && split.deflated ? await inflate(split.icc) : split.icc;
+  const profile = icc ? parseProfile(icc) : null;
+  if (profile) toSrgb(pixels, profile);
+  return pixels;
 }
