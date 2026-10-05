@@ -1,10 +1,12 @@
 // Law 2 (CLAUDE.md), R3 (docs/RISKS.md): a colour-tagged photo must decode
 // to the same pixels in every engine. The browser never sees the profile
-// (web/src/engine/icc.ts cuts it out), and our integer pipeline applies it.
+// (web/src/decode.ts ignores it), and our integer pipeline applies it.
 
+import { createHash } from "node:crypto";
 import { deflateSync, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { evalCurve, parseProfile, splitColourProfile, toSrgb } from "../web/src/engine/icc";
+import { detExp, detLog, detPow } from "../web/src/engine/detmath";
+import { evalCurve, extractColourProfile, parseProfile, SRGB_STEPS, srgbEncodeTable, toSrgb } from "../web/src/engine/icc";
 
 const enc = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0));
 const be16 = (n: number) => [(n >>> 8) & 0xff, n & 0xff];
@@ -60,60 +62,87 @@ const srgb = () =>
 
 const px = (...rgb: number[][]) => ({ width: rgb.length, height: 1, data: Uint8ClampedArray.from(rgb.flatMap(([r, g, b, a = 255]) => [r, g, b, a])) });
 
-describe("splitColourProfile: the browser decodes an untagged file", () => {
+describe("extractColourProfile: the profile, read without copying the file", () => {
   const seg = (marker: number, body: Uint8Array | number[]) => cat([0xff, marker], be16(body.length + 2), body);
   const icc = (seq: number, count: number, data: number[]) => seg(0xe2, cat(enc("ICC_PROFILE\0"), [seq, count], data));
 
-  it("JPEG: removes every ICC_PROFILE APP2 segment and joins the chunks in sequence order", () => {
+  it("JPEG: joins every ICC_PROFILE APP2 chunk in sequence order", () => {
     const app0 = seg(0xe0, enc("JFIF\0\x01\x02"));
     const dqt = seg(0xdb, [0, 1, 2, 3]);
     const scan = cat([0xff, 0xda], be16(4), [9, 9], [1, 2, 0xff, 0x00, 3], [0xff, 0xd9]);
     const file = cat([0xff, 0xd8], app0, icc(2, 2, [4, 5, 6]), seg(0xe1, enc("Exif\0\0")), icc(1, 2, [1, 2, 3]), dqt, scan);
-    const out = splitColourProfile(file);
-    expect([...out.icc!]).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(out.deflated).toBe(false);
-    expect([...out.bytes]).toEqual([...cat([0xff, 0xd8], app0, seg(0xe1, enc("Exif\0\0")), dqt, scan)]);
+    const out = extractColourProfile(file);
+    expect([...out!.icc]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(out!.deflated).toBe(false);
   });
 
-  it("JPEG without a profile comes back untouched", () => {
-    const file = cat([0xff, 0xd8], seg(0xe0, enc("JFIF\0")), [0xff, 0xda, 0, 2, 7, 7, 0xff, 0xd9]);
-    const out = splitColourProfile(file);
-    expect(out.icc).toBeNull();
-    expect(out.bytes).toBe(file);
+  it("JPEG: a single-segment profile is a view into the file, not a copy", () => {
+    const file = cat([0xff, 0xd8], icc(1, 1, [7, 8, 9]), [0xff, 0xda, 0, 2, 0xff, 0xd9]);
+    const out = extractColourProfile(file)!;
+    expect([...out.icc]).toEqual([7, 8, 9]);
+    expect(out.icc.buffer).toBe(file.buffer);
   });
 
-  it("PNG: drops iCCP, gAMA, cHRM and sRGB and returns the deflated profile", () => {
+  it("JPEG without a profile has none", () => {
+    expect(extractColourProfile(cat([0xff, 0xd8], seg(0xe0, enc("JFIF\0")), [0xff, 0xda, 0, 2, 7, 7, 0xff, 0xd9]))).toBeNull();
+  });
+
+  it("PNG: returns iCCP's deflated profile", () => {
     const chunk = (type: string, data: Uint8Array | number[]) => cat(be32(data.length), enc(type), data, [0xde, 0xad, 0xbe, 0xef]);
     const prof = adobe();
-    const ihdr = chunk("IHDR", new Array(13).fill(1));
-    const idat = chunk("IDAT", [1, 2, 3]);
-    const iend = chunk("IEND", []);
-    const file = cat([0x89, ...enc("PNG\r\n\x1a\n")], ihdr, chunk("gAMA", be32(45455)), chunk("cHRM", new Array(32).fill(0)), chunk("iCCP", cat(enc("ICC\0"), [0], deflateSync(prof))), chunk("sRGB", [0]), idat, iend);
-    const out = splitColourProfile(file);
+    const file = cat([0x89, ...enc("PNG\r\n\x1a\n")], chunk("IHDR", new Array(13).fill(1)), chunk("gAMA", be32(45455)), chunk("iCCP", cat(enc("ICC\0"), [0], deflateSync(prof))), chunk("IDAT", [1, 2, 3]), chunk("IEND", []));
+    const out = extractColourProfile(file)!;
     expect(out.deflated).toBe(true);
-    expect([...inflateSync(out.icc!)]).toEqual([...prof]);
-    expect([...out.bytes]).toEqual([...cat([0x89, ...enc("PNG\r\n\x1a\n")], ihdr, idat, iend)]);
+    expect([...inflateSync(out.icc)]).toEqual([...prof]);
+    expect(out.icc.buffer).toBe(file.buffer);
   });
 
-  it("WebP: drops ICCP, clears the VP8X ICC flag and rewrites the RIFF size", () => {
+  it("WebP: returns the ICCP chunk", () => {
     const chunk = (fourcc: string, data: number[]) => cat(enc(fourcc), le32(data.length), data, data.length & 1 ? [0] : []);
-    const vp8x = chunk("VP8X", [0x20 | 0x10, 0, 0, 0, 9, 0, 0, 9, 0, 0]);
-    const iccp = chunk("ICCP", [1, 2, 3]);
-    const vp8l = chunk("VP8L", [0x2f, 1, 2, 3, 4]);
-    const body = cat(enc("WEBP"), vp8x, iccp, vp8l);
-    const file = cat(enc("RIFF"), le32(body.length), body);
-    const out = splitColourProfile(file);
-    expect([...out.icc!]).toEqual([1, 2, 3]);
-    const want = cat(enc("RIFF"), le32(4 + vp8x.length + vp8l.length), enc("WEBP"), chunk("VP8X", [0x10, 0, 0, 0, 9, 0, 0, 9, 0, 0]), vp8l);
-    expect([...out.bytes]).toEqual([...want]);
+    const body = cat(enc("WEBP"), chunk("VP8X", [0x20 | 0x10, 0, 0, 0, 9, 0, 0, 9, 0, 0]), chunk("ICCP", [1, 2, 3]), chunk("VP8L", [0x2f, 1, 2, 3, 4]));
+    const out = extractColourProfile(cat(enc("RIFF"), le32(body.length), body))!;
+    expect([...out.icc]).toEqual([1, 2, 3]);
+    expect(out.deflated).toBe(false);
   });
 
-  it("a truncated or unknown file comes back untouched, never throws", () => {
+  it("a truncated or unknown file has none, and never throws", () => {
     for (const bytes of [new Uint8Array(0), enc("GIF89a....."), Uint8Array.from([0xff, 0xd8, 0xff, 0xe2, 0xff, 0xff]), cat([0x89, ...enc("PNG\r\n\x1a\n")], be32(99999), enc("iCCP"))]) {
-      const out = splitColourProfile(bytes);
-      expect(out.icc).toBeNull();
-      expect(out.bytes).toBe(bytes);
+      expect(extractColourProfile(bytes)).toBeNull();
     }
+  });
+});
+
+describe("no engine's own pow builds a table (law 2)", () => {
+  it("SRGB_STEPS is pinned by hash", () => {
+    const hash = createHash("sha256").update(SRGB_STEPS.join(",")).digest("hex");
+    expect(SRGB_STEPS).toHaveLength(255);
+    expect(hash).toBe("e2a871678b4b26a190124ecfe64b3be4cec35b0424ea8e4bdfed0ff8b74cd779");
+  });
+
+  it("SRGB_STEPS is the sRGB encode formula, rounded to 8 bits", () => {
+    const formula = (y: number) => (y <= 0.0031308 ? 12.92 * y : 1.055 * Math.pow(y, 1 / 2.4) - 0.055);
+    const table = srgbEncodeTable();
+    for (let x = 0; x < 65536; x++) expect(table[x]).toBe(Math.round(Math.min(1, Math.max(0, formula(x / 65535))) * 255));
+  });
+
+  it("detPow agrees with Math.pow to 1e-14, and rounds to the same 16-bit value, on the curves photos carry", () => {
+    for (const g of [2.4, 1 / 2.4, ADOBE_G, 2.2, 1.8, 2.19921875, 0.45, 3]) {
+      for (let i = 1; i <= 65535; i += 7) {
+        const x = i / 65535;
+        const want = Math.pow(x, g);
+        const got = detPow(x, g);
+        expect(Math.abs(got - want) / want).toBeLessThan(1e-14);
+        expect(Math.round(got * 65535)).toBe(Math.round(want * 65535));
+      }
+    }
+  });
+
+  it("detPow's edges match Math.pow's", () => {
+    for (const [x, g] of [[0, 2.2], [1, 2.2], [0.5, 0], [0.5, 1], [-0.5, 2.2], [0, 0]]) {
+      expect(detPow(x, g)).toBe(Math.pow(x, g));
+    }
+    expect(detExp(0)).toBe(1);
+    expect(Math.abs(detLog(Math.E) - 1)).toBeLessThan(1e-15);
   });
 });
 

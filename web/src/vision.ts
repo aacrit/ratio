@@ -16,7 +16,7 @@
 
 import { FilesetResolver, ImageSegmenter, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { decodePixels } from "./decode";
-import { parseProfile, splitColourProfile, toSrgb } from "./engine/icc";
+import { extractColourProfile, parseProfile, toSrgb } from "./engine/icc";
 import { orient, readOrientation } from "./engine/orient";
 import type { Landmark, Mask } from "./engine/measure";
 import type { Pixels } from "./engine/resample";
@@ -135,8 +135,8 @@ async function inflate(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayB
 export async function decode(file: Blob): Promise<Pixels> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const raw = await decodePixels(bytes);
-  const split = splitColourProfile(bytes);
-  const icc = split.icc && split.deflated ? await inflate(split.icc) : split.icc;
+  const found = extractColourProfile(bytes);
+  const icc = found?.deflated ? await inflate(found.icc) : (found?.icc ?? null);
   const profile = icc ? parseProfile(icc) : null;
   if (profile) toSrgb(raw, profile);
   return orient(raw, readOrientation(bytes));
