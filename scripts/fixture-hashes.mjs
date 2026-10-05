@@ -185,7 +185,12 @@ async function main() {
   /** @type {Record<string, string>} */
   const probes = {};
   for (const name of browserNames) {
-    const browser = await ENGINES[name].launch();
+    // Firefox refuses WebGL on a machine with no GPU (the Linux CI image):
+    // MediaPipe needs a WebGL2 context in the read worker even on the CPU
+    // delegate, only to hand it the photo's pixels, so the blocklist is
+    // overridden here. It changes no arithmetic: the models still run on
+    // the CPU, and a texture upload of RGBA8 pixels is exact.
+    const browser = await ENGINES[name].launch(name === "firefox" ? { firefoxUserPrefs: { "webgl.force-enabled": true } } : {});
     try {
       const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       // The static preview has no Worker, so /e (the reading_completed count,
@@ -208,7 +213,7 @@ async function main() {
       page.on("pageerror", (e) => console.log(`fixture-hashes: ${name} pageerror: ${e.stack ?? e}`));
       // A 404 names its URL, so a missing file is never a mystery in the log.
       context.on("response", (r) => { if (r.status() >= 400) console.log(`fixture-hashes: ${name} ${r.status()} ${r.url()}`); });
-      context.on("requestfailed", (r) => console.log(`fixture-hashes: ${name} request failed: ${r.url()} (${r.failure()?.errorText})`));
+      context.on("requestfailed", (r) => r.url().endsWith("/e") || console.log(`fixture-hashes: ${name} request failed: ${r.url()} (${r.failure()?.errorText})`));
       results[name] = {};
       for (const [id, file] of Object.entries(files)) {
         try {
@@ -239,23 +244,29 @@ async function main() {
   const lock = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, "utf8")) : null;
   const engineNow = Object.values(results).flatMap((r) => Object.values(r)).find((r) => r.engine)?.engine ?? null;
 
-  // A browser that cannot run the models at all (R3's known-limit clause): recorded, never silently passed.
+  // A browser that cannot run the models at all (R3's known-limit clause).
+  // Checking, it fails the run unless fixtures.lock.json already records it
+  // as "unsupported: <reason>" (a reviewed decision, visible in the diff):
+  // a browser the lock enforces never drops out of agreement silently.
+  let failed = false;
+  const problems = [];
   const unsupported = {};
   for (const name of browserNames) {
     if (allFailedAlike(results[name])) {
       const reason = probes[name] ?? Object.values(results[name])[0]?.error ?? "could not run the models";
       unsupported[name] = `unsupported: ${reason}`;
-      console.warn(`fixture-hashes: ${name} could not run any fixture (${reason}); recorded as a known limit, excluded from agreement`);
+      const recorded = lock?.browsers?.[name];
+      if (!update && !(typeof recorded === "string" && recorded.startsWith("unsupported:"))) {
+        failed = true;
+        problems.push(`${name}: could not run any fixture, and fixtures.lock.json enforces it (${reason})`);
+      } else console.warn(`fixture-hashes: ${name} could not run any fixture (${reason}); ${update ? "will be recorded" : "recorded"} as a known limit, excluded from agreement`);
     }
   }
   const supported = browserNames.filter((n) => !unsupported[n]);
   if (supported.length === 0) {
-    console.error("fixture-hashes: no browser could run the models; nothing to verify");
+    console.error(`fixture-hashes: no browser could run the models; nothing to verify${problems.length ? `\n${problems.map((p) => `  - ${p}`).join("\n")}` : ""}`);
     process.exit(1);
   }
-
-  let failed = false;
-  const problems = [];
 
   // A browser that failed only some fixtures (not all alike) is a real bug, never a known limit.
   for (const name of supported) {
@@ -308,7 +319,10 @@ async function main() {
       console.error("fixture-hashes: --update refused; the browsers above do not agree, so there is nothing true to write");
       process.exit(1);
     }
-    const next = { engine: engineNow, fixtures: newFixtures, browsers: Object.fromEntries([...supported.map((n) => [n, "ok"]), ...Object.entries(unsupported)]) };
+    // Browsers not run here keep what the lock said about them (WebKit is
+    // read on the macOS runner only, see .github/workflows/gate.yml).
+    const browsers = { ...(lock?.browsers ?? {}), ...Object.fromEntries([...supported.map((n) => [n, "ok"]), ...Object.entries(unsupported)]) };
+    const next = { engine: engineNow, fixtures: newFixtures, browsers };
     writeFileSync(lockPath, JSON.stringify(next, null, 2) + "\n");
     console.log(`fixture-hashes: fixtures.lock.json updated (engine ${engineNow}, ${Object.keys(newFixtures).length} fixtures, browsers: ${Object.keys(next.browsers).join(", ")})`);
     return;

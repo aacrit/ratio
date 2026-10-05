@@ -41,4 +41,4 @@ quotas:
   - name: github_actions_minutes_per_month
     ceiling: 2000
     estimate_at_1000_users_per_day: 60
-    notes: "gate on every PR/push, verify-production every 6 hours, weekly branch-prune."
+    notes: "gate on every PR/push (its determinism legs include a macOS runner), verify-production every 6 hours, weekly branch-prune. The repo is public, so standard runners, macOS included, use no metered minutes."
