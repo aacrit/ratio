@@ -6,13 +6,35 @@
 // tab: it opens a drop cloth that says when it arrives and offers Read.
 
 const SOON: Record<string, string> = {
-  face: "Face arrives after the Rulebook. Read an outfit meanwhile.",
+  face: "Face is not built yet. Read an outfit meanwhile.",
   card: "Card is not built yet. Read an outfit meanwhile.",
 };
 
-export function setupTabs(opts: { onRead?: boolean } = {}): void {
+export interface TabsOptions {
+  onRead?: boolean;
+  /**
+   * A tab whose "not built yet" drop cloth can show something else instead,
+   * decided when it opens (Sam's re-run: the Card tab shows this read's card
+   * preview once there is a read, never "not built yet" while one exists). A
+   * result of null falls back to the plain SOON line.
+   */
+  dynamic?: Partial<Record<string, () => Promise<HTMLElement | null> | HTMLElement | null>>;
+  /**
+   * Called after the cloth's "Read an outfit" closes it (with onRead): the
+   * page routes to Read from wherever it is, so on Rules it switches to Read
+   * in-app rather than only closing the cloth over the Rulebook.
+   */
+  onReadAction?: () => void;
+}
+
+export interface TabsApi {
+  /** Moves the underline to `tab` (or hides it for null), closing any open "not built yet" drop cloth first, and records it as the route's tab: closing a cloth later returns the underline there. Main.ts calls this when it switches Read <-> Rules in-app. */
+  setActive(tab: HTMLElement | null): void;
+}
+
+export function setupTabs(opts: TabsOptions = {}): TabsApi {
   const nav = document.querySelector<HTMLElement>("nav.tabs");
-  if (!nav) return;
+  if (!nav) return { setActive: () => {} };
   const tabs = Array.from(nav.querySelectorAll<HTMLElement>(".tab"));
   const home = tabs.find((t) => t.getAttribute("aria-current") === "page") ?? null;
   const line = document.createElement("span");
@@ -20,6 +42,9 @@ export function setupTabs(opts: { onRead?: boolean } = {}): void {
   line.setAttribute("aria-hidden", "true");
   nav.append(line);
 
+  // The tab of the route showing (Read or Rules), and the tab the underline
+  // is under now: a cloth's tab while one is open, the route's tab otherwise.
+  let route: HTMLElement | null = home;
   let at: HTMLElement | null = home;
   const place = () => {
     if (!at) {
@@ -61,28 +86,35 @@ export function setupTabs(opts: { onRead?: boolean } = {}): void {
     open = null;
     cloth.hidden = true;
     delete document.body.dataset.soon;
-    at = home;
+    at = route;
     place();
   };
-  const show = (tab: HTMLElement) => {
+  const show = async (tab: HTMLElement) => {
     const which = tab.dataset.soon ?? "";
     if (open === tab) return close();
     open?.setAttribute("aria-expanded", "false");
     open = tab;
     tab.setAttribute("aria-expanded", "true");
+    cloth.replaceChildren(title, action);
     title.textContent = SOON[which] ?? "";
     cloth.hidden = false;
     document.body.dataset.soon = which;
     at = tab;
     place();
     title.focus({ preventScroll: true });
+    const custom = await opts.dynamic?.[which]?.();
+    if (open !== tab) return; // closed, or another tab opened, while this was drawing
+    if (custom) {
+      cloth.replaceChildren(custom);
+      custom.focus?.({ preventScroll: true });
+    }
   };
 
   for (const tab of tabs) {
     if (tab.dataset.soon) {
       tab.setAttribute("aria-controls", "soon");
       tab.setAttribute("aria-expanded", "false");
-      tab.addEventListener("click", () => show(tab));
+      tab.addEventListener("click", () => void show(tab));
     } else if (tab === home) {
       // The page's own tab closes a drop cloth instead of reloading the page.
       tab.addEventListener("click", (e) => {
@@ -92,18 +124,38 @@ export function setupTabs(opts: { onRead?: boolean } = {}): void {
       });
     }
   }
-  // On Read, "Read an outfit" is already here: close the cloth, keep the read.
+  // On Read, "Read an outfit" is already here: close the cloth, keep the
+  // read. From Rules, the page routes back to Read (onReadAction).
   if (opts.onRead)
     action.addEventListener("click", (e) => {
       e.preventDefault();
       close();
+      opts.onReadAction?.();
       home?.focus();
     });
-  addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && open) {
-      const tab = open;
-      close();
-      tab.focus();
-    }
-  });
+  // Capture phase: this must claim Escape before the page's own shortcuts
+  // (bound in the bubble phase on document) see it, so Esc does one thing -
+  // closing the cloth never also triggers "back to the original" underneath
+  // it (and, for the Card cloth, never touches whatever look is tried).
+  addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        const tab = open;
+        close();
+        tab.focus();
+      }
+    },
+    true,
+  );
+
+  return {
+    setActive(tab: HTMLElement | null): void {
+      if (open) close();
+      route = tab;
+      at = tab;
+      place();
+    },
+  };
 }
