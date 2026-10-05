@@ -508,7 +508,7 @@ describe("6. looks that differ", () => {
 });
 
 describe("7. engine version", () => {
-  it("is 0.8.0: a colour-tagged photo is converted by our own pipeline, not the browser's (T5)", () => {
-    expect(ENGINE_VERSION).toBe("ratio-engine/0.8.0");
+  it("is 0.9.0: every photo is decoded, stood upright and colour-converted by our own code, not the browser's (T5)", () => {
+    expect(ENGINE_VERSION).toBe("ratio-engine/0.9.0");
   });
 });

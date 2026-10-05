@@ -13,6 +13,7 @@ import { extractPalette, type Swatch } from "./engine/palette";
 import { type Side, isolatePerson } from "./engine/person";
 import { downsample, type Pixels } from "./engine/resample";
 import { type OutfitReading, readOutfit } from "./engine/rules";
+import { DecoderLoadError } from "./decode";
 import { decode, see } from "./vision";
 
 /** The long side the photo is shown at: three times the reading size, enough for a 1280 stage at 2x. */
@@ -60,7 +61,13 @@ export async function readPhoto(file: Blob, hooks: ReadHooks = {}): Promise<Read
   let full: Pixels;
   try {
     full = await decode(file);
-  } catch {
+  } catch (e) {
+    // The decoder is downloaded like the models: when it cannot load, the
+    // file was never the problem, so the visitor is not told it was.
+    if (e instanceof DecoderLoadError) {
+      console.error("ratio: the decoder failed to load:", e.cause ?? e);
+      return "models_failed";
+    }
     return "not_an_image";
   }
   const display = downsample(full, DISPLAY_SIZE);

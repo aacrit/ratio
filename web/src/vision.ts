@@ -15,7 +15,9 @@
 // it.
 
 import { FilesetResolver, ImageSegmenter, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { decodePixels } from "./decode";
 import { parseProfile, splitColourProfile, toSrgb } from "./engine/icc";
+import { orient, readOrientation } from "./engine/orient";
 import type { Landmark, Mask } from "./engine/measure";
 import type { Pixels } from "./engine/resample";
 
@@ -126,27 +128,16 @@ async function inflate(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayB
 }
 
 /**
- * Decodes a photo file upright (EXIF orientation applied) into full-size
- * sRGB pixels. The browser decodes the file with its colour profile cut out
- * (engines convert profiles differently, so the same photo gave three
- * different buffers); the profile is then applied by engine/icc.ts.
+ * Decodes a photo file upright into full-size sRGB pixels, all by our own
+ * code (decode.ts, engine/orient.ts, engine/icc.ts): the browser's decoder
+ * is never used, so the same file gives the same pixels in every engine.
  */
 export async function decode(file: Blob): Promise<Pixels> {
-  const split = splitColourProfile(new Uint8Array(await file.arrayBuffer()));
-  const bitmap = await createImageBitmap(new Blob([split.bytes], { type: file.type }), { imageOrientation: "from-image", colorSpaceConversion: "none" });
-  let pixels: Pixels;
-  try {
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) throw new Error("this browser cannot read the photo's pixels");
-    ctx.drawImage(bitmap, 0, 0);
-    const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height, { colorSpace: "srgb" });
-    pixels = { width: img.width, height: img.height, data: img.data };
-  } finally {
-    bitmap.close();
-  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const raw = await decodePixels(bytes);
+  const split = splitColourProfile(bytes);
   const icc = split.icc && split.deflated ? await inflate(split.icc) : split.icc;
   const profile = icc ? parseProfile(icc) : null;
-  if (profile) toSrgb(pixels, profile);
-  return pixels;
+  if (profile) toSrgb(raw, profile);
+  return orient(raw, readOrientation(bytes));
 }

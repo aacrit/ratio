@@ -8,14 +8,15 @@
 // and Firefox's reading differed from Chromium's in 20 bins. Every iPhone
 // photo is tagged (Display P3), so this is not a test artefact.
 //
-// So the profile is cut out of the file before the browser decodes it (an
-// untagged photo decodes to the same pixels in all three engines), and this
-// file converts the pixels to sRGB itself: an RGB matrix/curve profile or a
-// grey curve, on integer lookup tables. Only the tables are built with
-// Math.pow, and each entry is rounded to 16 or 8 bits, so engine-to-engine
-// drift in pow (an ulp at most) cannot change a pixel. A profile this file
-// cannot apply (a LUT-only or CMYK profile) is dropped, and the pixels are
-// read as sRGB: the same answer in every engine, if not a perfect colour.
+// So the browser never decodes a photo (web/src/decode.ts does, and its
+// decoders ignore profiles), and this file finds the profile in the file
+// and converts the decoded pixels to sRGB itself: an RGB matrix/curve
+// profile or a grey curve, on integer lookup tables. Only the tables are
+// built with Math.pow, and each entry is rounded to 16 or 8 bits, so
+// engine-to-engine drift in pow (an ulp at most) cannot change a pixel. A
+// profile this file cannot apply (a LUT-only or CMYK profile) is dropped,
+// and the pixels are read as sRGB: the same answer in every engine, if not
+// a perfect colour.
 
 import type { Pixels } from "./resample";
 
