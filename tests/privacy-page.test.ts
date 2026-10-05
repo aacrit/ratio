@@ -49,7 +49,7 @@ describe("web/privacy.html, claim by claim", () => {
 
   it("the photo is never stored, not even in this browser: no code path anywhere calls indexedDB", () => {
     expect(text).toContain(
-      "it is not saved anywhere, even in this tab: not in a file, not in a database on this site, not anywhere else in your browser, unless you choose to download a card, which saves that one image to your device like any download",
+      "it is never written to storage of any kind, even in this browser: not to a file, not to a database on this site, not to your browser's storage, unless you choose to download a card, which saves that one image to your device like any download",
     );
     expect(text).toContain("closing the tab, or reloading the page, clears it, exactly as above");
     expect(text).not.toMatch(/IndexedDB/i);
