@@ -32,6 +32,7 @@ import { setupRulebook } from "./rules";
 import { renderRulebook } from "./rules/render";
 import { chalkFigure } from "./tryon/figure";
 import { drawCard, saveCard } from "./ui/card";
+import { cardSaver } from "./ui/save";
 import { setupCompact } from "./ui/compact";
 import { countTo } from "./ui/count";
 import { type Shown, heroEyebrowOf, setupLooks, verdictOf } from "./ui/looks";
@@ -607,33 +608,8 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
   canvas.addEventListener("pointerup", release);
   canvas.addEventListener("pointercancel", release);
 
-  /** Draws and downloads the card for whatever is on screen now; shared by both download buttons and the `S` shortcut. */
-  const downloadCard = async (button: HTMLButtonElement, note: HTMLElement): Promise<void> => {
-    if (button.disabled) return; // a download already in flight for this button: S twice, or a double click, does it once
-    // The read being saved is fixed now: a new read started during the wait
-    // must not swap in (its own recolour was never waited on).
-    const c = current;
-    if (!c) return;
-    const original = button.textContent;
-    button.disabled = true;
-    button.textContent = "Drawing the card.";
-    // A look still being recoloured lands first: the card matches the photo and its note.
-    await c.settled();
-    const shown = c.shown();
-    try {
-      await saveCard({ still: c.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: c.credit ?? undefined });
-      button.textContent = "Downloaded";
-      note.textContent = `Saved to your downloads as ratio-${shown.hash.slice(0, 4)}.png.`;
-    } catch {
-      button.textContent = "Could not draw the card";
-    } finally {
-      setTimeout(() => {
-        button.disabled = false;
-        button.textContent = original;
-        button.focus();
-      }, 1600);
-    }
-  };
+  /** Draws and downloads the card for whatever is on screen now; shared by both download buttons, the Card preview's and the `S` shortcut, one export at a time (ui/save.ts). */
+  const downloadCard = cardSaver({ current: () => current, save: saveCard });
   save.addEventListener("click", () => void downloadCard(save, saveNote));
   saveTop.addEventListener("click", () => void downloadCard(saveTop, saveNote));
 
