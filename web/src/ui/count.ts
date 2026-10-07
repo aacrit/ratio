@@ -34,7 +34,7 @@ function render(template: string[], numbers: Part[], t: number): string {
   return out;
 }
 
-/** Counts the element's text to `to`. Returns the animation; the text is final when it resolves. */
+/** Counts the element's text to `to`. Returns the animation; the text is final when it resolves, unless it was cancelled (cancel resolves it too). */
 export function countTo(el: HTMLElement, to: string, from?: string): Animation {
   const { template, numbers } = parts(to, from);
   if (!numbers.length || (from !== undefined && from === to)) {

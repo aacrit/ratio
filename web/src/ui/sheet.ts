@@ -14,6 +14,50 @@ export type Snap = "peek" | "half" | "full";
 
 const WIDE = "(min-width: 1024px)";
 
+/**
+ * The grip's accessible state and label for each resting place (T8, R-09:
+ * the handle said "Expand the reading" with aria-expanded="true" while only
+ * half open; review round 1: pairing a label that still says "Expand" with
+ * aria-expanded="true" is self-contradictory at any two states, not only
+ * that one). One stable name, independent of state; aria-expanded alone
+ * carries whether it is collapsed (peek) or not (half or full).
+ */
+export function gripLabel(snap: Snap): { expanded: boolean; label: string } {
+  return { expanded: snap !== "peek", label: "Expand or collapse the reading" };
+}
+
+/** The handful of a WheelEvent that wheelTarget needs, kept as a plain shape so it can be tested without a DOM. */
+export interface WheelInput {
+  deltaX: number;
+  deltaY: number;
+  /** 0 = pixels, 1 = lines, 2 = pages (WheelEvent.DOM_DELTA_*): a line or page delta is never a stray trackpad jitter, however small its number. */
+  deltaMode: number;
+  /** A pinch-to-zoom gesture reports as a wheel event with ctrlKey set in every evergreen browser; it is never a request to open the sheet. */
+  ctrlKey: boolean;
+}
+
+/** Below this many pixels (deltaMode 0 only) a wheel delta reads as trackpad jitter, not an intentional scroll (review round 1). */
+const MIN_PIXEL_DELTA = 4;
+
+/**
+ * What a wheel or trackpad scroll over the sheet body should do. Below
+ * full, the body's overflow stays hidden (design/BRAND.md: "full ... and
+ * only then does it scroll inside"), so a scroll gesture there is the same
+ * cue a swipe up already is through the pointer handlers below: raise the
+ * sheet to full, where the rest of the reading (Shortcuts, Download,
+ * feedback) is reachable by scrolling in place. Once full, this returns
+ * null and the native scroll takes over. A pinch-zoom, a mostly-horizontal
+ * scroll, a tiny jitter, or scrolling back up are all left alone: none of
+ * them is a request to open the sheet further.
+ */
+export function wheelTarget(snap: Snap, e: WheelInput): Snap | null {
+  if (snap === "full" || e.ctrlKey) return null;
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return null;
+  if (e.deltaY <= 0) return null;
+  if (e.deltaMode === 0 && e.deltaY < MIN_PIXEL_DELTA) return null;
+  return "full";
+}
+
 export class Sheet {
   private y = 0;
   private anim: Animation | null = null;
@@ -23,6 +67,8 @@ export class Sheet {
   private velocity = new Velocity();
   private listeners = new Set<(top: number, snap: Snap) => void>();
   private _snap: Snap = "peek";
+  /** True from the moment a wheel escalates the sheet until that spring settles, so a momentum-scroll trackpad's dozens of further events (all still arriving while the sheet is mid-flight) do not each restart it. Cleared by any snap or press too, so a cut-short spring never leaves the wheel switched off (review round 2). */
+  private wheelSettling = false;
 
   constructor(
     readonly element: HTMLElement,
@@ -31,7 +77,7 @@ export class Sheet {
   ) {
     this.measure();
     this.place(this.stops.peek);
-    this.element.dataset.snap = "peek";
+    this.setSnap("peek");
     addEventListener("resize", () => this.measure(true));
     this.wide.addEventListener("change", () => this.measure(true));
     grip.addEventListener("click", () => {
@@ -49,6 +95,12 @@ export class Sheet {
     element.addEventListener("pointermove", (e) => this.move(e));
     element.addEventListener("pointerup", (e) => this.up(e));
     element.addEventListener("pointercancel", (e) => this.up(e));
+    // A wheel or trackpad scroll reaches the rest of the reading the same
+    // way a swipe up already does (T8, Sam's re-run: "can't be reached by
+    // swipe or wheel" - the pointer handlers below already raise the sheet
+    // on a drag; wheel input needs the same escalation since it never
+    // reaches the pointer handlers).
+    body.addEventListener("wheel", (e) => this.wheel(e), { passive: false });
     // Test hook, and a way for the page to ask for a resting place by event.
     element.addEventListener("ratio:snap", (e) => this.snap((e as CustomEvent<Snap>).detail));
   }
@@ -103,11 +155,35 @@ export class Sheet {
   private setSnap(s: Snap): void {
     this._snap = s;
     this.element.dataset.snap = s;
-    this.grip.setAttribute("aria-expanded", String(s !== "peek"));
-    this.grip.setAttribute("aria-label", s === "full" ? "Collapse the reading" : "Expand the reading");
-    // The body scrolls only when the sheet is fully up; below that a drag moves the sheet.
+    const { expanded, label } = gripLabel(s);
+    this.grip.setAttribute("aria-expanded", String(expanded));
+    this.grip.setAttribute("aria-label", label);
+    // The body scrolls only when the sheet is fully up; below that a drag (or a wheel, below) moves the sheet.
     this.body.style.overflowY = s === "full" || this.wide.matches ? "auto" : "hidden";
     if (s !== "full") this.body.scrollTop = 0;
+  }
+
+  private wheel(e: WheelEvent): void {
+    if (this.wide.matches) return;
+    if (this.wheelSettling) {
+      // The rest of a momentum scroll: claim it, so it neither restarts the
+      // spring nor scrolls the (now full) body mid-flight.
+      e.preventDefault();
+      return;
+    }
+    const target = wheelTarget(this._snap, e);
+    if (!target) return;
+    e.preventDefault();
+    this.snap(target);
+    if (reducedMotion()) return;
+    const anim = this.anim;
+    if (!anim) return;
+    this.wheelSettling = true;
+    void anim.done.then(() => {
+      // Only this wheel's own spring ends its settle: a snap or a press
+      // that cut it short has already cleared the flag (review round 2).
+      if (this.anim === anim) this.wheelSettling = false;
+    });
   }
 
   /** Moves to a resting place, carrying `velocity` (px per second, downward positive) into the spring. */
@@ -118,6 +194,8 @@ export class Sheet {
     }
     this.measure();
     this.setSnap(to);
+    // Any other move ends a wheel's settle: the wheel must work again at once.
+    this.wheelSettling = false;
     this.anim?.cancel();
     const target = this.stops[to];
     if (reducedMotion()) {
@@ -133,6 +211,7 @@ export class Sheet {
     const inBody = this.body.contains(e.target as Node);
     if (inBody && this._snap === "full" && this.body.scrollTop > 0) return;
     // A press on a control is a press until it clearly moves; then it is a drag of the sheet.
+    this.wheelSettling = false;
     this.anim?.cancel();
     this.drag = { startY: this.y, startPointer: e.clientY, moved: false, id: e.pointerId };
     this.velocity.reset(e.clientY);

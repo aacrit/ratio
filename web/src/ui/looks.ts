@@ -54,11 +54,18 @@ export interface LooksDeps {
 /** The verdict reads as a judgement of a tried look, never of the outfit itself: "Trying navy for the lower piece: Works...". */
 const tryingPrefix = (look: Look | null): string => (look ? `Trying ${lookPhrase(look.moves)}: ` : "");
 
+/** In Compact the full verdict is hidden; its one-line toggle (ui/compact.ts) is what actually shows, so that's what a tried look must keep in view (review round 1). */
+function summaryEl(verdict: HTMLElement): HTMLElement {
+  if (document.body.dataset.compact === undefined) return verdict;
+  return document.getElementById("verdict-compact-toggle") ?? verdict;
+}
+
 /** Scrolls the summary (the verdict) into view if a tried look pushed it off-screen; smooth unless reduced motion. */
 function keepSummaryInView(verdict: HTMLElement): void {
-  const r = verdict.getBoundingClientRect();
+  const el = summaryEl(verdict);
+  const r = el.getBoundingClientRect();
   if (r.top >= 0 && r.bottom <= innerHeight) return;
-  verdict.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "nearest" });
+  el.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "nearest" });
 }
 
 const changeText = (from: LineState, to: LineState) => `${STATE_WORDS[from]} → ${STATE_WORDS[to]}`;

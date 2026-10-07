@@ -43,12 +43,15 @@ export interface Animation {
  * speed in units per second, so a release carries into the motion. Resolves
  * when it settles to 0.1% of the travel (or of `scale`, for a spring that
  * starts at rest at its target but with velocity). Returns a cancel
- * function alongside the promise; a cancelled spring resolves at once.
+ * function alongside the promise; a cancelled spring stops where it is and
+ * resolves at once.
  */
 export function spring(p: SpringParams, from: number, to: number, update: (x: number, v: number) => void, velocity = 0, scale?: number): Animation {
   let id = 0;
   let cancelled = false;
+  let finish = () => {};
   const done = new Promise<void>((resolve) => {
+    finish = resolve;
     if (reducedMotion()) {
       update(to, 0);
       resolve();
@@ -80,9 +83,16 @@ export function spring(p: SpringParams, from: number, to: number, update: (x: nu
   });
   return {
     done,
+    // Resolves at once: cancelAnimationFrame means the step that would
+    // have resolved never runs, so a cancelled spring's `done` would
+    // otherwise hang forever (T8 review round 2: the sheet's wheel waited
+    // on it and stayed switched off). Callers that must not act on a
+    // superseded spring check that it is still theirs.
     cancel: () => {
+      if (cancelled) return;
       cancelled = true;
       cancelAnimationFrame(id);
+      finish();
     },
   };
 }

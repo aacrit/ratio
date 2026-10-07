@@ -931,9 +931,36 @@ body[data-compare="on"] .figure {
   gap: 24px;
 }
 
+/* A grid item's default min-width is its content's min-content size, which
+   for a nowrap descendant (Compact's one-line headline, below) is the
+   whole unwrapped sentence: without this, that single descendant grows
+   .reading's one implicit column (and so .sheet-body) to fit it, pushing
+   the panel wider than its own room instead of letting the nowrap text
+   ellipsize inside it (review round 1: "the reading is 572px in a 488px
+   body"). */
+.reading > * {
+  min-width: 0;
+}
+
+/* Compact (T8): the same sections, closer together, so the rule rows (the
+   point of turning it on) start sooner. */
+[data-compact] .reading {
+  gap: 10px;
+}
+
+[data-compact] .sheet-head {
+  gap: 8px;
+}
+
 .sheet-head {
   display: grid;
   gap: 12px;
+}
+
+/* Same reason as .reading > *, above: .sheet-head is also an implicit
+   single-column grid, and .peek-cluster is one of its items. */
+.sheet-head > * {
+  min-width: 0;
 }
 
 /* Everything the peek resting place shows: this session's strip (once there
@@ -941,6 +968,7 @@ body[data-compare="on"] .figure {
 .peek-cluster {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 /* The plain verdict leads (founder, 2026-10-04): "Works." or "Two changes
@@ -952,6 +980,111 @@ body[data-compare="on"] .figure {
   font-size: clamp(1.6rem, 6vw, 2.3rem);
   line-height: 1.15;
   max-width: 34ch;
+}
+
+/* display: contents outside Compact: the wrapper adds no box, so the
+   verdict sits exactly where it always has in .peek-cluster's grid (T8:
+   "with Compact off, the default first view stays as designed"). */
+.verdict-wrap {
+  display: contents;
+}
+
+.verdict-compact-toggle {
+  display: none;
+}
+
+/* Compact (T8, R-09: the headline filled the fold at every width because
+   Compact folded the rule rows but never it). The full verdict is replaced
+   by one line, read back out of it (ui/headline.ts: never a second source
+   of truth), with the ratio sitting beside it instead of under it so the
+   pair costs one row of height, not two. The full sentence is a tap away. */
+[data-compact] .peek-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+[data-compact] .peek-cluster > .session-strip {
+  flex: 0 0 100%;
+}
+
+/* The wrapper stays box-less in Compact too, so the toggle and the full
+   sentence are this row's own flex items: the toggle shares the first line
+   with the numeral, and the disclosed sentence (order 1, below) takes a
+   full-width line of its own under both. flex-basis 0 (not auto): the
+   toggle's nowrap content must never set its starting size, or it claims
+   the whole line before the numeral gets a share (review round 1). It
+   grows into everything the numeral leaves; the numeral alone is short
+   (review round 2: with the eyebrow beside it too, the ratio kept 300px of
+   a 343px line at 375 and the verdict showed "W..."). */
+[data-compact] .verdict-compact-toggle {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.verdict-compact-text {
+  display: block;
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: clamp(1.1rem, 3vw, 1.3rem);
+  line-height: 1.25;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-compact] #verdict {
+  display: none;
+}
+
+/* The disclosure: a tap on the compact line reveals the full sentence
+   underneath it, kept smaller than its non-Compact size (spec.md: the
+   headline's type scale may be tightened) so opening it once does not
+   refill the fold it was just cleared of. */
+[data-compact] .verdict-wrap[data-open] #verdict {
+  display: block;
+  order: 1;
+  flex: 0 0 100%;
+  /* A whole line of its own (a max-width would let it share the toggle's
+     line on a wide panel); the end padding keeps its measure to 48ch. */
+  max-width: none;
+  padding-inline-end: max(0px, calc(100% - 48ch));
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+/* Only the numeral sits beside the verdict: its state already shows in its
+   own hue (tape, section, borderline) and, in words, on the first rule row
+   just below, so Compact drops the eyebrow that repeats it. The numeral is
+   set on the toggle's 44px line, centred on it, so the two read as one. */
+[data-compact] .ratio-row {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding-top: 0;
+}
+
+[data-compact] .hero-eyebrow {
+  display: none;
+}
+
+[data-compact] .hero-n {
+  display: block;
+  line-height: 44px;
+  white-space: nowrap;
 }
 
 .ratio-row {
@@ -1336,6 +1469,20 @@ body[data-compare="on"] .figure {
   margin-bottom: 12px;
 }
 
+/* The heading ("Looks to try") already says what the list is; Compact
+   drops the sentence under it the same way it drops a row's own prose. */
+[data-compact] .looks-intro {
+  display: none;
+}
+
+[data-compact] .look-list {
+  gap: 2px;
+}
+
+[data-compact] .section-title {
+  margin-bottom: 4px;
+}
+
 .look-list {
   list-style: none;
   margin: 0;
@@ -1464,6 +1611,40 @@ body[data-compare="on"] .figure {
   font: 500 0.72rem var(--font-data);
   letter-spacing: 0.04em;
   color: var(--color-cream-muted);
+}
+
+/* Compact (T8): a look card still names the look and keeps "Try it" and
+   "Why?" in reach, but drops the moves and changes prose that Compact's own
+   rows already fold elsewhere, and sits on one line (swatches and title
+   beside the button) instead of two stacked ones, so each card costs one
+   short row, not three. */
+[data-compact] .look {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 5px 12px;
+}
+
+[data-compact] .look-moves,
+[data-compact] .look-changes {
+  display: none;
+}
+
+[data-compact] .look-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-compact] .look-title {
+  font-size: 0.95rem;
+}
+
+[data-compact] .look-foot {
+  margin-top: 0;
 }
 
 /* ---- Feedback and the foot ---------------------------------------------------- */
