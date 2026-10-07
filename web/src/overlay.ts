@@ -75,8 +75,18 @@ interface Scene {
 export class Figure {
   private ctx: CanvasRenderingContext2D;
   private photo: OffscreenCanvas;
-  /** The tried look's recoloured photo, or null when showing the outfit as worn. */
+  /**
+   * The tried look's recoloured photo, or null when showing the outfit as
+   * worn. This is the state on screen, and the only layer the saved card
+   * reads: it is cleared the moment the person goes back to as worn.
+   */
   private look: OffscreenCanvas | null = null;
+  /**
+   * A look on its way out: drawn on the stage while the wipe glides home,
+   * never on the card (T7, R-09: the card kept the look's recolour under
+   * "As worn" until this glide settled, and for good when it was cut short).
+   */
+  private leaving: OffscreenCanvas | null = null;
   /** Where the look begins, as a fraction of the width (0 = all look, 1 = all as worn). */
   private wipe = 1;
   private wipeAnim: Animation | null = null;
@@ -165,14 +175,17 @@ export class Figure {
     const unit = Math.max(1, rw / 340);
     ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     ctx.clearRect(0, 0, rw, rh);
-    ctx.drawImage(still && this.look ? this.look : this.photo, 0, 0, rw, rh);
-    if (!still && this.look && this.wipe < 1) {
+    // The stage draws a leaving look behind the wipe as it glides home; the
+    // card draws only the look on screen, whole, or the photo as worn.
+    const layer = still ? this.look : (this.look ?? this.leaving);
+    ctx.drawImage(still && layer ? layer : this.photo, 0, 0, rw, rh);
+    if (!still && layer && this.wipe < 1) {
       const x0 = rw * this.wipe;
       ctx.save();
       ctx.beginPath();
       ctx.rect(x0, 0, rw - x0, rh);
       ctx.clip();
-      ctx.drawImage(this.look, 0, 0, rw, rh);
+      ctx.drawImage(layer, 0, 0, rw, rh);
       ctx.restore();
     }
 
@@ -251,7 +264,7 @@ export class Figure {
     }
 
     // The wipe: a chalk line with a grip, and the two sides named.
-    if (!still && this.look && this.wipe > 0 && this.wipe < 1) {
+    if (!still && layer && this.wipe > 0 && this.wipe < 1) {
       const wx = rw * this.wipe;
       this.line(ctx, wx, 0, wx, rh, c.chalk, 1.4 * unit);
       ctx.fillStyle = c.halo;
@@ -283,22 +296,29 @@ export class Figure {
   /**
    * Shows a tried look's recoloured photo (display size) behind the wipe,
    * which glides to the middle so both sides are in view; null returns to
-   * the outfit as worn.
+   * the outfit as worn at once (the card and `hasLook` see it immediately),
+   * while the stage lets the old look glide out behind the wipe.
    */
   setLook(pixels: Pixels | null): void {
     this.wipeAnim?.cancel();
     if (!pixels) {
+      if (this.look) this.leaving = this.look;
+      this.look = null;
       const from = this.wipe;
-      this.wipeAnim = spring(springToken("glide"), from, 1, (w) => {
+      const anim = spring(springToken("glide"), from, 1, (w) => {
         this.wipe = w;
         this.draw();
       });
-      void this.wipeAnim.done.then(() => {
-        if (this.wipe >= 1) this.look = null;
+      this.wipeAnim = anim;
+      void anim.done.then(() => {
+        // Home: the leaving layer is spent. A newer look or exit that cut
+        // this glide short owns the layers now, so leave them alone.
+        if (this.wipeAnim === anim) this.leaving = null;
         this.draw();
       });
       return;
     }
+    this.leaving = null;
     this.look = sheet(pixels);
     const from = this.wipe;
     this.wipeAnim = spring(springToken("glide"), from, 0.5, (w) => {
@@ -309,6 +329,7 @@ export class Figure {
 
   /** Moves the wipe (0 = all the look, 1 = all as worn), from a drag or the range control. */
   setWipe(fraction: number): void {
+    if (!this.look) return; // as worn there is nothing to compare; a leaving look is not draggable
     this.wipeAnim?.cancel();
     this.wipe = Math.max(0, Math.min(1, fraction));
     this.draw();
@@ -316,6 +337,7 @@ export class Figure {
 
   /** The wipe let go at `velocity` (fractions of the width per second): it carries on and settles where it would stop. */
   flingWipe(velocity: number, onMove?: (w: number) => void): void {
+    if (!this.look) return;
     this.wipeAnim?.cancel();
     const to = Math.max(0.02, Math.min(0.98, project(this.wipe, velocity)));
     this.wipeAnim = spring(
@@ -340,9 +362,14 @@ export class Figure {
     return this.look !== null;
   }
 
-  /** The photo with its overlay at rest, the look whole when one is tried: for the saved card. */
+  /**
+   * The photo with its overlay at rest, the look whole when one is tried
+   * (never a look on its way out): for the saved card. Sized from this
+   * read's own photo, never the shared stage canvas, which the next read
+   * may already have resized while this card is drawing (as restore() does).
+   */
   still(): OffscreenCanvas {
-    const out = new OffscreenCanvas(this.element.width, this.element.height);
+    const out = new OffscreenCanvas(this.photo.width, this.photo.height);
     const ctx = out.getContext("2d");
     if (ctx) this.paint(ctx, true);
     return out;

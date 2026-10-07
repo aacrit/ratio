@@ -60,7 +60,8 @@ export function setupShortcuts(handlers: ShortcutHandlers, root: ShortcutRoot = 
     if (e.key === "?") return handlers.help();
     const lower = e.key.toLowerCase();
     if (lower === "o") return handlers.another();
-    if (lower === "s") return handlers.download();
+    // A held S auto-repeats: one press, one card (T7 review).
+    if (lower === "s") return e.repeat ? undefined : handlers.download();
     if (lower in KEY_LOOK) return handlers.tryLook(KEY_LOOK[lower]);
   };
   root.addEventListener("keydown", onKeydown);
