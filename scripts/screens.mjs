@@ -590,15 +590,14 @@ async function run(name, viewport) {
   note(`${name}: Compact on: #sheet-body scrollWidth ${sheetOverflow.scrollWidth} vs clientWidth ${sheetOverflow.clientWidth}`);
   if (sheetOverflow.scrollWidth > sheetOverflow.clientWidth) errors.push(`Compact on ${name} overflows the sheet body horizontally (scrollWidth ${sheetOverflow.scrollWidth} > clientWidth ${sheetOverflow.clientWidth})`);
 
-  // Review round 1: the ratio must actually sit beside the compact
-  // headline (one row), not wrap beneath it (two).
-  const headlineRatioAlign = await page.evaluate(() => {
-    const hero = document.getElementById("hero-n").getBoundingClientRect();
-    const toggle = document.getElementById("verdict-compact-toggle").getBoundingClientRect();
-    return { heroTop: hero.top, toggleTop: toggle.top };
-  });
-  note(`${name}: Compact: hero-n top ${headlineRatioAlign.heroTop}, compact toggle top ${headlineRatioAlign.toggleTop}`);
-  if (Math.abs(headlineRatioAlign.heroTop - headlineRatioAlign.toggleTop) > 20) errors.push(`Compact did not keep the ratio beside the headline (hero-n top ${headlineRatioAlign.heroTop} vs toggle top ${headlineRatioAlign.toggleTop})`);
+  // Review rounds 1 and 2: the ratio sits beside the compact headline (one
+  // row, tops within 5 px), and the headline gets most of that row (round
+  // 2: the ratio and its eyebrow kept their full width, leaving the toggle
+  // 39 px at 375 showing "W..."). The hard strings are checked at three
+  // widths by runCompactHeadline, below; this is the real read's line.
+  const headlineGeom = await page.evaluate(compactGeometry);
+  note(`${name}: Compact: toggle ${headlineGeom.toggleWidth}px of the cluster's ${headlineGeom.clusterWidth}px (${headlineGeom.share}); tops: toggle ${headlineGeom.toggleTop}, hero-n ${headlineGeom.heroTop}; visible "${headlineGeom.visible}"`);
+  errors.push(...compactGeometryErrors(headlineGeom, `${name}, the sample's own verdict`));
 
   if (!phone) {
     const firstRowYCompact = await page.evaluate(() => document.querySelector(".row")?.getBoundingClientRect().top ?? null);
@@ -675,8 +674,33 @@ async function run(name, viewport) {
     const snapAfterTouch = await page.evaluate(() => document.getElementById("sheet").dataset.snap);
     const gripAfterTouch = await page.getAttribute("#grip", "aria-expanded");
     note(`${name}: a real touch drag (CDP) up from half: sheet now "${snapAfterTouch}", grip aria-expanded ${gripAfterTouch}`);
-    if (snapAfterTouch === "half") errors.push("a real touch drag up from half did not move the sheet");
+    if (snapAfterTouch !== "full") errors.push(`a real touch drag up from half left the sheet at "${snapAfterTouch}", not full`);
     if (gripAfterTouch !== "true") errors.push(`the grip's aria-expanded after a touch drag off peek was "${gripAfterTouch}", not "true"`);
+
+    // Review round 2: wheel escalation used to switch itself off for good
+    // when its spring was cut short (the settle flag waited on a cancelled
+    // spring's `done`, which never resolved). Wheel from half, snap back to
+    // half inside 60 ms, then wheel again: the sheet must still go to full.
+    await snap("half");
+    await page.waitForTimeout(400);
+    await page.mouse.move(bodyBox.x + bodyBox.width / 2, bodyBox.y + 40);
+    const cutShort = await page.evaluate(async () => {
+      const body = document.getElementById("sheet-body");
+      const sheet = document.getElementById("sheet");
+      const t0 = performance.now();
+      body.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
+      const afterFirst = sheet.dataset.snap;
+      await new Promise((r) => setTimeout(r, 30));
+      sheet.dispatchEvent(new CustomEvent("ratio:snap", { detail: "half" }));
+      return { afterFirst, cancelledAfterMs: Math.round(performance.now() - t0), afterSnap: sheet.dataset.snap };
+    });
+    await page.mouse.wheel(0, 120); // a real wheel this time
+    await page.waitForTimeout(600);
+    const snapAfterCutShort = await page.evaluate(() => document.getElementById("sheet").dataset.snap);
+    note(`${name}: wheel at half -> "${cutShort.afterFirst}", snapped back to "${cutShort.afterSnap}" after ${cutShort.cancelledAfterMs} ms (mid-spring), then a real wheel: sheet "${snapAfterCutShort}"`);
+    if (cutShort.afterFirst !== "full") errors.push(`the wheel-after-cancel check's first wheel left the sheet at "${cutShort.afterFirst}", not full`);
+    if (cutShort.cancelledAfterMs >= 60) errors.push(`the wheel-after-cancel check snapped back after ${cutShort.cancelledAfterMs} ms, not inside the spring's first 60 ms`);
+    if (snapAfterCutShort !== "full") errors.push(`after a wheel's spring was cut short by a snap, the next wheel left the sheet at "${snapAfterCutShort}", not full`);
 
     await snap("half"); // leave the sheet where the rest of this run expects it
     await page.waitForTimeout(400);
@@ -838,7 +862,122 @@ async function runReducedMotion() {
   return errors.length;
 }
 
-const failures = (await run("phone", { width: 375, height: 812 })) + (await run("desktop", { width: 1280, height: 900 })) + (await runReducedMotion());
+/**
+ * Compact's one-line headline at 375, 768 and 1280 with the strings that
+ * crowd it most (review round 2): the longest change the engine can name,
+ * a tried look's "Trying ·" prefix, and an optional "or try" note. Each is
+ * set as the verdict's text (ui/compact.ts observes it and refolds the
+ * line, the same path a real read or a tried look takes), then measured:
+ * the toggle holds at least 55% of the cluster, sits beside the numeral,
+ * and shows the verdict word and some of the change. The disclosure, once
+ * open, must take a full-width line of its own beneath both.
+ */
+const LONG_CHANGE = "a neutral, or a neighbouring hue, for the colour outside the scheme";
+const HARD_VERDICTS = [
+  { id: "long", full: `Works, with one change worth making. The proportions are strong. The change: ${LONG_CHANGE}.`, lead: "Works · " },
+  { id: "trying", full: `Trying navy for the lower piece: Works, with one change worth making. The proportions are strong. The change: ${LONG_CHANGE}.`, lead: "Trying · Works · " },
+  { id: "or-try", full: `Works. The proportions are strong. For one more note, try ${LONG_CHANGE}.`, lead: "Works · or try " },
+];
+
+async function runCompactHeadline(width) {
+  const errors = [];
+  const phone = width < 1024;
+  const name = `compact-${width}`;
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ viewport: { width, height: phone ? 812 : 900 }, deviceScaleFactor: 1, colorScheme: "dark" });
+  const page = await context.newPage();
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.click("#try-sample");
+  await page.waitForSelector("#reading-hash:not(:empty)", { timeout: 120_000 });
+  await page.waitForFunction(() => document.body.dataset.revealing === undefined, { timeout: 10_000 }).catch(() => {});
+  if ((await page.getAttribute("#compact-toggle", "aria-pressed")) !== "true") await page.click("#compact-toggle");
+  if (phone) await page.evaluate(() => document.getElementById("sheet").dispatchEvent(new CustomEvent("ratio:snap", { detail: "half" })));
+  // Clicking Compact scrolled the panel down to its button; the headline is
+  // at the top of the panel, so go back there, and park the pointer on the
+  // stage so no hover state is in the shot.
+  await page.evaluate(() => (document.getElementById("sheet-body").scrollTop = 0));
+  await page.mouse.move(4, (phone ? 812 : 900) / 2);
+  await page.waitForTimeout(500);
+  for (const v of HARD_VERDICTS) {
+    await page.evaluate((full) => (document.getElementById("verdict").textContent = full), v.full);
+    await page.waitForTimeout(150);
+    const g = await page.evaluate(compactGeometry);
+    note(`${name}: ${v.id}: toggle ${g.toggleWidth}px of ${g.clusterWidth}px (${g.share}); tops: toggle ${g.toggleTop}, hero-n ${g.heroTop}; visible "${g.visible}"`);
+    errors.push(...compactGeometryErrors(g, `${name}, ${v.id}`));
+    if (!g.visible.startsWith(v.lead)) errors.push(`${name}, ${v.id}: the visible headline "${g.visible}" does not start with "${v.lead}"`);
+    const changeShown = g.visible.startsWith(v.lead) ? g.visible.slice(v.lead.length).trim() : "";
+    if (changeShown.length < 6) errors.push(`${name}, ${v.id}: the visible headline "${g.visible}" shows ${changeShown.length} characters of the change, fewer than 6`);
+  }
+  await page.screenshot({ path: path.join(out, `${name}-closed.png`) });
+  note(`${name}: closed`);
+  await page.click("#verdict-compact-toggle");
+  await page.waitForTimeout(250);
+  const open = await page.evaluate(() => {
+    const r = (id) => document.getElementById(id).getBoundingClientRect();
+    const cluster = document.querySelector(".peek-cluster").getBoundingClientRect();
+    const verdict = r("verdict");
+    const toggle = r("verdict-compact-toggle");
+    const hero = r("hero-n");
+    const lh = parseFloat(getComputedStyle(document.getElementById("verdict")).lineHeight);
+    return { verdictWidth: Math.round(verdict.width), clusterWidth: Math.round(cluster.width), verdictTop: Math.round(verdict.top), toggleBottom: Math.round(toggle.bottom), heroBottom: Math.round(hero.bottom), lines: Math.round(verdict.height / lh) };
+  });
+  note(`${name}: disclosure open: the full sentence is ${open.verdictWidth}px of ${open.clusterWidth}px, top ${open.verdictTop} under the toggle's bottom ${open.toggleBottom}, ${open.lines} lines`);
+  if (open.verdictWidth < open.clusterWidth - 1) errors.push(`${name}: the open disclosure is ${open.verdictWidth}px wide, not the cluster's full ${open.clusterWidth}px line`);
+  if (open.verdictTop < Math.max(open.toggleBottom, open.heroBottom)) errors.push(`${name}: the open disclosure starts at ${open.verdictTop}, beside the toggle or numeral rather than beneath them`);
+  if (open.lines > 5) errors.push(`${name}: the open disclosure runs to ${open.lines} lines (one word per line in a narrow column?)`);
+  await page.screenshot({ path: path.join(out, `${name}-open.png`) });
+  note(`${name}: open`);
+  if (errors.length) note(`${name}: findings:\n  ${errors.join("\n  ")}`);
+  await browser.close();
+  return errors.length;
+}
+
+/** Runs in the page: the compact headline's geometry and the part of its text actually on screen (the ellipsis, when there is one, takes the place of the characters under it). */
+function compactGeometry() {
+  const cluster = document.querySelector(".peek-cluster").getBoundingClientRect();
+  const toggle = document.getElementById("verdict-compact-toggle").getBoundingClientRect();
+  const hero = document.getElementById("hero-n").getBoundingClientRect();
+  const span = document.getElementById("verdict-compact-text");
+  const box = span.getBoundingClientRect();
+  let limit = box.right;
+  if (span.scrollWidth > span.clientWidth) {
+    const dots = document.createElement("span");
+    dots.textContent = "…";
+    dots.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap";
+    span.appendChild(dots);
+    limit -= dots.getBoundingClientRect().width;
+    dots.remove();
+  }
+  const node = span.firstChild;
+  const range = document.createRange();
+  let visible = "";
+  for (let i = 0; node && i < node.length; i++) {
+    range.setStart(node, i);
+    range.setEnd(node, i + 1);
+    if (range.getBoundingClientRect().right > limit + 0.5) break;
+    visible += node.data[i];
+  }
+  return {
+    clusterWidth: Math.round(cluster.width),
+    toggleWidth: Math.round(toggle.width),
+    share: +(toggle.width / cluster.width).toFixed(2),
+    toggleTop: Math.round(toggle.top),
+    heroTop: Math.round(hero.top),
+    visible,
+  };
+}
+
+function compactGeometryErrors(g, where) {
+  const errors = [];
+  if (g.share < 0.55) errors.push(`${where}: the compact headline is ${g.toggleWidth}px, ${Math.round(g.share * 100)}% of the ${g.clusterWidth}px row, under 55%`);
+  if (Math.abs(g.toggleTop - g.heroTop) > 5) errors.push(`${where}: the ratio is not beside the compact headline (tops ${g.heroTop} vs ${g.toggleTop}, more than 5px apart)`);
+  if (!/^(Trying · )?(Works|Two changes would help|A few changes would help)\b/.test(g.visible)) errors.push(`${where}: the visible headline "${g.visible}" does not show the whole verdict word`);
+  return errors;
+}
+
+let failures = (await run("phone", { width: 375, height: 812 })) + (await run("desktop", { width: 1280, height: 900 })) + (await runReducedMotion());
+for (const width of [375, 768, 1280]) failures += await runCompactHeadline(width);
 writeFileSync(path.join(out, "log.txt"), log.join("\n") + "\n");
 // A page error is a finding to review, never a silent pass; the job fails so it shows.
 process.exit(failures ? 1 : 0);

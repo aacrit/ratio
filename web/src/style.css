@@ -1010,21 +1010,20 @@ body[data-compare="on"] .figure {
   flex: 0 0 100%;
 }
 
-/* flex-basis 0 (not auto): the item's own content (a nowrap line) must
-   never set its starting size, or it claims the whole row's width before
-   .ratio-row gets a share of it and the ellipsis never has room to apply
-   (review round 1: ".verdict-wrap is flex:1 1 auto with a nowrap basis, so
-   the ratio wraps beneath it"). */
-[data-compact] .verdict-wrap {
+/* The wrapper stays box-less in Compact too, so the toggle and the full
+   sentence are this row's own flex items: the toggle shares the first line
+   with the numeral, and the disclosed sentence (order 1, below) takes a
+   full-width line of its own under both. flex-basis 0 (not auto): the
+   toggle's nowrap content must never set its starting size, or it claims
+   the whole line before the numeral gets a share (review round 1). It
+   grows into everything the numeral leaves; the numeral alone is short
+   (review round 2: with the eyebrow beside it too, the ratio kept 300px of
+   a 343px line at 375 and the verdict showed "W..."). */
+[data-compact] .verdict-compact-toggle {
   display: block;
   flex: 1 1 0;
   min-width: 0;
-}
-
-[data-compact] .verdict-compact-toggle {
-  display: block;
-  width: 100%;
-  min-height: 36px;
+  min-height: 44px;
   background: none;
   border: none;
   margin: 0;
@@ -1039,7 +1038,7 @@ body[data-compare="on"] .figure {
   display: block;
   font-family: var(--font-display);
   font-variation-settings: var(--display-settings);
-  font-size: clamp(1.15rem, 3.4vw, 1.5rem);
+  font-size: clamp(1.1rem, 3vw, 1.3rem);
   line-height: 1.25;
   max-width: 100%;
   white-space: nowrap;
@@ -1057,15 +1056,35 @@ body[data-compare="on"] .figure {
    refill the fold it was just cleared of. */
 [data-compact] .verdict-wrap[data-open] #verdict {
   display: block;
-  margin-top: 4px;
+  order: 1;
+  flex: 0 0 100%;
+  /* A whole line of its own (a max-width would let it share the toggle's
+     line on a wide panel); the end padding keeps its measure to 48ch. */
+  max-width: none;
+  padding-inline-end: max(0px, calc(100% - 48ch));
+  margin: 0;
   font-size: 1.05rem;
   line-height: 1.4;
-  max-width: 48ch;
 }
 
+/* Only the numeral sits beside the verdict: its state already shows in its
+   own hue (tape, section, borderline) and, in words, on the first rule row
+   just below, so Compact drops the eyebrow that repeats it. The numeral is
+   set on the toggle's 44px line, centred on it, so the two read as one. */
 [data-compact] .ratio-row {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   padding-top: 0;
+}
+
+[data-compact] .hero-eyebrow {
+  display: none;
+}
+
+[data-compact] .hero-n {
+  display: block;
+  line-height: 44px;
+  white-space: nowrap;
 }
 
 .ratio-row {
