@@ -73,15 +73,16 @@ export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
     // A narrower lower piece is a cut change, not a recolour.
     return { ...base, state: "advice", text: `${cap}: two full volumes, so the outfit has nothing to anchor it. ${anchor}${side}` };
   }
-  // A row that is fine or on the mark closes on its plain verdict, after
-  // the one-side note (Sam, UX pass 4: a fine row must not end on a doubt).
+  // A row that is fine or on the mark says one plain verdict, on its own
+  // subject, and offers no fix; the one-side note follows it as a caveat
+  // (Sam, UX pass 4; T9 review round 1: never a verdict, a hedge, a verdict).
   if (t === "fitted" && l === "narrow") {
-    return { ...base, state: "neutral", text: `${cap}: a streamlined column of fitted pieces. A single fuller piece, a wide-leg lower piece or a looser layer, would add contrast if you want it.${side} As worn, it works.` };
+    return { ...base, state: "neutral", text: `${cap}: a streamlined column of fitted pieces, a pair that works.${side}` };
   }
   if ((t === "loose" && l === "narrow") || (t === "fitted" && l === "wide")) {
-    return { ...base, state: "golden", text: `${cap}: one full volume balanced by one fitted, the classic pairing.${side} Keep it.` };
+    return { ...base, state: "golden", text: `${cap}: one full volume balanced by one fitted, the classic pairing, so keep the pairing.${side}` };
   }
-  return { ...base, state: "neutral", text: `${cap}: moderate volumes that sit together.${side} A quiet choice that works.` };
+  return { ...base, state: "neutral", text: `${cap}: moderate volumes that sit together, a quiet balance that works.${side}` };
 }
 
 /** Whether the shoes continue the lower piece's line: the one predicate the leg line and the proportion line's shoe clause share. */
@@ -100,11 +101,12 @@ export function legLine(lowerL: number, shoesL: number, shoesAccent = false): Ad
   const gap = Math.abs(lowerL - shoesL);
   const base = { rule: "legline" as const, title: "Leg line", measured: `ΔL ${two(gap)}`, borderline: legBorderline(gap) };
   if (shoesContinue(lowerL, shoesL)) {
-    return { ...base, state: "golden", text: `The shoes sit close in value to the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line runs unbroken to the floor. Keep it.` };
+    return { ...base, state: "golden", text: `The shoes sit close in value to the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line runs unbroken to the floor. Keep the shoes close in value.` };
   }
-  const said = `The shoes contrast with the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line stops where the shoes begin and they become a point of their own.`;
-  if (shoesAccent) return { ...base, state: "neutral", text: `${said} They carry the outfit's accent, so the contrast is the point: keep it.` };
-  return { ...base, state: "neutral", recolours: [{ garment: "shoes" }], text: `${said} Shoes nearer the lower piece's value would run the line to the floor instead, but as worn it is a choice that holds.` };
+  // A fine row commits: the finding and its verdict, no hypothetical (T9 review round 1).
+  const said = `The shoes contrast with the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line stops at the shoes and they become a point of their own`;
+  if (shoesAccent) return { ...base, state: "neutral", text: `${said}. They carry the outfit's accent, so the contrast is the point: keep the contrast.` };
+  return { ...base, state: "neutral", text: `${said}: a contrast that holds.` };
 }
 
 /** The volume line when nothing could be read and an arm or a hand lay on the upper piece's edges on every row: said, never guessed. */

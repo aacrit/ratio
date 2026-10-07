@@ -110,13 +110,13 @@ describe("the proportion instrument reads bands as the engine does", () => {
     expect(proportionAt(0.05).r).toBe(0.1);
     expect(proportionAt(0.97).r).toBe(0.9);
     expect(proportionAt(0.4499)).toMatchObject({ r: 0.44, band: "halves", onEdge: true });
-    expect(proportionAt(0.383)).toMatchObject({ r: 0.38, band: "golden", label: "golden section", onEdge: false });
-    expect(proportionAt(0.64)).toMatchObject({ band: "golden-long", label: "golden, below" });
+    expect(proportionAt(0.383)).toMatchObject({ r: 0.38, band: "golden", label: "a third or golden", onEdge: false });
+    expect(proportionAt(0.64)).toMatchObject({ band: "golden-long", label: "a third or golden, from the floor" });
   });
 
   it("says the live value in plain words", () => {
     expect(proportionNote(0.46)).toBe("Drag the line: 0.46, halves.");
-    expect(proportionNote(0.56)).toBe("Drag the line: 0.56, golden, below, on the edge.");
+    expect(proportionNote(0.56)).toBe("Drag the line: 0.56, a third or golden, from the floor, on the edge.");
   });
 });
 
@@ -240,7 +240,11 @@ describe("review fixes: one source for every number and label, handles that do n
   });
 
   it("each proportion band has one short label, the same on the tape, in the note and to a screen reader", () => {
-    for (const b of PROPORTION_BANDS) expect(html).toContain(`>${PROPORTION_LABELS[b.id]}</text>`);
+    // A label with a comma is set on two lines (rules/render.ts).
+    for (const b of PROPORTION_BANDS) {
+      const [first, ...rest] = PROPORTION_LABELS[b.id].split(", ");
+      expect(html).toContain(rest.length ? `>${first},</tspan><tspan x="86" dy="11">${rest.join(", ")}</tspan></text>` : `>${first}</text>`);
+    }
     expect(proportionNote(0.64)).toContain(PROPORTION_LABELS["golden-long"]);
   });
 

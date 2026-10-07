@@ -11,7 +11,7 @@
 import { type Lab, labToLch } from "./color";
 import { type BinnedSwatch, NEUTRAL_CHROMA, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
 import { binShares, isNeutral } from "./constants";
-import { byName } from "./names";
+import { byName, namingBorderline } from "./names";
 import { type Recolour, accentOf, pieceOf, pieces } from "./pieces";
 import type { RuleId } from "./rulebook";
 import { type Fit, legBorderline, legLine, legUnread, shoesContinue, volumeLine, volumeUnread } from "./shape-rules";
@@ -27,7 +27,7 @@ export { NEUTRAL_CHROMA };
 // says why.
 // 0.11.0 (T9, UX pass 4): a tailor's words. Volume's reference is "across
 // the shoulders" (the spec-sheet term), so it holds when the upper piece is
-// not read; a piece's lightness is its swatch's in every line
+// not read; a piece's lightness is its measured core in every line
 // (pieceLightness); the golden section is never shortened to "the section";
 // a row that is fine or on the mark ends in a plain verdict; a look's
 // reasons name the rule it moves, and no two looks share one.
@@ -88,8 +88,8 @@ export const BODY_PART_PATTERNS: readonly RegExp[] = [
 
 /** The first body-measure word or body part in a text, or null: the one lint every produced line, Rulebook text and Rules page label passes. */
 export function bodyMeasureIn(raw: string): string | null {
-  // The one allowed shoulder phrase is taken out before the lint reads the rest.
-  const text = raw.replace(/\bacross the shoulders\b/gi, "across");
+  // The one allowed shoulder phrase, and only as a ratio's reference ("0.40× across the shoulders"), is taken out before the lint reads the rest.
+  const text = raw.replace(/(\d\.\d\d×) across the shoulders\b/gi, "$1");
   const lower = text.toLowerCase();
   const word = BODY_MEASURE_WORDS.find((w) => lower.includes(w));
   if (word) return word;
@@ -195,16 +195,19 @@ export function binsOf(m: OutfitMeasure, palette: Swatch[]): Bins {
 export const tuckable = (b: Pick<Bins, "front">): boolean => !b.front;
 
 /**
- * The lightness of the upper and the lower piece: its swatch's, the one
- * source every line reads (T9, Mara, UX pass 4: the leg line quoted the
- * lower piece's swatch, 0.32, and the value line its measured core, 0.26).
- * The swatch is what the palette strip, the leg line, the Measured list and
- * the chalk figure all show; the measured core only picks which swatch is
- * which piece (pieces.ts). When no swatch is a piece, the measured core.
+ * The lightness of the upper piece, the lower piece and the shoes: the one
+ * source every line that quotes a piece's lightness reads (T9, Mara, UX pass
+ * 4: the leg line quoted the lower piece's swatch, 0.32, the value line its
+ * measured core, 0.26). The pieces are their measured cores (bins.top and
+ * bins.bottom): one stable measurement per piece, so a one-bin change moves
+ * the number by one bin. The swatch nearest a core could switch near a tie
+ * and jump by 0.10 or more (T9 review round 1, law 2). The shoes are their
+ * swatch, read from the boxes round the feet, the one measurement of them.
+ * Palette swatches stay the source for colour (harmony, shares, chroma).
  */
-export function pieceLightness(b: Pick<Bins, "palette" | "waist" | "top" | "bottom">): { upper: number; lower: number } {
+export function pieceLightness(b: Pick<Bins, "palette" | "waist" | "top" | "bottom">): { upper: number; lower: number; shoes: number | null } {
   const p = pieces(b.palette, b.waist, { top: b.top, bottom: b.bottom });
-  return { upper: p.upper >= 0 ? b.palette[p.upper].L : b.top.L, lower: p.lower >= 0 ? b.palette[p.lower].L : b.bottom.L };
+  return { upper: b.top.L, lower: b.bottom.L, shoes: p.shoes >= 0 ? b.palette[p.shoes].L : null };
 }
 
 /** A ratio pair as one unit, thin spaces round the colon (design/BRAND.md). */
@@ -238,7 +241,7 @@ function proportionLine(b: Bins, rawBreak: number | null, shoes: ShoeLine): Advi
       rule: "proportion",
       title: "Proportion",
       measured: "one column",
-      text: `Top and bottom read as one colour, so the eye runs head to foot without a break.${clause} A single column is the longest line an outfit can draw: keep it.`,
+      text: `Top and bottom read as one colour, so the eye runs head to foot without a break.${clause} A single column is the longest line an outfit can draw: keep the column.`,
       state: "neutral",
       borderline: clause !== "" && shoes.borderline,
     };
@@ -257,8 +260,8 @@ function proportionLine(b: Bins, rawBreak: number | null, shoes: ShoeLine): Advi
     // Every band names its division in full ("the golden section", never
     // "the section"), and the lower one is counted from the floor (Mara, UX
     // pass 4). No "block": a tailor names the piece.
-    "short-top": { text: `The break sits high, near ${r.toFixed(2)} of the height, so the lower piece carries the length. Keep its line unbroken to the shoe and it holds.`, state: "neutral" },
-    golden: { text: `The break sits near ${nearestDivision(r)} of the height. The eye reads a short upper piece over a long lower one, the classic division. Keep it.`, state: "golden" },
+    "short-top": { text: `The break sits high, near ${r.toFixed(2)} of the height, so the lower piece carries the length. Keep its line unbroken to the shoe and the length holds.`, state: "neutral" },
+    golden: { text: `The break sits near ${nearestDivision(r)} of the height. The eye reads a short upper piece over a long lower one, the classic division. Keep the break where it is.`, state: "golden" },
     halves: {
       text: !tuckable(b)
         ? `Near-equal halves read as boxy. The upper piece opens down the front, so it hangs to its hem rather than tucking. ${shorter}`
@@ -266,7 +269,7 @@ function proportionLine(b: Bins, rawBreak: number | null, shoes: ShoeLine): Advi
       state: "advice",
     },
     // "Keep the lower block narrow" is gone: a width is Volume's to judge (Mara, UX pass 4).
-    "golden-long": { text: `The break sits near ${nearestDivision(1 - r)}, counted from the floor: a long upper piece over a short lower one, the second classical division. Keep it.`, state: "golden" },
+    "golden-long": { text: `The break sits near ${nearestDivision(1 - r)}, counted from the floor: a long upper piece over a short lower one, the second classical division. Keep the break where it is.`, state: "golden" },
     "long-top": {
       text: !tuckable(b)
         ? `The upper piece covers most of the figure, so the break has little to divide. It opens down the front, so a belt would sit under it. ${shorter}`
@@ -292,34 +295,39 @@ export interface OutfitReading {
 export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
   const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
   const legRead = p.lower >= 0 && p.shoes >= 0;
+  // One lightness per piece, in every line that quotes it (pieceLightness).
+  const light = pieceLightness(bins);
   // Accent shoes: the outfit's accent is the shoe swatch (and not also a
   // piece). The verdict keeps them, so no line recolours them.
   const accent = accentOf(bins.palette);
   const shoesAccent = accent >= 0 && pieceOf(accent, p) === "shoes";
   const shoeLine: ShoeLine = {
-    kind: !legRead ? "unread" : shoesContinue(bins.palette[p.lower].L, bins.palette[p.shoes].L) ? "continue" : "contrast",
-    borderline: legRead && legBorderline(Math.abs(bins.palette[p.lower].L - bins.palette[p.shoes].L)),
+    kind: !legRead ? "unread" : shoesContinue(light.lower, light.shoes!) ? "continue" : "contrast",
+    borderline: legRead && legBorderline(Math.abs(light.lower - light.shoes!)),
   };
   // Shoes another line keeps as worn: the accent, or shoes carrying the leg line on.
   const shoesKept = shoesAccent || shoeLine.kind === "continue";
   const lines = [proportionLine(bins, rawBreak, shoeLine)];
   if (bins.fit) lines.push(volumeLine(bins.fit, { oneSide: bins.fitOneSide, front: bins.front, why: bins.fitWhy }));
   else if (bins.fitWhy) lines.push(volumeUnread(bins.fitWhy));
-  if (legRead) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L, shoesAccent));
+  if (legRead) lines.push(legLine(light.lower, light.shoes!, shoesAccent));
   else if (p.shoes < 0 && bins.shoesWhy) lines.push(legUnread(bins.shoesWhy));
   if (bins.palette.length) {
     // Harmony, shares and chroma read the palette as people name it, one
     // name, one entry; value reads every swatch's own lightness, so a light
     // grey over a dark grey keeps its range.
     const named = byName(bins.palette);
+    // A palette whose reading by name a one-bin lightness change would alter marks the lines that read it by name borderline (law 2).
+    const namesEdge = namingBorderline(bins.palette);
+    const huesEdge = namesEdge && namingBorderline(bins.palette, true);
+    const edge = (l: AdviceLine, on: boolean): AdviceLine => (on && !l.borderline ? { ...l, borderline: true } : l);
     lines.push(
-      harmonyLine(named, bins.waist, { shoesKept }),
+      edge(harmonyLine(named, bins.waist, { shoesKept }), huesEdge),
       // Darker shoes on their own only for shoes no other line keeps; shoes
       // that carry the leg line on darken with the lower piece, as a pair.
-      // The pieces' own swatches, the same lightness the leg line quotes (pieceLightness).
-      valueLine(bins.palette, pieceLightness(bins).upper, pieceLightness(bins).lower, { shoes: p.shoes < 0 || shoesAccent ? "none" : shoeLine.kind === "continue" ? "matched" : "free" }),
-      sharesLine(named, { accent: accent >= 0, shoesKept: shoeLine.kind === "continue" }),
-      chromaLine(named, bins.waist, { shoesKept }),
+      valueLine(bins.palette, light.upper, light.lower, { shoes: p.shoes < 0 || shoesAccent ? "none" : shoeLine.kind === "continue" ? "matched" : "free" }),
+      edge(sharesLine(named, { accent: accent >= 0, shoesKept: shoeLine.kind === "continue" }), namesEdge),
+      edge(chromaLine(named, bins.waist, { shoesKept }), huesEdge),
     );
   }
   return lines;

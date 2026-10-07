@@ -116,3 +116,27 @@ export function byName<T extends Placed>(palette: readonly T[]): (Placed & { nam
     .sort((p, q) => q.e.share - p.e.share || p.i - q.i)
     .map((x) => x.e);
 }
+
+/**
+ * Whether a one-bin change in any colour's lightness would change how the
+ * palette is read by name: a colour whose name changes there and then joins
+ * or leaves another colour of that name, or crosses the neutral line. The
+ * rules that read the palette by name (harmony, shares, chroma) mark their
+ * line borderline then, so it is never flipped silently (law 2, T9 review
+ * round 1: shoes at 0.38 read as oxblood, at 0.40 as red). `hues`: only
+ * colours count, for the rules that read the hues alone (harmony, chroma):
+ * two neutrals trading names changes nothing they read.
+ */
+export function namingBorderline(palette: readonly Placed[], hues = false, step = 0.02): boolean {
+  const live = palette.filter((s) => s.share > 0);
+  const names = live.map((s) => colourName(s.L, s.C, s.h));
+  return live.some((s, i) =>
+    [-step, step].some((d) => {
+      const L = Number((s.L + d).toFixed(2));
+      const n = colourName(L, s.C, s.h);
+      if (n === names[i]) return false;
+      if (hues && isNeutral(s) && isNeutral({ L, C: s.C })) return false;
+      return isNeutral({ L, C: s.C }) !== isNeutral(s) || names.some((x, j) => j !== i && (x === n || x === names[i]));
+    }),
+  );
+}

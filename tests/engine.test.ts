@@ -201,7 +201,7 @@ describe("colour theory", () => {
     expect(valueLine([sw(0.2, 0, 0, 0.5), sw(0.8, 0, 0, 0.5)], 0.2, 0.8).state).toBe("advice");
     expect(valueLine([sw(0.8, 0, 0, 0.5), sw(0.2, 0, 0, 0.5)], 0.8, 0.2).text).toMatch(/^Light over dark/);
     // A darker upper piece is never called light over dark, however small the gap.
-    expect(valueLine([sw(0.24, 0, 0, 0.5), sw(0.38, 0, 0, 0.5)], 0.24, 0.38).text).toMatch(/^Dark over light/);
+    expect(valueLine([sw(0.24, 0, 0, 0.5), sw(0.38, 0, 0, 0.5)], 0.24, 0.38).text).toMatch(/^A small step of dark over light/);
     expect(valueLine([sw(0.24, 0, 0, 0.5), sw(0.38, 0, 0, 0.5)], 0.24, 0.38).state).toBe("neutral");
   });
 
@@ -283,7 +283,7 @@ describe("copy law (V4, design lint)", () => {
     // T9 (Mara, UX pass 4): "shoulder line" is the seam from the neck to the shoulder point, not a width; the reference is "across the shoulders" (founder, 2026-10-07).
     for (const t of ["its shoulder line", "the upper piece's shoulder line", "Shoulder line"]) expect(bodyMeasureIn(t), t).toBe("shoulder line");
     // Only that phrase is allowed: the shoulders on their own are still a body word.
-    for (const t of ["across the shoulders and the shoulders", "around the shoulders"]) expect(bodyMeasureIn(t), t).not.toBeNull();
+    for (const t of ["across the shoulders", "the span across the shoulders", "0.40× across the shoulders and the shoulders", "around the shoulders"]) expect(bodyMeasureIn(t), t).not.toBeNull();
     const texts = everyGarmentLine();
     expect(texts.length).toBeGreaterThan(400);
     for (const text of texts) {
@@ -303,7 +303,7 @@ describe("copy law (V4, design lint)", () => {
     for (const e of Object.values(RULEBOOK)) for (const t of [e.rule, e.maths, ...e.edges.map((x) => x.name)]) expect(bodyMeasureIn(t), t).toBeNull();
     for (const s of SCALES) for (const t of [s.title, s.label, ...s.bands]) expect(bodyMeasureIn(t), t).toBeNull();
     // Honest about the reference: "across the shoulders" is the span between the shoulder points the pose marks, read even when the upper piece is not.
-    expect(RULEBOOK.volume.maths).toMatch(/calls across the shoulders, the garment spec sheet's term: plainly, the straight span between the two shoulder points the pose model marks/);
+    expect(RULEBOOK.volume.maths).toMatch(/writes after each ratio, as in "1\.00× across the shoulders" \(the garment spec sheet's term\): plainly, the straight span between the two shoulder points the pose model marks/);
     expect(RULEBOOK.volume.maths).toMatch(/read even when the upper piece's own width is not/);
   });
 });

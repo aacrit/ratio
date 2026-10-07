@@ -39,14 +39,15 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
           : `Upper piece ${two(bins.fit.top)}× ${ACROSS_SHOULDERS}${bins.fitOneSide ? ", read on one side," : ""} on the rows no arm crosses, ${w.top}`;
       // Garment lines only, never a body measure (T6), and every ratio names its reference (T9, Noor):
       // the lower piece at its knee line, against the span across the shoulders, which is read even when the upper piece is not.
-      const legs = bins.fit.legs === null ? "lower piece not read" : `lower piece ${two(bins.fit.legs)}× ${ACROSS_SHOULDERS} at the knee line, ${w.legs}`;
+      const legs = bins.fit.legs === null ? "lower piece not read" : `lower piece at the knee line, ${two(bins.fit.legs)}× ${ACROSS_SHOULDERS}, ${w.legs}`;
       return `${upper}; ${legs}.`;
     }
     case "legline": {
       const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
       if (p.shoes < 0 && bins.shoesWhy) return bins.shoesWhy === "cut_off" ? "Not read: the frame cuts the shoes off." : "Not read: the shoes merge with the floor.";
       if (p.lower < 0 || p.shoes < 0) return "Lightness of the lower piece against the shoes.";
-      return `Lightness of the lower piece ${two(bins.palette[p.lower].L)}, the shoes ${two(bins.palette[p.shoes].L)}.`;
+      const pl = pieceLightness(bins);
+      return `Lightness of the lower piece ${two(pl.lower)}, the shoes ${two(pl.shoes!)}.`;
     }
     case "proportion":
       return bins.proportion === null
@@ -55,7 +56,8 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
     case "harmony":
       return `${named.length === 1 ? "1 colour" : `${named.length} colours`} in the outfit: ${named.map(colourLabel).join(", ")}.`;
     case "value": {
-      // The pieces' lightness is their swatches' (pieceLightness), the numbers the leg line and the list beside it show (T9, Mara).
+      // The pieces' lightness is their measured cores (pieceLightness), the numbers the leg line quotes too (T9, Mara);
+      // the list after it is each palette colour's own lightness, labelled by colour, which the range reads.
       const pl = pieceLightness(bins);
       return `Upper piece ${two(pl.upper)}, lower piece ${two(pl.lower)}; lightness of each colour: ${lightness(bins)}.`;
     }

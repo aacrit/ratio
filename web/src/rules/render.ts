@@ -60,7 +60,10 @@ function proportionInstrument(): string {
   const edges = PROPORTION_EDGES.map((e) => `M62 ${f1(propY(e))} H118`).join(" ");
   const labels = PROPORTION_BANDS.map((b, i) => {
     const y = Math.min(sole - 4, Math.max(crown + 10, propY((b.from + Math.min(1, b.to)) / 2) + 3));
-    return `<text x="86" y="${f1(y)}" text-anchor="end" class="band" data-band="${i}">${esc(PROPORTION_LABELS[b.id])}</text>`;
+    // A label with a comma breaks there onto a second line, so it stays clear of the tape.
+    const [first, ...rest] = PROPORTION_LABELS[b.id].split(", ");
+    const lines = rest.length ? `<tspan x="86">${esc(first)},</tspan><tspan x="86" dy="11">${esc(rest.join(", "))}</tspan>` : esc(first);
+    return `<text x="86" y="${f1(rest.length ? y - 5 : y)}" text-anchor="end" class="band" data-band="${i}">${lines}</text>`;
   }).join("");
   const golden = [GOLDEN, 1 - GOLDEN].map((g) => `M${tapeX} ${f1(propY(g))} H${tapeX + 12}`).join(" ");
   return `<div class="instrument-wrap">
@@ -100,7 +103,7 @@ function rangeFor(s: ScaleDef): string {
 }
 
 const LABELS: Partial<Record<RuleId, string>> = {
-  volume: "The volume instrument: two scales, the upper piece's width over the span across the shoulders and the lower piece's width at the knee line over the same span, each with its bands; drag a handle to see where a band ends",
+  volume: "The volume instrument: two scales, the upper piece's width over the span between the shoulder points and the lower piece's width at the knee line over the same span, each with its bands; drag a handle to see where a band ends",
   legline: "The leg line instrument: the lightness gap between the lower piece and the shoes, against the edge where the line stops running on; drag the handle to see where it ends",
   value: "The value instrument: the palette's lightness range against its low, medium and high edges, over a lightness scale; drag the handle to see where a band ends",
   chroma: "The chroma instrument: a colour's chroma against the saturated edge, with your colours marked (a neutral has a dashed outline), and a worked pair of complements at equal lightness; drag the handle to see where a band ends",

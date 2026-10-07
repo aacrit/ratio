@@ -46,7 +46,7 @@ describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
     }
     const p2 = show(fixtureBins("p2"));
     const v = p2.lines.find((l) => l.rule === "volume")!;
-    expect(measuredCopy(v, p2.bins)).toBe("Upper piece 0.90× across the shoulders, read on one side, on the rows no arm crosses, fitted; lower piece 0.45× across the shoulders at the knee line, straight.");
+    expect(measuredCopy(v, p2.bins)).toBe("Upper piece 0.90× across the shoulders, read on one side, on the rows no arm crosses, fitted; lower piece at the knee line, 0.45× across the shoulders, straight.");
   });
 
   it("p1 (Noor, UX pass 3 read 0429 at 0.9.0, ed0f at 0.10.0): keeps the coral shoes, and the leg line keeps them too", () => {
@@ -54,7 +54,7 @@ describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
     expect(s.verdict).toContain("Keep the coral shoes.");
     const leg = s.lines.find((l) => l.rule === "legline")!;
     expect(leg.text).not.toMatch(/nearer/);
-    expect(leg.text).toMatch(/accent, so the contrast is the point: keep it\.$/);
+    expect(leg.text).toMatch(/accent, so the contrast is the point: keep the contrast\.$/);
     expect(leg.recolours).toBeUndefined();
   });
 

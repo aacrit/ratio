@@ -10,7 +10,7 @@ import { ACCENT_SHARE, type Look, accentOf, accentWords, pieceOf, pieces, sugges
 import { measuredCopy } from "../../web/src/engine/measured";
 import { byName, colourName } from "../../web/src/engine/names";
 import { RULEBOOK } from "../../web/src/engine/rulebook";
-import { type AdviceLine, type Bins, JUDGING_WORDS, bodyMeasureIn, readBins } from "../../web/src/engine/rules";
+import { type AdviceLine, type Bins, JUDGING_WORDS, bodyMeasureIn, pieceLightness, readBins } from "../../web/src/engine/rules";
 import { looksIntroOf, verdictOf } from "../../web/src/engine/verdict";
 import { stateLabel } from "../../web/src/ui/rows";
 
@@ -166,12 +166,41 @@ export function problemsOf(s: Shown, label: string): string[] {
 /** A row's short numeral for Volume ("1.70× · 0.25×"): the number beside the row's name, whose reference its Measured line names. */
 const VOLUME_NUMERAL = /^(?:\d\.\d\d×|not read) · (?:\d\.\d\d×|not read)$/;
 
+/** A verdict word: a row that is fine or on the mark says one sentence holding one. */
+export const VERDICT_WORD = /\b(?:keep|works?|holds)\b/i;
+
+/** What each rule's verdict must be about, so it is never bolted on ("The palette is warm-led. Keep it."). */
+const VERDICT_SUBJECT: Record<AdviceLine["rule"], RegExp> = {
+  proportion: /\b(?:break|column|length|division)\b/,
+  volume: /\b(?:volumes?|pairing|balance|pair)\b/,
+  legline: /\b(?:shoes|contrast|line)\b/,
+  harmony: /\b(?:hues?|scheme|harmony|neutrals?)\b/,
+  value: /\b(?:value|tone|light|dark|step)\b/,
+  shares: /\b(?:colour|shares?|palette|column|split|lead)\b/,
+  chroma: /\b(?:palette|voice|saturated)\b/,
+};
+
+/** The one-side caveat Volume may add after its verdict. */
+const ONE_SIDE_CAVEAT = /^The upper piece's width was read on one side only/;
+
 /**
- * The plain verdicts a row that is fine or on the mark closes on (Sam, UX
- * pass 4: a Value row marked FINE read as a fault). Its last sentence ends
- * in one of these, so no such row ends on a problem.
+ * Why a row that is fine or on the mark does not close on its own plain
+ * verdict, or null when it does (Sam and Noor, UX pass 4; T9 review round 1):
+ * exactly one sentence holds a verdict word, it is the last (only Volume's
+ * one-side caveat may follow), it names the rule's subject rather than "it",
+ * and the row offers no fix ("would", "if you want").
  */
-export const CLOSING_VERDICT = /(?:keep it|it works|that works|it holds|that holds)\.$/i;
+export function verdictProblem(l: AdviceLine): string | null {
+  const sentences = l.text.split(/(?<=\.)\s+(?=[A-Z])/).filter((x) => !(l.rule === "volume" && ONE_SIDE_CAVEAT.test(x)));
+  const verdicts = sentences.filter((x) => VERDICT_WORD.test(x));
+  if (verdicts.length !== 1) return `${verdicts.length} verdict sentences`;
+  const v = verdicts[0];
+  if (v !== sentences.at(-1)) return "the verdict is not the last sentence";
+  if (/\bkeep it\b|\bit (?:works|holds)\b/i.test(v)) return `the verdict "${v}" says "it"`;
+  if (!VERDICT_SUBJECT[l.rule].test(v)) return `the verdict "${v}" does not name the rule's subject`;
+  if (/\bwould\b|\bif you want\b/i.test(l.text)) return "a fine row offers a fix";
+  return null;
+}
 
 /**
  * The words that name each rule's cause in a look's reason, written out here
@@ -179,26 +208,30 @@ export const CLOSING_VERDICT = /(?:keep it|it works|that works|it holds|that hol
  * and oxblood moved the leg line, but no reason said so).
  */
 const CAUSE_WORDS: Record<AdviceLine["rule"], RegExp> = {
-  proportion: /\bbreak\b/,
-  volume: /\bvolumes?\b/,
-  legline: /\bleg line\b/,
-  harmony: /\bharmony\b|\bscheme\b/,
-  value: /\bvalue\b/,
-  shares: /\bshares?\b|60-30-10/,
-  chroma: /\bsaturat|full strength/,
+  proportion: /moves the break|draws the break/,
+  volume: /balance of volumes/,
+  legline: /leg line runs on to the floor/,
+  harmony: /read as one (?:analogous )?scheme|make a (?:split-)?complementary pair|so the harmony holds|so no hues can clash|the most forgiving harmony|a neutral sits with any hue/,
+  value: /value then steps down|nearly one value|step in value .* small enough to hold|puts the darker value below|darker value below grounds the outfit/,
+  shares: /shares then come close to 60-30-10|split the shares near the golden section|compete for the lead in the colour shares/,
+  chroma: /one saturated colour then leads|compete at full strength|the other steps back/,
 };
 
 /** A move's identity: the same move offered in two looks is one move, said once each. */
 const moveKey = (m: Look["moves"][number]) => (m.kind === "break" ? `b${m.to}` : `${m.kind}${"swatch" in m ? m.swatch : ""}:${m.L},${m.C},${m.h}`);
 
-/** The lightness a line quotes for the upper and the lower piece, if it quotes one. */
-function quotedL(line: AdviceLine, bins: Bins): { where: string; upper?: number; lower?: number }[] {
+type Quote = { where: string; upper?: number; lower?: number; shoes?: number };
+
+/** The lightness a line quotes for the upper piece, the lower piece and the shoes, if it quotes one. */
+function quotedL(line: AdviceLine, bins: Bins): Quote[] {
   const n = (x: string | undefined) => (x === undefined ? undefined : Number(x));
-  const out: { where: string; upper?: number; lower?: number }[] = [];
+  const out: Quote[] = [];
   const copy = measuredCopy(line, bins);
   if (line.rule === "legline") {
-    out.push({ where: "Leg line", lower: n(line.text.match(/the lower piece \((\d\.\d\d) and \d\.\d\d\)/)?.[1]) });
-    out.push({ where: "Leg line Measured", lower: n(copy.match(/lower piece (\d\.\d\d), the shoes/)?.[1]) });
+    const t = line.text.match(/the lower piece \((\d\.\d\d) and (\d\.\d\d)\)/);
+    out.push({ where: "Leg line", lower: n(t?.[1]), shoes: n(t?.[2]) });
+    const c = copy.match(/lower piece (\d\.\d\d), the shoes (\d\.\d\d)/);
+    out.push({ where: "Leg line Measured", lower: n(c?.[1]), shoes: n(c?.[2]) });
   }
   if (line.rule === "value") {
     out.push({ where: "Value", upper: n(line.text.match(/upper (?:piece )?(?:\(lightness )?(\d\.\d\d)/)?.[1]), lower: n(line.text.match(/lower (?:piece )?(?:\(lightness )?(\d\.\d\d)/)?.[1]) });
@@ -226,14 +259,18 @@ function tailorProblems(s: Shown, texts: readonly string[], label: string, out: 
   const readings: { name: string; lines: AdviceLine[]; bins: Bins }[] = [{ name: "worn", lines: s.lines, bins: s.bins }, ...s.looks.map((l) => ({ name: `look "${l.title}"`, lines: l.lines, bins: l.bins }))];
   for (const r of readings) {
     // A piece's lightness is one number wherever it is quoted (Mara: Leg line 0.32, Value 0.26).
+    // The one source is the piece's measured core and the shoes' swatch (pieceLightness, T9 review round 1).
     const quotes = r.lines.flatMap((l) => quotedL(l, r.bins));
-    for (const piece of ["upper", "lower"] as const) {
+    const truth = pieceLightness(r.bins);
+    for (const piece of ["upper", "lower", "shoes"] as const) {
       const said = quotes.filter((q) => q[piece] !== undefined);
-      if (new Set(said.map((q) => q[piece])).size > 1) out.push(`${label}, ${r.name}: the ${piece} piece's lightness differs: ${said.map((q) => `${q.where} ${q[piece]}`).join(", ")}`);
+      if (new Set(said.map((q) => q[piece])).size > 1) out.push(`${label}, ${r.name}: the ${piece} lightness differs: ${said.map((q) => `${q.where} ${q[piece]}`).join(", ")}`);
+      for (const q of said) if (q[piece] !== Number((truth[piece] ?? NaN).toFixed(2))) out.push(`${label}, ${r.name}: ${q.where} quotes the ${piece} at ${q[piece]}, not its measured ${truth[piece]}`);
     }
     for (const l of r.lines) {
-      // A row that is fine or on the mark closes on a plain verdict (Sam).
-      if ((l.state === "golden" || l.state === "neutral") && !CLOSING_VERDICT.test(l.text)) out.push(`${label}, ${r.name}: ${l.rule} is ${stateLabel(l)} but ends without a verdict: ${l.text}`);
+      // A row that is fine or on the mark closes on one plain verdict of its own (Sam, Noor).
+      const why = l.state === "golden" || l.state === "neutral" ? verdictProblem(l) : null;
+      if (why) out.push(`${label}, ${r.name}: ${l.rule} is ${stateLabel(l)}, ${why}: ${l.text}`);
     }
     // A half-read Volume measures nothing against the upper piece it did not read (Sam).
     const v = r.lines.find((l) => l.rule === "volume");
@@ -245,14 +282,18 @@ function tailorProblems(s: Shown, texts: readonly string[], label: string, out: 
   // A look's reason names the rule it moves (Mara), and no two looks share a reason (Noor).
   for (const look of s.looks)
     for (const c of look.changes) if (!look.moves.some((m) => CAUSE_WORDS[c.rule].test(m.detail))) out.push(`${label}: "${look.title}" moves ${c.rule} (${c.from} to ${c.to}) but no reason names it: ${look.moves.map((m) => m.detail).join(" ")}`);
+  // Reasons differ in substance, not only in the colour they name (T9 review round 1): compared with the move's colour name taken out.
   const reasons = new Map<string, string>();
   for (const look of s.looks)
     for (const m of look.moves) {
       const reason = m.detail.slice(m.detail.indexOf(": ") + 2);
+      // At most two clauses, the reason and one clause on what it moves (T9 review round 1).
+      if (reason.split("; ").length > 2) out.push(`${label}: "${m.detail}" has more than two clauses`);
+      const bare = m.kind === "break" ? reason : reason.split(colourName(m.L, m.C, m.h)).join("_");
       const key = moveKey(m);
-      const other = reasons.get(reason);
-      if (other !== undefined && other !== key) out.push(`${label}: two looks share the reason "${reason}"`);
-      reasons.set(reason, key);
+      const other = reasons.get(bare);
+      if (other !== undefined && other !== key) out.push(`${label}: two looks share the reason "${bare}"`);
+      reasons.set(bare, key);
     }
 }
 
@@ -268,11 +309,13 @@ function reasonProblems(s: Shown, look: Look, label: string, out: string[]): voi
   for (const m of look.moves) {
     const say = (why: string) => out.push(`${label}: "${m.detail}" ${why}`);
     if (m.kind !== "recolour") continue;
-    const was = s.bins.palette[m.swatch];
+    // A piece's lightness as the lines quote it: the measured core for the upper and lower piece.
+    const p = pieces(s.bins);
+    const was = { ...s.bins.palette[m.swatch], L: m.swatch === p.lower ? s.bins.bottom.L : m.swatch === p.upper ? s.bins.top.L : s.bins.palette[m.swatch].L };
     // No title says one colour name twice ("Bottle green detail muted to bottle green").
     // Longer names are counted and taken out first, so "steel blue" does not count as a "blue".
     let rest = m.title.toLowerCase();
-    for (const c of [...new Set([colourName(was.L, was.C, was.h), colourName(m.L, m.C, m.h)])].sort((x, y) => y.length - x.length)) {
+    for (const c of [...new Set([colourName(s.bins.palette[m.swatch].L, was.C, was.h), colourName(m.L, m.C, m.h)])].sort((x, y) => y.length - x.length)) {
       const parts = rest.split(c.toLowerCase());
       if (parts.length - 1 > 1) out.push(`${label}: "${m.title}" says ${c} ${parts.length - 1} times`);
       rest = parts.join("|");
@@ -293,4 +336,38 @@ function reasonProblems(s: Shown, look: Look, label: string, out: string[]): voi
 /** Asserts a reading agrees, listing every disagreement found. */
 export function agrees(s: Shown, label: string): void {
   expect(problemsOf(s, label)).toEqual([]);
+}
+
+/** One lightness bin (rules.ts binColour). */
+export const LIGHTNESS_BIN = 0.02;
+
+/**
+ * Law 2 for the lightness the lines read (T9 review round 1): each piece's
+ * measured core and the shoes' swatch, nudged one bin either way. A line
+ * whose state differs between the reading and a nudge is marked borderline
+ * in at least one of the two, so a one-bin change never flips it silently.
+ */
+export function nudgeProblems(b: Bins, label: string): { problems: string[]; nudges: number; flips: number } {
+  const worn = readBins(b);
+  const shoes = pieces(b).shoes;
+  const at = (v: number) => Number(Math.min(1, Math.max(0, v)).toFixed(2));
+  const variants: [string, Bins][] = [];
+  for (const d of [-LIGHTNESS_BIN, LIGHTNESS_BIN]) {
+    const sign = d > 0 ? "+" : "";
+    variants.push([`upper ${sign}${d}`, { ...b, top: { ...b.top, L: at(b.top.L + d) } }]);
+    variants.push([`lower ${sign}${d}`, { ...b, bottom: { ...b.bottom, L: at(b.bottom.L + d) } }]);
+    if (shoes >= 0) variants.push([`shoes ${sign}${d}`, { ...b, palette: b.palette.map((s, i) => (i === shoes ? { ...s, L: at(s.L + d) } : s)) }]);
+  }
+  const problems: string[] = [];
+  let flips = 0;
+  for (const [name, v] of variants) {
+    const nudged = readBins(v);
+    for (const a of worn) {
+      const z = nudged.find((l) => l.rule === a.rule);
+      if (!z || z.state === a.state) continue;
+      flips++;
+      if (!a.borderline && !z.borderline) problems.push(`${label}: ${a.rule} flips from ${a.state} to ${z.state} at ${name}, marked borderline in neither: "${a.text}" / "${z.text}"`);
+    }
+  }
+  return { problems, nudges: variants.length, flips };
 }
