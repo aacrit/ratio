@@ -39,6 +39,7 @@ import {
   stripX,
   yoursValues,
 } from "./rules/model";
+import { hashesOfLastRead, hashLine } from "./ui/hashline";
 import { STATE_WORDS } from "./ui/rows";
 import { setupTabs } from "./ui/tabs";
 
@@ -437,10 +438,12 @@ export function setupRulebook(root: HTMLElement): { refreshYours: () => void } {
     dot.setAttribute("aria-hidden", "true");
     const what = document.createElement("span");
     const source = last.source === "sample" ? "the sample" : "your photo";
-    what.textContent = `Your last read: ${source}, as worn${look ? `; the dashed mark is the look you tried, ${look.title.charAt(0).toLowerCase()}${look.title.slice(1)}` : ""}`;
+    // The look is named once, in the hash line below, as Read and the card name it.
+    what.textContent = `Your last read: ${source}, as worn${look ? "; the dashed mark is the look you tried" : ""}`;
     const meta = document.createElement("span");
     meta.dataset.numeral = "";
-    meta.textContent = `${worn.hash.slice(0, 4)} · ${last.day === localDay() ? "today" : last.day}`;
+    // The same hash line Read showed for this view, word for word (ui/hashline.ts, T10 review 1).
+    meta.textContent = `${hashLine(hashesOfLastRead(last))} · ${last.day === localDay() ? "today" : last.day}`;
     const parts: Node[] = [dot, what, meta];
     if (last.engine !== ENGINE_VERSION) {
       const old = document.createElement("span");

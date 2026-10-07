@@ -15,6 +15,8 @@ interface NumeralEl {
   dataset: DOMStringMap;
   /** Read once to restart the flash's CSS animation; absent in tests. */
   readonly offsetWidth?: number;
+  /** Empty when the element is not displayed (a hidden ancestor); absent in tests that do not care. */
+  getClientRects?: () => { length: number };
   addEventListener?: (type: "animationend", fn: () => void, opts: { once: true }) => void;
 }
 
@@ -25,9 +27,10 @@ export function setNumeral(el: NumeralEl, to: string): boolean {
   return changed;
 }
 
-/** Flashes the tape glow behind the numeral (`.hero-n[data-lands]` in style.css), restarting it if one is running. */
+/** Flashes the tape glow behind the numeral (`.hero-n[data-lands]` in style.css), restarting it if one is running. Not while it is not displayed (Rules showing): a flash nobody sees would only replay later. */
 export function flashNumeral(el: NumeralEl): void {
   delete el.dataset.lands;
+  if (el.getClientRects && el.getClientRects().length === 0) return;
   void el.offsetWidth; // a reflow, so the same attribute restarts the animation
   el.dataset.lands = "";
   // Cleared once it has played, so a later display change (Compact on or

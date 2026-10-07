@@ -82,9 +82,11 @@ async function photo(id) {
 // up through pairs no reading could produce ("0.25 : 0.25", "0.42 : 0.24").
 const PAIR = /(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/g;
 /** What is wrong with a hero numeral's text, or null: empty, a pair that does not sum to 1 (±0.01), or (with `pair`) no pair at all. */
-function heroProblem(text, { pair = false } = {}) {
+function heroProblem(text, { pair = false, expected = null } = {}) {
   const t = (text ?? "").trim();
   if (!t) return "is empty";
+  const norm = (s) => s.replace(/\s+/g, " ").trim();
+  if (expected !== null && norm(t) !== norm(expected)) return `"${t}" is not the measured "${expected.trim()}" its first row states`;
   const pairs = [...t.matchAll(PAIR)];
   if (pair && !pairs.length) return `"${t}" is not a ratio pair`;
   const bad = pairs.find((m) => Math.abs(Number(m[1]) + Number(m[2]) - 1) > 0.01);
@@ -134,10 +136,12 @@ async function readPhotoShot(page, name, id, snap, phone, errors) {
   await page.waitForTimeout(3500);
   const heroNow = await page.textContent("#hero-n");
   note(`${name}: ${id}: hero as the reading appeared "${heroAtOnce?.trim()}", 3.5 s later "${heroNow?.trim()}"`);
-  // p1 has a break, so its hero is a ratio pair; p2 reads as one column (no pair to sum).
+  // p1 has a break, so its hero is a ratio pair; p2 reads as one column (no
+  // pair to sum). Either way it is exactly what the first row measured.
   const wantPair = id === "p1";
+  const firstRow = (await page.textContent(".row .row-n")) ?? "";
   for (const [when, text] of [["as the reading appeared", heroAtOnce], ["in the shot", heroNow]]) {
-    const problem = heroProblem(text, { pair: wantPair });
+    const problem = heroProblem(text, { pair: wantPair, expected: firstRow });
     if (problem) errors.push(`${id}: the hero numeral ${when} ${problem}`);
   }
   for (const f of await heroWatchFindings(page)) errors.push(`${id}: the hero numeral was shown as ${f}`);
@@ -152,7 +156,7 @@ async function readPhotoShot(page, name, id, snap, phone, errors) {
   for (const row of await page.$$eval(".row", (rs) => rs.map((r) => `${r.querySelector(".row-t")?.textContent} | ${r.querySelector(".row-n")?.textContent} | ${r.getAttribute("data-state")} | ${r.querySelector(".row-b")?.textContent?.replace(/\s+/g, " ").trim()}`))) note(`${name}: ${id}:   ${row}`);
   for (const t of await page.$$eval(".look", (ls) => ls.map((l) => `${l.querySelector(".look-title")?.textContent} | ${l.querySelector(".look-moves")?.textContent} | ${[...l.querySelectorAll(".look-changes li")].map((c) => c.textContent).join("; ")}`))) note(`${name}: ${id}:   look: ${t}`);
   if ((await page.$$(".look")).length === 0) note(`${name}: ${id}:   looks: ${await page.textContent(".looks-intro")}`);
-  const heroAtShot = heroProblem(await page.textContent("#hero-n"), { pair: id === "p1" });
+  const heroAtShot = heroProblem(await page.textContent("#hero-n"), { pair: id === "p1", expected: firstRow });
   if (heroAtShot) errors.push(`${id}: the hero numeral in the 9-${id} shot ${heroAtShot}`);
   await shot(page, name, `9-${id}`);
 }
@@ -232,10 +236,13 @@ async function run(name, viewport) {
   if (firstLookDisabledAfterRaceBack !== false) errors.push("leaving for Rules during the first read's reveal left Try it disabled on return");
 
   await page.waitForTimeout(3500);
-  const heroAtRead = heroProblem(await page.textContent("#hero-n"), { pair: true });
+  const heroAtRead = heroProblem(await page.textContent("#hero-n"), { pair: true, expected: (await page.textContent(".row .row-n")) ?? "" });
   if (heroAtRead) errors.push(`the hero numeral in the 2-read shot ${heroAtRead}`);
   await shot("2-read");
-  note(`${name}: ${await page.textContent("#reading-hash")}`);
+  const wornHashLine = (await page.textContent("#reading-hash"))?.trim() ?? "";
+  const photo4 = /^Same photo, same reading\. ([0-9a-f]{4}) · ratio-engine\/\S+$/.exec(wornHashLine)?.[1] ?? null;
+  if (!photo4) errors.push(`the as-worn hash line does not read "Same photo, same reading. <hash> · <engine>" ("${wornHashLine}")`);
+  note(`${name}: ${wornHashLine}`);
   note(`${name}: hero: ${await page.textContent("#hero-n")} (${await page.textContent("#hero-eyebrow")})`);
   note(`${name}: verdict: ${await page.textContent("#verdict")}`);
   note(`${name}: others line: ${(await page.isVisible("#others-note")) ? await page.textContent("#others-note") : "(none)"}`);
@@ -258,6 +265,14 @@ async function run(name, viewport) {
     await page.waitForTimeout(1800);
     if (i === 0) await shot("3-try");
     note(`${name}: look ${i + 1} note: ${await page.textContent(".trying-note")}`);
+    // T10 review 1: on a look the hash line labels the photo's hash and the look's own, and names the look as its card is titled.
+    const lookLine = (await page.textContent("#reading-hash"))?.trim() ?? "";
+    const lookTitle = (await page.textContent(".trying-title"))?.trim() ?? "";
+    const m = /^Same photo, same reading\. ([0-9a-f]{4}) · look ([0-9a-f]{4}): (.+) · ratio-engine\/\S+$/.exec(lookLine);
+    note(`${name}: look ${i + 1} hash line: ${lookLine}`);
+    if (!m || m[1] !== photo4 || m[3] !== lookTitle) errors.push(`look ${i + 1}'s hash line "${lookLine}" does not name the photo's ${photo4} and the look "${lookTitle}"`);
+    const lookHero = heroProblem(await page.textContent("#hero-n"), { pair: true, expected: (await page.textContent(".row .row-n")) ?? "" });
+    if (lookHero) errors.push(`look ${i + 1}: the hero numeral ${lookHero}`);
     if (await page.isVisible("#wipe")) {
       // The look must really change the photo: the stage at the wipe's two
       // ends (all as worn, all the look) must differ in its pixels.
@@ -323,6 +338,7 @@ async function run(name, viewport) {
     await page.waitForTimeout(200);
     note(`${name}: as-worn card ${wornCardName}, look card ${lookCardName}`);
     if (lookCardName.slice(0, 10) !== wornCardName.slice(0, 10)) errors.push(`the look's card (${lookCardName}) and the as-worn card (${wornCardName}) do not carry the same photo hash`);
+    if (wornCardName !== `ratio-${photo4}.png`) errors.push(`the as-worn card is ${wornCardName}, not the hash line's photo hash (ratio-${photo4}.png)`);
     if (phone) {
       await snap("full");
       await page.waitForTimeout(500);

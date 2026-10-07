@@ -18,7 +18,8 @@ import type { Read } from "../read";
 import type { Reader } from "../reader";
 import { chalkFigure } from "../tryon/figure";
 import { type Bands, type PhotoPlan, refuseAll, refusedCardCopy, refusedCopy, refusedSwatches, showsOnPhoto } from "../tryon/recolour";
-import { replaceNumeral } from "./count";
+import { replaceNumeral, setNumeral } from "./count";
+import { hashesOfShown, hashLine } from "./hashline";
 import { STATE_WORDS, paletteStrip, renderRows, stateLabel } from "./rows";
 import type { Sheet } from "./sheet";
 
@@ -96,7 +97,7 @@ export interface Shown {
   note?: string;
   /** On a tried look: the photo's own reading hash, which the card's footer names (T10). As worn it is `hash` itself. */
   photoHash?: string;
-  /** On a tried look: the look in everyday words, for the card's footer and filename. */
+  /** On a tried look: the look's title, as its card is titled and the Rulebook names it, for the hash line and filename. */
   look?: string;
 }
 
@@ -106,7 +107,42 @@ export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = [], b
 /** The sheet head's eyebrow under the hero numeral: the rule and its state. */
 export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].title}, ${stateLabel(lines[0])}`;
 
-export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => Promise<void>; view: () => number } {
+/** The card's note while the tuck is shown on the as-worn photo: the break line moved, the readings did not. */
+export const TUCK_NOTE = "Tuck shown: the break line on the photo is where a front tuck would put it. The readings are as worn.";
+
+/** The sheet head's three texts. */
+export interface HeadEls {
+  heroN: { textContent: string | null; dataset: DOMStringMap; getClientRects?: () => { length: number } };
+  heroEyebrow: { textContent: string | null };
+  verdict: { textContent: string | null };
+}
+
+/**
+ * Writes the sheet head for a reading: the hero numeral final at once (T10:
+ * never counted, never empty while the eyebrow shows), its state, the
+ * eyebrow and the verdict, all in one tick. `arrive` is a read being shown
+ * (no flash: the signature flashes it when the photo's label lands);
+ * `replace` is a look tried or removed, which flashes a changed value.
+ * Every reading surface (a read, a look, the chalk restore) goes through it.
+ */
+export function writeHead(els: HeadEls, lines: Read["reading"]["lines"], verdict: string, mode: "arrive" | "replace"): void {
+  if (mode === "replace") replaceNumeral(els.heroN, lines[0].measured);
+  else setNumeral(els.heroN, lines[0].measured);
+  els.heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
+  els.heroEyebrow.textContent = heroEyebrowOf(lines);
+  els.verdict.textContent = verdict;
+}
+
+export interface LooksApi {
+  shown: () => Shown;
+  settled: () => Promise<void>;
+  /** Changes in the same tick a look is tried or removed, or the tuck is shown or hidden. */
+  view: () => number;
+  /** The as-worn tuck toggle (main.ts): a change of view, and the card marks it. */
+  setTuck: (on: boolean) => void;
+}
+
+export function setupLooks(d: LooksDeps): LooksApi {
   const { read } = d;
   const looks = suggestLooks(read.reading.bins, read.reading.lines);
   d.verdict.textContent = verdictOf(read.reading.lines, looks, read.reading.bins);
@@ -116,11 +152,23 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   const intro = d.section.querySelector<HTMLElement>(".looks-intro");
   const asWornShown: Shown = { title: "As worn", lines: read.reading.lines, bins: read.reading.bins, hash: read.hash, engine: read.reading.engine };
   let shown = asWornShown;
+  let current: string | null = null;
+  /** Bumped in the same tick a look is tried or removed (or the tuck toggled): the save row compares it to tell whether its card still matches the screen. */
+  let view = 0;
+  const changeView = () => {
+    view++;
+    d.onChange?.();
+  };
+  const setTuck = (on: boolean) => {
+    if (current !== null) return; // the tuck button belongs to the as-worn rows only
+    changeView();
+    shown = on ? { ...asWornShown, note: TUCK_NOTE } : asWornShown;
+  };
 
   if (!looks.length) {
     if (intro) intro.textContent = looksIntroOf(read.reading.lines, 0);
     d.list.replaceChildren();
-    return { shown: () => shown, settled: () => Promise.resolve(), view: () => 0 };
+    return { shown: () => shown, settled: () => Promise.resolve(), view: () => view, setTuck };
   }
   if (intro) intro.textContent = looksIntroOf(read.reading.lines, looks.length);
 
@@ -153,12 +201,15 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   const note = d.trying.querySelector<HTMLElement>(".trying-note");
   const noteAsBuilt = note?.textContent ?? "";
   const before = new Map(read.reading.lines.map((l) => [l.rule, l.state] as const));
-  let current: string | null = null;
-  /** Bumped in the same tick a look is tried or removed: the save row compares it to tell whether its card still matches the screen. */
-  let view = 0;
-  const changeView = () => {
-    view++;
-    d.onChange?.();
+  /** Each look's own reading hash, computed once. */
+  const lookHashes = new Map<string, Promise<string>>();
+  const lookHashOf = (look: Look) => {
+    let hh = lookHashes.get(look.id);
+    if (!hh) {
+      hh = readingHash({ engine: ENGINE_VERSION, bins: look.bins });
+      lookHashes.set(look.id, hh);
+    }
+    return hh;
   };
   const buttons = new Map<string, HTMLButtonElement>();
   const cards = new Map<string, HTMLElement>();
@@ -167,11 +218,8 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
 
   const setHead = (lines: Read["reading"]["lines"], bins: Read["reading"]["bins"], tried: Look | null) => {
     // Final at once, never counted (T10): a replaced numeral is never left mid-way.
-    replaceNumeral(d.heroN, lines[0].measured);
-    d.heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
-    d.heroEyebrow.textContent = heroEyebrowOf(lines);
     // As worn, the verdict names the best look; on a tried look, it judges that look and says so up front, never as a verdict on the outfit itself.
-    d.verdict.textContent = tryingPrefix(tried) + verdictOf(lines, tried ? [] : looks, bins);
+    writeHead(d, lines, tryingPrefix(tried) + verdictOf(lines, tried ? [] : looks, bins), "replace");
     keepSummaryInView(d.verdict);
   };
 
@@ -197,7 +245,8 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     setHead(read.reading.lines, read.reading.bins, null);
     renderRows(d.rows, read.reading.lines, read.reading.bins, { borderlineSlot: d.borderlineSlot, ...d.asWornExtras() }).land();
     d.paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
-    d.hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
+    d.hash.textContent = hashLine(hashesOfShown(shown));
+    d.hash.title = `Reading hash ${read.hash}`;
   };
 
   // The last try or "as worn" in flight, with its recolour: the card waits
@@ -227,7 +276,9 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     // one that fails (or has nothing on the photo to move, like shoes when
     // none were measured) is named and shown on the chalk figure only. A
     // doubtful recolour is never painted, so it can never reach a saved card.
-    const plan = await planOf(look);
+    // The look's own reading hash comes with the plan, so the hash line
+    // changes in the same tick as the numerals, never a beat after them.
+    const [plan, hh] = await Promise.all([planOf(look), lookHashOf(look)]);
     if (current !== look.id) return;
     const painted = plan.paint.map((i) => look.moves[i]);
     const onPhoto = painted.length > 0 && showsOnPhoto(painted, read.palette);
@@ -253,18 +304,17 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     if (title) title.textContent = look.title;
     const phrase = lookPhrase(look.moves);
     d.announce.textContent = `Trying: ${phrase}`;
+    // A look the photo shows only in part says so on the card, naming the parts on the chalk figure.
+    shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: refusedCardCopy(look.moves, plan) ?? undefined, photoHash: read.hash, look: look.title };
     setHead(look.lines, look.bins, look);
+    // One hash line for this view: the screen, the card and the Rulebook's chip all say it (ui/hashline.ts).
+    d.hash.textContent = hashLine(hashesOfShown(shown));
+    d.hash.title = `Photo reading hash ${read.hash}; look reading hash ${hh}`;
+    d.onShown?.(shown, look.title);
     // On a phone the sheet drops to half so the photo and the wipe are in view.
     if (!d.sheet.isWide) d.sheet.snap("half");
     renderRows(d.rows, look.lines, look.bins, { before, borderlineSlot: d.borderlineSlot }).land();
     d.paletteSlot.replaceChildren(paletteStrip(look.bins, "The look's palette"));
-    const hh = await readingHash({ engine: ENGINE_VERSION, bins: look.bins });
-    // A look the photo shows only in part says so on the card, naming the parts on the chalk figure.
-    if (current === look.id) {
-      shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: refusedCardCopy(look.moves, plan) ?? undefined, photoHash: read.hash, look: phrase };
-      d.onShown?.(shown, look.title);
-    }
-    if (current === look.id) d.hash.textContent = `Trying a look. Same look, same reading. ${hh.slice(0, 4)} · ${ENGINE_VERSION}`;
     d.onTried();
     await landed;
   };
@@ -340,5 +390,5 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   );
   // The cards arrive after the rows, settling one after another.
   requestAnimationFrame(() => d.list.classList.add("in"));
-  return { shown: () => shown, settled: () => pending.then(() => undefined, () => undefined), view: () => view };
+  return { shown: () => shown, settled: () => pending.then(() => undefined, () => undefined), view: () => view, setTuck };
 }

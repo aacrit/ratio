@@ -28,7 +28,7 @@ import type { Shown } from "./looks";
 export const DRAWING_CARD = "Drawing the card.";
 export const CARD_FAILED = "The card could not be drawn. Try the download again.";
 /** The saved line names the file exactly as saveCard names it: the photo's hash, and the look when the card is a look's. */
-export const savedCopy = (hash: string, look?: string): string => `Saved to your downloads as ${cardFileName({ hash, look })}.`;
+export const savedCopy = (hash: string, look?: CardContent["look"]): string => `Saved to your downloads as ${cardFileName({ hash, look })}.`;
 
 /** The read on screen, as far as a card needs it. */
 export interface SaveTarget {
