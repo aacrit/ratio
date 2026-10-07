@@ -47,7 +47,7 @@ export interface VolumeContext {
 export const UPPER_REF = "its shoulder line";
 export const LOWER_REF = "the upper piece's shoulder line";
 
-const ONE_SIDE =" The upper piece's width was read on one side only, as an arm lay on the other, so take it as a nudge.";
+const ONE_SIDE = " The upper piece's width was read on one side only, as an arm lay on the other, so take it as a nudge.";
 
 export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
   const { top: t, legs: l } = volumeWords(fit);
@@ -68,7 +68,8 @@ export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
   const cap = pair.charAt(0).toUpperCase() + pair.slice(1);
   if (t === "loose" && l !== "narrow") {
     const anchor = ctx.front ? "Keep one fitted: pair it with a narrower lower piece." : "Keep one fitted: if the upper piece tucks, a tuck does it; otherwise pair it with a narrower lower piece.";
-    return { ...base, state: "advice", asks: ["lower"], text: `${cap}: two full volumes, so the outfit has nothing to anchor it. ${anchor}${side}` };
+    // A narrower lower piece is a cut change, not a recolour.
+    return { ...base, state: "advice", text: `${cap}: two full volumes, so the outfit has nothing to anchor it. ${anchor}${side}` };
   }
   if (t === "fitted" && l === "narrow") {
     return { ...base, state: "neutral", text: `${cap}: a streamlined column of fitted pieces. A single fuller piece, a wide-leg lower piece or a looser layer, would add contrast if you want it.${side}` };
@@ -82,6 +83,9 @@ export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
 /** Whether the shoes continue the lower piece's line: the one predicate the leg line and the proportion line's shoe clause share. */
 export const shoesContinue = (lowerL: number, shoesL: number): boolean => Math.abs(lowerL - shoesL) < LEG_LINE_EDGE;
 
+/** Whether a lower-piece-to-shoes gap sits at the leg line's edge: lightness bins are 0.02, so a difference of two bins can move by one. */
+export const legBorderline = (gap: number): boolean => nearEdge(gap, [LEG_LINE_EDGE], 0.04);
+
 /**
  * The leg line. Contrasting shoes that are the outfit's accent are a choice
  * to keep, never one to change: the verdict keeps them, so this line must
@@ -90,14 +94,13 @@ export const shoesContinue = (lowerL: number, shoesL: number): boolean => Math.a
  */
 export function legLine(lowerL: number, shoesL: number, shoesAccent = false): AdviceLine {
   const gap = Math.abs(lowerL - shoesL);
-  // Lightness bins are 0.02; a difference of two bins can move by one.
-  const base = { rule: "legline" as const, title: "Leg line", measured: `ΔL ${two(gap)}`, borderline: nearEdge(gap, [LEG_LINE_EDGE], 0.04) };
+  const base = { rule: "legline" as const, title: "Leg line", measured: `ΔL ${two(gap)}`, borderline: legBorderline(gap) };
   if (shoesContinue(lowerL, shoesL)) {
     return { ...base, state: "golden", text: `The shoes sit close in value to the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line runs unbroken to the floor.` };
   }
   const said = `The shoes contrast with the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line stops where the shoes begin and they become a point of their own.`;
   if (shoesAccent) return { ...base, state: "neutral", text: `${said} They carry the outfit's accent, so the contrast is the point: keep it.` };
-  return { ...base, state: "neutral", asks: ["shoes"], text: `${said} That is a choice that holds; shoes nearer the lower piece's value would run the line to the floor instead.` };
+  return { ...base, state: "neutral", recolours: [{ garment: "shoes" }], text: `${said} That is a choice that holds; shoes nearer the lower piece's value would run the line to the floor instead.` };
 }
 
 /** The volume line when nothing could be read and an arm or a hand lay on the upper piece's edges on every row: said, never guessed. */

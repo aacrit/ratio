@@ -10,7 +10,9 @@ import { CATEGORY, type Landmark, type Mask, measureOutfit } from "../web/src/en
 import { downsample, targetSize } from "../web/src/engine/resample";
 import { type BinnedSwatch, TEMPLATES, chromaLine, fitTemplate, harmonyLine, sharesLine, valueLine } from "../web/src/engine/colour-rules";
 import { extractPalette } from "../web/src/engine/palette";
-import { BODY_MEASURE_WORDS, type Bins, JUDGING_WORDS, readBins, readOutfit } from "../web/src/engine/rules";
+import { type Bins, JUDGING_WORDS, bodyMeasureIn, readBins, readOutfit } from "../web/src/engine/rules";
+import { renderRulebook } from "../web/src/rules/render";
+import { SCALES } from "../web/src/rules/model";
 import { suggestLooks } from "../web/src/engine/looks";
 import { measuredCopy } from "../web/src/engine/measured";
 import { RULEBOOK } from "../web/src/engine/rulebook";
@@ -250,13 +252,29 @@ describe("copy law (V4, design lint)", () => {
   it("never makes a body part the thing measured: garment lines only (T6)", () => {
     // The lint catches the old copy.
     const old = "Each leg reads narrow (0.40× the shoulder width at the knee).";
-    expect(BODY_MEASURE_WORDS.some((w) => old.toLowerCase().includes(w))).toBe(true);
+    expect(bodyMeasureIn(old)).not.toBeNull();
+    // Body words alone are caught; the tailor's garment lines are not.
+    for (const t of ["a bust dart", "at the knee", "over the shoulders", "the thigh", "chest width", "a neck", "your build", "the hips"]) expect(bodyMeasureIn(t), t).not.toBeNull();
+    for (const t of ["the knee line", "its shoulder line", "the hip line", "the shoulder points the pose marks", "a neckline", "the figure"]) expect(bodyMeasureIn(t), t).toBeNull();
     const texts = everyGarmentLine();
     expect(texts.length).toBeGreaterThan(400);
     for (const text of texts) {
-      for (const word of BODY_MEASURE_WORDS) expect(text.toLowerCase(), text).not.toContain(word);
+      expect(bodyMeasureIn(text), text).toBeNull();
       for (const word of JUDGING_WORDS) expect(text.toLowerCase(), text).not.toContain(word);
       expect(text).not.toContain("—");
     }
+  });
+
+  it("the Rulebook speaks the same way: maths, edge names, scale titles, labels and every instrument's aria label (T6)", () => {
+    // The rendered Rulebook page holds every rule, maths, edge name, scale
+    // title and aria label, attributes included.
+    const page = renderRulebook().replace(/&#39;/g, "'");
+    const hit = bodyMeasureIn(page);
+    const at = hit === null ? -1 : page.toLowerCase().indexOf(hit.toLowerCase());
+    expect(hit, at < 0 ? "" : page.slice(Math.max(0, at - 80), at + 60)).toBeNull();
+    for (const e of Object.values(RULEBOOK)) for (const t of [e.rule, e.maths, ...e.edges.map((x) => x.name)]) expect(bodyMeasureIn(t), t).toBeNull();
+    for (const s of SCALES) for (const t of [s.title, s.label, ...s.bands]) expect(bodyMeasureIn(t), t).toBeNull();
+    // Honest about the reference: the shoulder line is the span between the shoulder points the pose marks.
+    expect(RULEBOOK.volume.maths).toMatch(/span between the two shoulder points the pose model marks/);
   });
 });

@@ -2,7 +2,7 @@
 // lines and names the garment, never the body.
 //
 // - No line, Measured copy, verdict, look or look reason makes a body part
-//   the thing measured (BODY_MEASURE_WORDS).
+//   the thing measured (bodyMeasureIn: BODY_MEASURE_WORDS and BODY_PART_PATTERNS).
 // - A rule that was not judged never shows "fine".
 // - The verdict never keeps a piece any line, or the look it offers, asks to
 //   change; the proportion line's shoe clause follows the leg line.
@@ -18,11 +18,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { BinnedSwatch } from "../web/src/engine/colour-rules";
 import { binShares } from "../web/src/engine/constants";
-import { type Look, suggestLooks } from "../web/src/engine/looks";
+import { type Look, accentOf, accentWords, pieces, suggestLooks } from "../web/src/engine/looks";
+import { colourName } from "../web/src/engine/names";
 import { measuredCopy } from "../web/src/engine/measured";
 import { RULEBOOK } from "../web/src/engine/rulebook";
-import { type AdviceLine, BODY_MEASURE_WORDS, type Bins, JUDGING_WORDS, readBins } from "../web/src/engine/rules";
-import { changedGarments, looksIntroOf, verdictOf } from "../web/src/engine/verdict";
+import { type AdviceLine, type Bins, JUDGING_WORDS, bodyMeasureIn, readBins } from "../web/src/engine/rules";
+import { looksIntroOf, restoredLooksIntroOf, verdictOf } from "../web/src/engine/verdict";
 import { STATE_WORDS, stateLabel } from "../web/src/ui/rows";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,12 +61,56 @@ const keepsShoes = (verdict: string) => {
   return k !== null && /shoes/.test(k);
 };
 
+/** The rule each "Keep …" sentence keeps, written out here so the check does not trust the verdict's own table. */
+const KEEP_RULE: Record<string, AdviceLine["rule"]> = {
+  "the break where it is": "proportion",
+  "the balance of volumes": "volume",
+  "the hues as they are": "harmony",
+  "the order of light and dark": "value",
+  "the one saturated note": "chroma",
+  "the way the colours share the area": "shares",
+  "the shoes near the lower piece's value": "legline",
+};
+
+/**
+ * Every keep sentence holds against the look the verdict offers and the
+ * lines beside it (review round 1). An accent kept: no move recolours its
+ * swatch and no line names its colour for a change. A rule kept: the look's
+ * line for that rule measures exactly what the outfit does.
+ */
+function keepHolds(s: Shown, label: string): void {
+  const kept = keepOf(s.verdict);
+  if (kept === null) return;
+  const look = s.looks[0];
+  const accent = accentWords(s.bins);
+  if (accent !== null && kept === accent) {
+    const i = accentOf(s.bins);
+    const p = pieces(s.bins);
+    const name = colourName(s.bins.palette[i].L, s.bins.palette[i].C, s.bins.palette[i].h);
+    for (const m of look?.moves ?? []) {
+      expect(m.kind === "recolour" && m.swatch === i, `${label}: "${s.verdict}" but the look recolours the accent (${m.title})`).toBe(false);
+      expect(m.kind === "accent" && i === p.shoes, `${label}: "${s.verdict}" but the look recolours the accent shoes (${m.title})`).toBe(false);
+    }
+    for (const l of s.lines) for (const r of l.recolours ?? []) expect(r.colour, `${label}: "${s.verdict}" but ${l.rule} recolours it: ${l.text}`).not.toBe(name);
+    return;
+  }
+  const rule = KEEP_RULE[kept];
+  expect(rule, `${label}: unknown keep "${kept}"`).toBeDefined();
+  const worn = s.lines.find((l) => l.rule === rule)!;
+  expect(worn.state, `${label}: keeps ${rule}, which is not on the mark`).toBe("golden");
+  if (look) {
+    const tried = look.lines.find((l) => l.rule === rule);
+    expect(tried?.measured, `${label}: "${s.verdict}" but the look moves ${rule} from ${worn.measured} to ${tried?.measured}`).toBe(worn.measured);
+  }
+  if (rule === "legline") for (const l of s.lines) for (const r of l.recolours ?? []) if (r.garment === "shoes") expect(r.matched, `${label}: keeps the shoes but ${l.rule} recolours them`).toBe(true);
+}
+
 /** The checks every reading must pass, on the fixtures and on the grid. */
 function agrees(s: Shown, label: string): void {
   const all = everyText(s);
   // 1. Garment, never body.
   for (const t of all) {
-    for (const w of BODY_MEASURE_WORDS) expect(t.toLowerCase(), `${label}: "${w}" in: ${t}`).not.toContain(w);
+    expect(bodyMeasureIn(t), `${label}: body word in: ${t}`).toBeNull();
     for (const w of JUDGING_WORDS) expect(t.toLowerCase(), `${label}: "${w}" in: ${t}`).not.toContain(w);
   }
   // 2. Not judged is never fine: a line whose number holds "not read" is unread.
@@ -73,21 +118,28 @@ function agrees(s: Shown, label: string): void {
     if (l.measured.includes("not read")) expect(l.state, `${label}: ${l.rule} ${l.measured}`).toBe("unread");
     if (l.state === "unread") expect(stateLabel(l)).not.toMatch(/fine/);
   }
-  // 3. The verdict never keeps a piece a line or its look changes.
-  const changed = changedGarments(s.lines, s.looks[0]);
+  // 3. The verdict never keeps what a line or its look changes: every keep sentence.
+  keepHolds(s, label);
   if (keepsShoes(s.verdict)) {
-    expect(changed.has("shoes"), `${label}: ${s.verdict} / ${s.lines.filter((l) => l.asks?.includes("shoes")).map((l) => l.text).join(" | ")}`).toBe(false);
     for (const l of s.lines) expect(l.text, label).not.toMatch(/shoes nearer|darker shoes|\(shoes, a belt/);
   }
-  //    The proportion line's shoe clause follows the leg line.
+  //    The proportion line's shoe clause follows the leg line, and carries
+  //    its borderline mark (law 2: a clause that can flip is never settled).
   const prop = s.lines.find((l) => l.rule === "proportion")!;
   const leg = s.lines.find((l) => l.rule === "legline");
   if (/close in value too/.test(prop.text)) expect(leg?.state, label).toBe("golden");
   if (/shoes contrast with it/.test(prop.text)) expect(leg && leg.state !== "golden" && leg.state !== "unread", label).toBe(true);
+  if (/The shoes (sit close in value too|contrast with it)/.test(prop.text)) {
+    expect(prop.text, label).toMatch(/the leg line says more\.$/);
+    expect(prop.borderline, `${label}: proportion borderline follows the leg line`).toBe(leg!.borderline);
+  }
   expect(prop.text).not.toMatch(/Keep the shoes close in value/);
-  //    No line keeps the shoes while another asks to change them.
+  //    No line keeps the shoes while another recolours them on their own
+  //    (darkening the pair together keeps the line, so it may be offered).
   const legKeeps = leg !== undefined && (leg.state === "golden" || /keep it\.$/.test(leg.text));
-  if (legKeeps) for (const l of s.lines) if (l !== leg) expect(l.asks ?? [], `${label}: ${l.rule} asks shoes while the leg line keeps them`).not.toContain("shoes");
+  if (legKeeps)
+    for (const l of s.lines)
+      if (l !== leg) for (const r of l.recolours ?? []) if (r.garment === "shoes") expect(r.matched, `${label}: ${l.rule} recolours shoes the leg line keeps: ${l.text}`).toBe(true);
   // 4. Harmony's number never shows Matsuda's letter.
   const harmony = s.lines.find((l) => l.rule === "harmony");
   if (harmony) expect(harmony.measured, label).not.toMatch(/^[iIVLYXT] ·/);
@@ -116,13 +168,13 @@ describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
     expect(measuredCopy(v, p2.bins)).toBe("Upper piece 0.90× its shoulder line, read on one side, on the rows no arm crosses, fitted; lower piece 0.45× at the knee line, straight.");
   });
 
-  it("p1 (Noor, hash 0429): keeps the coral shoes, and the leg line keeps them too", () => {
+  it("p1 (Noor, UX pass 3 read 0429 at 0.9.0, ed0f at 0.10.0): keeps the coral shoes, and the leg line keeps them too", () => {
     const s = show(fixtureBins("p1"));
     expect(s.verdict).toContain("Keep the coral shoes.");
     const leg = s.lines.find((l) => l.rule === "legline")!;
     expect(leg.text).not.toMatch(/nearer/);
     expect(leg.text).toMatch(/accent, so the contrast is the point: keep it\.$/);
-    expect(leg.asks).toBeUndefined();
+    expect(leg.recolours).toBeUndefined();
   });
 
   it("p1: the half-read Volume row says 'not judged', never 'fine' (Sam, Noor)", () => {
@@ -140,7 +192,7 @@ describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
     expect(h.measured).toBe("analogous · 345° 35°");
   });
 
-  it("p2 (Mara, hash ed6c): one column over contrasting shoes says so, and never says to keep the shoes close", () => {
+  it("p2 (Mara, UX pass 3 read ed6c at 0.9.0, ef5b at 0.10.0): one column over contrasting shoes says so, and never says to keep the shoes close", () => {
     const s = show(fixtureBins("p2"));
     const prop = s.lines.find((l) => l.rule === "proportion")!;
     const leg = s.lines.find((l) => l.rule === "legline")!;
@@ -165,6 +217,87 @@ describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
     // The navy lower piece is explained by navy's reason, not the accent's.
     for (const look of s.looks)
       for (const m of look.moves) if (m.kind === "recolour") expect(m.detail).not.toMatch(/accent of about a tenth/);
+  });
+});
+
+describe("review round 1 reproducers", () => {
+  const lch = (s: BinnedSwatch) => ({ L: s.L, C: s.C, h: s.h });
+  const swatch = (L: number, C: number, h: number, share: number, y: number): BinnedSwatch => ({ L, C, h, share, y });
+
+  /** (a) A small blue accent at y 0.7 (a bag or a belt) and a look that recolours the lower piece. */
+  const reproA = (): Bins => {
+    const palette = [swatch(0.6, 0.08, 95, 0.35, 0.6), swatch(0.4, 0.05, 280, 0.35, 0.3), swatch(0.5, 0.18, 255, 0.1, 0.7), swatch(0.5, 0.05, 330, 0.1, 0.6), swatch(0.95, 0, 0, 0.05, 0.6), swatch(0.6, 0.18, 0, 0.05, 0.95)];
+    return { proportion: 0.72, waist: 0.38, top: lch(palette[1]), bottom: lch(palette[0]), palette, fit: null, front: true };
+  };
+  /** (b) Two blues; the look takes the lower piece to charcoal. */
+  const reproB = (): Bins => {
+    const palette = [swatch(0.3, 0.18, 240, 0.85, 0.6), swatch(0.5, 0.18, 215, 0.15, 0.2)];
+    return { proportion: 0.72, waist: 0.38, top: lch(palette[1]), bottom: lch(palette[0]), palette, fit: null, front: true };
+  };
+
+  it("1a. never 'Keep the hues as they are' over a look that recolours a hue; the bag-sized accent is kept, not suppressed by where it sits", () => {
+    const s = show(reproA());
+    expect(s.looks[0].moves.some((m) => m.kind === "recolour" && m.piece === "lower")).toBe(true);
+    expect(s.verdict).not.toContain("Keep the hues as they are.");
+    expect(s.verdict).toContain(`Keep ${accentWords(s.bins)}.`);
+    keepHolds(s, "repro a");
+  });
+
+  it("1b. never 'Keep the hues as they are' when the look takes a coloured piece to a neutral", () => {
+    const s = show(reproB());
+    expect(s.looks[0].title).toMatch(/Lower piece in charcoal/);
+    expect(s.verdict).not.toContain("Keep the hues as they are.");
+    keepHolds(s, "repro b");
+  });
+
+  it("2. a yellow column over stone shoes at the leg line's edge carries the borderline mark (law 2)", () => {
+    const palette = [swatch(0.8, 0.1, 95, 0.9, 0.5), swatch(0.7, 0.02, 80, 0.1, 0.95)];
+    const b: Bins = { proportion: null, waist: 0.38, top: lch(palette[0]), bottom: lch(palette[0]), palette, fit: null };
+    const lines = readBins(b);
+    const prop = lines.find((l) => l.rule === "proportion")!;
+    const leg = lines.find((l) => l.rule === "legline")!;
+    expect(leg.measured).toBe("ΔL 0.10");
+    expect(leg.borderline).toBe(true);
+    expect(prop.text).toMatch(/close in value too.*the leg line says more\.$/);
+    expect(prop.borderline).toBe(true);
+  });
+
+  it("value: shoes carrying the leg line on darken with the lower piece, as a pair, never alone", () => {
+    const palette = [swatch(0.2, 0, 0, 0.5, 0.3), swatch(0.6, 0, 0, 0.4, 0.65), swatch(0.62, 0, 0, 0.1, 0.95)];
+    const b: Bins = { proportion: 0.38, waist: 0.38, top: lch(palette[0]), bottom: lch(palette[1]), palette, fit: null };
+    const lines = readBins(b);
+    expect(lines.find((l) => l.rule === "legline")!.state).toBe("golden");
+    const value = lines.find((l) => l.rule === "value")!;
+    expect(value.state).toBe("advice");
+    expect(value.text).toMatch(/a darker lower piece, with the shoes darkened to match so the leg line holds, would do it/);
+    expect(value.text).not.toMatch(/or darker shoes/);
+    expect(value.recolours).toEqual([{ garment: "lower" }, { garment: "shoes", matched: true }]);
+    agrees(show(b), "value pair");
+  });
+
+  it("harmony: kept shoes (the accent) are never the colour named outside the scheme while another piece can be", () => {
+    const palette = [swatch(0.5, 0.12, 30, 0.45, 0.3), swatch(0.3, 0.12, 150, 0.4, 0.65), swatch(0.7, 0.15, 270, 0.15, 0.95)];
+    const b: Bins = { proportion: 0.38, waist: 0.38, top: lch(palette[0]), bottom: lch(palette[1]), palette, fit: null };
+    const s = show(b);
+    const harmony = s.lines.find((l) => l.rule === "harmony")!;
+    expect(harmony.state).toBe("advice");
+    expect(accentWords(b)).toMatch(/shoes$/);
+    expect(harmony.text).not.toMatch(/The shoes at/);
+    expect(harmony.recolours?.every((r) => r.garment !== "shoes")).toBe(true);
+    agrees(s, "harmony kept shoes");
+  });
+
+  it("3. the restore-from-chalk path never says 'on the mark or fine' over a rule not judged", () => {
+    const p1 = readBins(fixtureBins("p1"));
+    const noAdvice = p1.map((l) => (l.state === "advice" ? { ...l, state: "neutral" as const } : l));
+    expect(restoredLooksIntroOf(noAdvice, 0)).toBe(looksIntroOf(noAdvice, 0));
+    expect(restoredLooksIntroOf(noAdvice, 0)).toMatch(/Every rule Ratio could judge/);
+    expect(restoredLooksIntroOf(p1, 0)).toBe(looksIntroOf(p1, 0));
+    expect(restoredLooksIntroOf(p1, 2)).toMatch(/^2 looks the rules prefer.*chalk figure/);
+    // main.ts takes the sentence from the engine, never a copy of its own.
+    const main = readFileSync(path.join(repoRoot, "web/src/main.ts"), "utf8");
+    expect(main).not.toContain("on the mark or fine");
+    expect(main).toContain("restoredLooksIntroOf(asWornLines, looks.length)");
   });
 });
 

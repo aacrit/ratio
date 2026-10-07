@@ -70,8 +70,21 @@ export function pieces(palette: readonly Placed[], waist: number, measured?: { t
   };
 }
 
-/** A garment a line of advice can ask to change (AdviceLine.asks). */
+/** A garment a line can suggest a new colour or value for (AdviceLine.recolours). */
 export type Garment = Exclude<Piece, "other">;
+
+/**
+ * One recolour a line's text suggests, as a fix (advice) or an option a row
+ * offers. Cut changes (a tuck, a shorter or narrower piece) are not
+ * recolours: they leave every colour the verdict may keep as it is.
+ */
+export interface Recolour {
+  garment: Garment;
+  /** The plain colour name, when the line names one colour to change (harmony, chroma). */
+  colour?: string;
+  /** Changed together with the lower piece, keeping the shoes matched to it (the leg line holds). */
+  matched?: true;
+}
 
 /** What a swatch is to the outfit, preferring the lower piece when one swatch is both. */
 export function pieceOf(i: number, p: Pieces): Piece {
