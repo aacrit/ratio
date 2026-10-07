@@ -240,7 +240,7 @@ export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: numbe
     if (!advice) return { ...base, state: "neutral", text: `A small step of dark over light: the upper piece (lightness ${pct(upperL)}) is a little darker than the lower piece (lightness ${pct(lowerL)}). Overall, ${key}. The step in value is small and holds as worn.` };
     return { ...base, state: "advice", recolours, text: `Dark over light: the upper piece (lightness ${pct(upperL)}) is darker than the lower piece (lightness ${pct(lowerL)}), so the visual weight sits high. Painters ground a figure with the darker value below; ${fix}. Overall, ${key}.` };
   }
-  return { ...base, state: "neutral", text: `Light over dark (upper ${pct(upperL)}, lower ${pct(lowerL)}): the weight sits low and the figure reads grounded. Overall, ${key}. Keep the order of light over dark.` };
+  return { ...base, state: "neutral", text: `Light over dark (upper ${pct(upperL)}, lower ${pct(lowerL)}): the weight sits low and the figure reads grounded. Overall, ${key}. Keep it light over dark.` };
 }
 
 // ---- 3. Shares: 60-30-10 ----------------------------------------------------
@@ -277,7 +277,7 @@ export function sharesLine(palette: BinnedSwatch[], ctx: { accent: boolean; shoe
     return { ...base, state: "neutral", text: `No colour leads: the largest holds ${pct(a)} of the outfit, the rest share it in small parts: a calm, mixed palette that works.` };
   }
   // The reference said once, in one form (the verifier, T9 review round 1).
-  return { ...base, state: "neutral", text: `A dominant colour at ${pct(a)} leads and the rest support it, against the 60-30-10 reference: a lead that holds.` };
+  return { ...base, state: "neutral", text: `A dominant colour at ${pct(a)} leads and the rest support it (60-30-10 is the reference). The lead holds.` };
 }
 
 // ---- 4. Chroma, vibration and temperature ----------------------------------
@@ -322,7 +322,7 @@ export function chromaLine(palette: BinnedSwatch[], waist: number, ctx: { shoesK
   // A row that is fine closes on a plain verdict (Sam, UX pass 4).
   // Two or more saturated colours within 60° of each other do not compete;
   // the row says so, never "no colour is at full saturation" beside "2 saturated".
-  if (loud.length >= 2) return { ...base, state: "neutral", text: `${loud.length} saturated colours in neighbouring hues speak as one voice rather than competing. ${temp} The one voice works.` };
+  if (loud.length >= 2) return { ...base, state: "neutral", text: `${loud.length} saturated colours in neighbouring hues speak as one voice rather than competing. ${temp} That single voice works.` };
   if (chromatic.length === 0) return { ...base, state: "neutral", text: `${temp} No colour is saturated, so value carries the outfit: the quiet palette works.` };
   return { ...base, state: "neutral", text: `No colour is at full saturation, so the palette is quiet and value carries the outfit. ${temp} The quiet palette works.` };
 }

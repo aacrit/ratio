@@ -86,7 +86,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   value: {
     title: "Value",
     rule: "Lightness carries form before hue does. A darker value below a lighter one grounds a figure; the widest lightness edge draws the eye first.",
-    maths: "OKLab lightness of each measured colour holding at least 5% of the garment area, each on its own even when two share a plain name (a light grey and a dark grey keep their range); the range is the widest minus the narrowest. The upper and lower pieces are compared directly, each at its own colour's lightness: the same number the palette, the leg line and the Measured list show.",
+    maths: "OKLab lightness of each measured colour holding at least 5% of the garment area, each on its own even when two share a plain name (a light grey and a dark grey keep their range); the range is the widest minus the narrowest. The upper and lower pieces are compared directly, each at its measured core (the median lightness of its well-lit cloth), the lightness the leg line also quotes; the list of colours gives each palette colour's own lightness, and the range reads that.",
     edges: [
       { name: "range: low / medium / high", value: `below ${CONTRAST_EDGES[0]} / to ${CONTRAST_EDGES[1]} / above` },
       { name: "upper and lower read as one tone within", value: VALUE_GAP_EDGES[0] },

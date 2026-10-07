@@ -380,7 +380,7 @@ describe("4. advice quotes only numbers the reading shows", () => {
     const lines = readBins(bins);
     const value = lines.find((l) => l.rule === "value")!;
     expect(value.text).toContain("(upper 0.28, lower 0.20)");
-    expect(measuredCopy(value, bins)).toBe("Upper piece 0.28, lower piece 0.20; lightness of each colour: charcoal 0.30, black 0.22, white 0.90.");
+    expect(measuredCopy(value, bins)).toBe("Pieces at their measured core: upper 0.28, lower 0.20. Colours: charcoal 0.30, black 0.22, white 0.90.");
     expect(lines.find((l) => l.rule === "legline")!.text).toContain("the lower piece (0.20 and 0.90)");
   });
 });
@@ -392,7 +392,7 @@ describe("2b. value reads each colour's own lightness", () => {
     expect(byName(bins.palette)).toHaveLength(1);
     const value = readBins(bins).find((l) => l.rule === "value")!;
     expect(value.measured).toBe("range 0.22");
-    expect(measuredCopy(value, bins)).toBe("Upper piece 0.46, lower piece 0.68; lightness of each colour: grey 0.46 and 0.68.");
+    expect(measuredCopy(value, bins)).toBe("Pieces at their measured core: upper 0.46, lower 0.68. Colours: grey 0.46 and 0.68.");
     const wide: Bins = { ...bins, top: { L: 0.24, C: 0, h: 0 }, palette: [sw(0.24, 0, 0, 0.5, 0.3), grey(0.68, 0.5, 0.7)] };
     expect(readBins(wide).find((l) => l.rule === "value")!.measured).toBe("range 0.44");
   });

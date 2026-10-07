@@ -80,7 +80,7 @@ export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
     return { ...base, state: "neutral", text: `${cap}: a streamlined column of fitted pieces, a pair that works.${side}` };
   }
   if ((t === "loose" && l === "narrow") || (t === "fitted" && l === "wide")) {
-    return { ...base, state: "golden", text: `${cap}: one full volume balanced by one fitted, the classic pairing, so keep the pairing.${side}` };
+    return { ...base, state: "golden", text: `${cap}: one full volume balanced by one fitted, the classic pairing: keep this pairing.${side}` };
   }
   return { ...base, state: "neutral", text: `${cap}: moderate volumes that sit together, a quiet balance that works.${side}` };
 }

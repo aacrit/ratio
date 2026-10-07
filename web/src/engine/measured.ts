@@ -59,7 +59,7 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
       // The pieces' lightness is their measured cores (pieceLightness), the numbers the leg line quotes too (T9, Mara);
       // the list after it is each palette colour's own lightness, labelled by colour, which the range reads.
       const pl = pieceLightness(bins);
-      return `Upper piece ${two(pl.upper)}, lower piece ${two(pl.lower)}; lightness of each colour: ${lightness(bins)}.`;
+      return `Pieces at their measured core: upper ${two(pl.upper)}, lower ${two(pl.lower)}. Colours: ${lightness(bins)}.`;
     }
     case "shares":
       return `Share of the outfit's area: ${each((s) => s.share)}.`;

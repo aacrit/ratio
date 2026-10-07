@@ -11,7 +11,7 @@
 import { type Lab, labToLch } from "./color";
 import { type BinnedSwatch, NEUTRAL_CHROMA, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
 import { binShares, isNeutral } from "./constants";
-import { byName, namingBorderline } from "./names";
+import { byName, renamingNudges } from "./names";
 import { type Recolour, accentOf, pieceOf, pieces } from "./pieces";
 import type { RuleId } from "./rulebook";
 import { type Fit, legBorderline, legLine, legUnread, shoesContinue, volumeLine, volumeUnread } from "./shape-rules";
@@ -88,8 +88,8 @@ export const BODY_PART_PATTERNS: readonly RegExp[] = [
 
 /** The first body-measure word or body part in a text, or null: the one lint every produced line, Rulebook text and Rules page label passes. */
 export function bodyMeasureIn(raw: string): string | null {
-  // The one allowed shoulder phrase, and only as a ratio's reference ("0.40× across the shoulders"), is taken out before the lint reads the rest.
-  const text = raw.replace(/(\d\.\d\d×) across the shoulders\b/gi, "$1");
+  // The one allowed shoulder phrase, and only as a ratio's reference ("0.40× across the shoulders", or "× across the shoulders" in a scale title), is taken out before the lint reads the rest.
+  const text = raw.replace(/((?:\d\.\d\d)?×) across the shoulders\b/gi, "$1");
   const lower = text.toLowerCase();
   const word = BODY_MEASURE_WORDS.find((w) => lower.includes(w));
   if (word) return word;
@@ -318,16 +318,18 @@ export function readBins(bins: Bins, rawBreak: number | null = bins.proportion):
     // grey over a dark grey keeps its range.
     const named = byName(bins.palette);
     // A palette whose reading by name a one-bin lightness change would alter marks the lines that read it by name borderline (law 2).
-    const namesEdge = namingBorderline(bins.palette);
-    const huesEdge = namesEdge && namingBorderline(bins.palette, true);
-    const edge = (l: AdviceLine, on: boolean): AdviceLine => (on && !l.borderline ? { ...l, borderline: true } : l);
+    // A line the palette's reading by name could flip at a one-bin lightness change is borderline (law 2): the rule is re-run on each renaming nudge.
+    const nudged = renamingNudges(bins.palette).map(byName);
+    const edge = (l: AdviceLine, rerun: (p: typeof named) => AdviceLine): AdviceLine => (!l.borderline && nudged.some((p) => rerun(p).state !== l.state) ? { ...l, borderline: true } : l);
+    const harmonyCtx = { shoesKept };
+    const sharesCtx = { accent: accent >= 0, shoesKept: shoeLine.kind === "continue" };
     lines.push(
-      edge(harmonyLine(named, bins.waist, { shoesKept }), huesEdge),
+      edge(harmonyLine(named, bins.waist, harmonyCtx), (p) => harmonyLine(p, bins.waist, harmonyCtx)),
       // Darker shoes on their own only for shoes no other line keeps; shoes
       // that carry the leg line on darken with the lower piece, as a pair.
       valueLine(bins.palette, light.upper, light.lower, { shoes: p.shoes < 0 || shoesAccent ? "none" : shoeLine.kind === "continue" ? "matched" : "free" }),
-      edge(sharesLine(named, { accent: accent >= 0, shoesKept: shoeLine.kind === "continue" }), namesEdge),
-      edge(chromaLine(named, bins.waist, { shoesKept }), huesEdge),
+      edge(sharesLine(named, sharesCtx), (p) => sharesLine(p, sharesCtx)),
+      edge(chromaLine(named, bins.waist, harmonyCtx), (p) => chromaLine(p, bins.waist, harmonyCtx)),
     );
   }
   return lines;

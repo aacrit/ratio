@@ -118,25 +118,23 @@ export function byName<T extends Placed>(palette: readonly T[]): (Placed & { nam
 }
 
 /**
- * Whether a one-bin change in any colour's lightness would change how the
- * palette is read by name: a colour whose name changes there and then joins
- * or leaves another colour of that name, or crosses the neutral line. The
- * rules that read the palette by name (harmony, shares, chroma) mark their
- * line borderline then, so it is never flipped silently (law 2, T9 review
- * round 1: shoes at 0.38 read as oxblood, at 0.40 as red). `hues`: only
- * colours count, for the rules that read the hues alone (harmony, chroma):
- * two neutrals trading names changes nothing they read.
+ * The palette with each colour whose name a one-bin change in its
+ * lightness would change, nudged that way: one palette per such nudge.
+ * The rules that read the palette by name (harmony, shares, chroma) are
+ * re-run on each, and a line whose state differs on any is marked
+ * borderline (law 2, T9 review rounds 1 and 2: shoes at 0.38 read as
+ * oxblood, at 0.40 as red). A palette with no such colour gives none, so
+ * no line is marked for a renaming that changes nothing it reads.
  */
-export function namingBorderline(palette: readonly Placed[], hues = false, step = 0.02): boolean {
-  const live = palette.filter((s) => s.share > 0);
-  const names = live.map((s) => colourName(s.L, s.C, s.h));
-  return live.some((s, i) =>
-    [-step, step].some((d) => {
+export function renamingNudges<T extends Placed>(palette: readonly T[], step = 0.02): T[][] {
+  const out: T[][] = [];
+  palette.forEach((s, i) => {
+    if (s.share <= 0) return;
+    const name = colourName(s.L, s.C, s.h);
+    for (const d of [-step, step]) {
       const L = Number((s.L + d).toFixed(2));
-      const n = colourName(L, s.C, s.h);
-      if (n === names[i]) return false;
-      if (hues && isNeutral(s) && isNeutral({ L, C: s.C })) return false;
-      return isNeutral({ L, C: s.C }) !== isNeutral(s) || names.some((x, j) => j !== i && (x === n || x === names[i]));
-    }),
-  );
+      if (colourName(L, s.C, s.h) !== name) out.push(palette.map((x, j) => (j === i ? { ...x, L } : x)));
+    }
+  });
+  return out;
 }

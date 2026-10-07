@@ -64,7 +64,7 @@ describe("one lightness per piece (Mara: Leg line 0.32, Value 0.26)", () => {
       expect(line(s, "legline").text).toContain(`the lower piece (${lower} and`);
       expect(measuredCopy(line(s, "legline"), s.bins)).toContain(`lower piece ${lower},`);
       expect(line(s, "value").text).toMatch(new RegExp(`lower (piece \\(lightness )?${lower}`));
-      expect(measuredCopy(line(s, "value"), s.bins)).toContain(`lower piece ${lower};`);
+      expect(measuredCopy(line(s, "value"), s.bins)).toContain(`lower ${lower}. Colours:`);
     }
   });
 
@@ -108,7 +108,7 @@ describe("a fine row closes on one plain verdict of its own (Sam, Noor, the veri
   });
 
   it("the verifier's three rows: shares says 60-30-10 once, the leg line commits, Volume keeps its caveat in two sentences", () => {
-    expect(line(fixture("sample"), "shares").text).toBe("A dominant colour at 0.45 leads and the rest support it, against the 60-30-10 reference: a lead that holds.");
+    expect(line(fixture("sample"), "shares").text).toBe("A dominant colour at 0.45 leads and the rest support it (60-30-10 is the reference). The lead holds.");
     expect(line(fixture("sample"), "legline").text).toBe("The shoes contrast with the lower piece (0.56 and 0.22), so the leg line stops at the shoes and they become a point of their own: a contrast that holds.");
     expect(line(fixture("p2"), "volume").text).toBe("Fitted over straight: moderate volumes that sit together, a quiet balance that works. The upper piece's width was read on one side only, as an arm lay on the other, so take it as a nudge.");
   });

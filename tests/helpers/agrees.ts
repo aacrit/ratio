@@ -196,7 +196,8 @@ export function verdictProblem(l: AdviceLine): string | null {
   if (verdicts.length !== 1) return `${verdicts.length} verdict sentences`;
   const v = verdicts[0];
   if (v !== sentences.at(-1)) return "the verdict is not the last sentence";
-  if (/\bkeep it\b|\bit (?:works|holds)\b/i.test(v)) return `the verdict "${v}" says "it"`;
+  // "it" with nothing after it is a verdict on nothing named ("Keep it.", "It works."); "Keep it light over dark." names its subject.
+  if (/\bkeep it\.$|\bit (?:works|holds)\.$/i.test(v)) return `the verdict "${v}" says "it"`;
   if (!VERDICT_SUBJECT[l.rule].test(v)) return `the verdict "${v}" does not name the rule's subject`;
   if (/\bwould\b|\bif you want\b/i.test(l.text)) return "a fine row offers a fix";
   return null;
@@ -235,7 +236,8 @@ function quotedL(line: AdviceLine, bins: Bins): Quote[] {
   }
   if (line.rule === "value") {
     out.push({ where: "Value", upper: n(line.text.match(/upper (?:piece )?(?:\(lightness )?(\d\.\d\d)/)?.[1]), lower: n(line.text.match(/lower (?:piece )?(?:\(lightness )?(\d\.\d\d)/)?.[1]) });
-    out.push({ where: "Value Measured", upper: n(copy.match(/^Upper piece (\d\.\d\d)/)?.[1]), lower: n(copy.match(/lower piece (\d\.\d\d);/)?.[1]) });
+    const c = copy.match(/^Pieces at their measured core: upper (\d\.\d\d), lower (\d\.\d\d)\./);
+    out.push({ where: "Value Measured", upper: n(c?.[1]), lower: n(c?.[2]) });
   }
   return out;
 }
