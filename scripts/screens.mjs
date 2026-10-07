@@ -77,6 +77,41 @@ async function photo(id) {
   return file;
 }
 
+// T10 (R-09, UX pass 4): every number on screen is final and true for what
+// is shown. The hero numeral was empty for the whole reveal and then counted
+// up through pairs no reading could produce ("0.25 : 0.25", "0.42 : 0.24").
+const PAIR = /(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/g;
+/** What is wrong with a hero numeral's text, or null: empty, a pair that does not sum to 1 (±0.01), or (with `pair`) no pair at all. */
+function heroProblem(text, { pair = false } = {}) {
+  const t = (text ?? "").trim();
+  if (!t) return "is empty";
+  const pairs = [...t.matchAll(PAIR)];
+  if (pair && !pairs.length) return `"${t}" is not a ratio pair`;
+  const bad = pairs.find((m) => Math.abs(Number(m[1]) + Number(m[2]) - 1) > 0.01);
+  return bad ? `"${t}" has parts that do not sum to 1` : null;
+}
+
+/**
+ * Watches the sheet head from now on: every state the page could paint in
+ * which the reading's eyebrow shows while #hero-n is empty, or holds a pair
+ * that does not sum to 1, is recorded (a MutationObserver runs before the
+ * next paint, so a screenshot at any moment could catch nothing it misses).
+ */
+const watchHero = (page) =>
+  page.evaluate(() => {
+    window.__heroBad = [];
+    const hero = document.getElementById("hero-n");
+    const eyebrow = document.getElementById("hero-eyebrow");
+    const check = () => {
+      if (!eyebrow?.textContent?.trim() || document.getElementById("result")?.hidden) return;
+      const t = hero?.textContent?.trim() ?? "";
+      const pairs = [...t.matchAll(/(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/g)];
+      if (!t || pairs.some((m) => Math.abs(Number(m[1]) + Number(m[2]) - 1) > 0.01)) window.__heroBad.push(`"${t}" under "${eyebrow.textContent}"`);
+    };
+    new MutationObserver(check).observe(document.getElementById("result"), { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["hidden"] });
+  });
+const heroWatchFindings = (page) => page.evaluate(() => [...new Set(window.__heroBad ?? [])]);
+
 /** Reads one pinned photo on the page and logs what the reading says: the verdict, every row, the palette and the looks. */
 async function readPhotoShot(page, name, id, snap, phone, errors) {
   let file;
@@ -87,9 +122,25 @@ async function readPhotoShot(page, name, id, snap, phone, errors) {
     return;
   }
   await page.goto(base, { waitUntil: "networkidle" });
+  await watchHero(page);
+  // A fresh load may already show the last read as a chalk restore (its hash
+  // included): wait for this photo's own reading, whose reveal (the full
+  // signature, on a fresh page) starts in the same tick its text is written.
   await page.setInputFiles("#photo", file);
-  await page.waitForSelector("#reading-hash:not(:empty)", { timeout: 120_000 });
+  await page.waitForFunction(() => document.body.dataset.revealing !== undefined, null, { timeout: 120_000 });
+  // The first read of a fresh page plays the full signature: the numeral
+  // must already be there, final, while it plays.
+  const heroAtOnce = await page.textContent("#hero-n");
   await page.waitForTimeout(3500);
+  const heroNow = await page.textContent("#hero-n");
+  note(`${name}: ${id}: hero as the reading appeared "${heroAtOnce?.trim()}", 3.5 s later "${heroNow?.trim()}"`);
+  // p1 has a break, so its hero is a ratio pair; p2 reads as one column (no pair to sum).
+  const wantPair = id === "p1";
+  for (const [when, text] of [["as the reading appeared", heroAtOnce], ["in the shot", heroNow]]) {
+    const problem = heroProblem(text, { pair: wantPair });
+    if (problem) errors.push(`${id}: the hero numeral ${when} ${problem}`);
+  }
+  for (const f of await heroWatchFindings(page)) errors.push(`${id}: the hero numeral was shown as ${f}`);
   note(`${name}: ${id}: ${await page.textContent("#reading-hash")}`);
   note(`${name}: ${id}: verdict: ${await page.textContent("#verdict")}`);
   note(`${name}: ${id}: palette: ${await page.getAttribute(".palette", "aria-label")}`);
@@ -101,6 +152,8 @@ async function readPhotoShot(page, name, id, snap, phone, errors) {
   for (const row of await page.$$eval(".row", (rs) => rs.map((r) => `${r.querySelector(".row-t")?.textContent} | ${r.querySelector(".row-n")?.textContent} | ${r.getAttribute("data-state")} | ${r.querySelector(".row-b")?.textContent?.replace(/\s+/g, " ").trim()}`))) note(`${name}: ${id}:   ${row}`);
   for (const t of await page.$$eval(".look", (ls) => ls.map((l) => `${l.querySelector(".look-title")?.textContent} | ${l.querySelector(".look-moves")?.textContent} | ${[...l.querySelectorAll(".look-changes li")].map((c) => c.textContent).join("; ")}`))) note(`${name}: ${id}:   look: ${t}`);
   if ((await page.$$(".look")).length === 0) note(`${name}: ${id}:   looks: ${await page.textContent(".looks-intro")}`);
+  const heroAtShot = heroProblem(await page.textContent("#hero-n"), { pair: id === "p1" });
+  if (heroAtShot) errors.push(`${id}: the hero numeral in the 9-${id} shot ${heroAtShot}`);
   await shot(page, name, `9-${id}`);
 }
 
@@ -147,9 +200,15 @@ async function run(name, viewport) {
   await shot("1-idle");
 
   const tRead = Date.now();
+  await watchHero(page);
   await page.click("#try-sample");
   await page.waitForSelector("#reading-hash:not(:empty)", { timeout: 120_000 });
   note(`${name}: sample read in ${Date.now() - tRead} ms (models download included on a cold run)`);
+  // The session's first read, its signature still playing: the numeral is already final (T10).
+  const heroDuringSignature = await page.textContent("#hero-n");
+  const signatureProblem = heroProblem(heroDuringSignature, { pair: true });
+  note(`${name}: hero while the first read's signature plays: "${heroDuringSignature?.trim()}"`);
+  if (signatureProblem) errors.push(`the hero numeral while the first read's signature plays ${signatureProblem}`);
 
   // T3 re-review: leaving for Rules while the first read's full signature is
   // still revealing must not strand Read inert when you come back. The hash
@@ -162,10 +221,8 @@ async function run(name, viewport) {
   // The reveal keeps running in the background regardless of which route is
   // visible; give it time to actually finish before judging the result.
   await page.waitForFunction(() => document.body.dataset.revealing === undefined, { timeout: 5_000 }).catch(() => {});
-  // The hero counts up from 0 (ui/count.ts sets data-counting while it
-  // does): wait for the count to land, then hold it to the value measured,
-  // which the first row states in full, so a mid-count "0.00 : 0.00" fails.
-  await page.waitForSelector("#hero-n:not(:empty):not([data-counting])", { timeout: 5_000 }).catch(() => {});
+  // The hero never counts (T10): hold it to the value measured, which the
+  // first row states in full, at once, with no wait for anything to land.
   const heroAfterRaceBack = (await page.textContent("#hero-n"))?.trim();
   const firstRowMeasured = (await page.textContent(".row .row-n"))?.trim();
   const firstLookDisabledAfterRaceBack = await page.$eval(".look .btn", (b) => b.disabled).catch(() => null);
@@ -175,6 +232,8 @@ async function run(name, viewport) {
   if (firstLookDisabledAfterRaceBack !== false) errors.push("leaving for Rules during the first read's reveal left Try it disabled on return");
 
   await page.waitForTimeout(3500);
+  const heroAtRead = heroProblem(await page.textContent("#hero-n"), { pair: true });
+  if (heroAtRead) errors.push(`the hero numeral in the 2-read shot ${heroAtRead}`);
   await shot("2-read");
   note(`${name}: ${await page.textContent("#reading-hash")}`);
   note(`${name}: hero: ${await page.textContent("#hero-n")} (${await page.textContent("#hero-eyebrow")})`);
@@ -244,6 +303,42 @@ async function run(name, viewport) {
   const saveNoteText = await page.textContent("#save-note");
   note(`${name}: #save-note after a download: "${saveNoteText}"`);
   if (!saveNoteText?.includes(download.suggestedFilename())) errors.push(`#save-note did not confirm the download (was "${saveNoteText}")`);
+
+  // T10: the saved line describes only the card of what is on screen. A
+  // look removed clears it; the as-worn card of the same photo carries the
+  // same photo hash in its name as the look's card; a look tried clears it.
+  const lookCardName = download.suggestedFilename();
+  if (await page.isVisible(".trying-back")) {
+    if (phone) {
+      await snap("full");
+      await page.waitForTimeout(500);
+    }
+    await page.click(".trying-back");
+    await page.waitForTimeout(300);
+    const afterOriginal = await page.textContent("#save-note");
+    note(`${name}: #save-note after Show original: "${afterOriginal}"`);
+    if (afterOriginal) errors.push(`the saved line stayed under the button after the look was removed ("${afterOriginal}")`);
+    const [wornCard] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
+    const wornCardName = wornCard.suggestedFilename();
+    await page.waitForTimeout(200);
+    note(`${name}: as-worn card ${wornCardName}, look card ${lookCardName}`);
+    if (lookCardName.slice(0, 10) !== wornCardName.slice(0, 10)) errors.push(`the look's card (${lookCardName}) and the as-worn card (${wornCardName}) do not carry the same photo hash`);
+    if (phone) {
+      await snap("full");
+      await page.waitForTimeout(500);
+    }
+    await looks[0].click(); // inside the Downloaded window
+    await page.waitForTimeout(300);
+    const afterTry = await page.textContent("#save-note");
+    note(`${name}: #save-note after trying a look: "${afterTry}"`);
+    if (afterTry) errors.push(`the saved line stayed under the button after a look was tried ("${afterTry}")`);
+    await page.waitForTimeout(1500);
+    if (await page.isVisible(".trying-back")) {
+      await page.click(".trying-back"); // as worn again, so the chalk-only search below starts clean
+      await page.waitForTimeout(600);
+    }
+  }
+  for (const f of await heroWatchFindings(page)) errors.push(`sample: the hero numeral was shown as ${f}`);
 
   // A look the photo does not show (a tuck, or a recolour refused as
   // doubtful): the chalk figure alone, and its saved card says the photo is
