@@ -131,6 +131,19 @@ describe("the card's photo is the state on screen (Figure.still)", () => {
   });
 });
 
+describe("the card is sized from its own read's photo", () => {
+  it("a card drawn after the next read has resized the shared stage canvas is still the first read's whole photo", () => {
+    const stage = new (globalThis as unknown as { OffscreenCanvas: typeof FakeCanvas }).OffscreenCanvas();
+    const reading = { engine: ENGINE_VERSION, bins, lines: readBins(bins) };
+    const a = new Figure(stage as unknown as HTMLCanvasElement, solid(100, 100, BLACK_SHOES), { width: 100, height: 100 }, measure, reading);
+    new Figure(stage as unknown as HTMLCanvasElement, solid(60, 140, TERRACOTTA_SHOES), { width: 60, height: 140 }, measure, reading); // ] while A's card draws
+    expect(stage.width).toBe(60);
+    const still = a.still() as unknown as FakeCanvas;
+    expect([still.width, still.height]).toEqual([100, 100]);
+    expect(still.drawn[0]).toBe(AS_WORN);
+  });
+});
+
 describe("the compare wipe moves only while a look is shown", () => {
   it("as worn, setWipe and flingWipe do nothing", () => {
     const f = figure();
@@ -369,25 +382,71 @@ describe("the lock belongs to the read it saved (T7 review 2)", () => {
     expect(saveTop.disabled).toBe(false);
   });
 
-  it("while A is drawing, a press for B says Drawing the card. only, and its line is cleared when A's card is done", async () => {
+  it("while A is drawing, a press for B says Drawing the card., then B's own card starts once A's is done", async () => {
+    const readA = target(figure(), () => ({ ...asWorn, hash: "aaaa0000" }));
+    const readB = target(figure(), () => ({ ...asWorn, hash: "bbbb0000" }));
+    let onScreen = readA;
+    const finishes: (() => void)[] = [];
+    const saved: string[] = [];
+    const save = vi.fn((c: CardContent) => new Promise<void>((r) => finishes.push(() => (saved.push(c.hash), r()))));
+    const download = cardSaver({ current: () => onScreen, save });
+    const noteA = { textContent: "" as string | null };
+    const first = download(fakeButton(), noteA);
+    onScreen = readB; // ] while A draws
+    const noteB = { textContent: "" as string | null };
+    const buttonB = fakeButton();
+    await download(buttonB, noteB);
+    expect(noteB.textContent).toBe(DRAWING_CARD); // never a saved line for A under B
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    finishes[0]();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2)); // B's card, from the queued press
+    expect(noteA.textContent).toBe(""); // A is no longer on screen
+    expect(noteB.textContent).toBe(DRAWING_CARD);
+    finishes[1]();
+    await first;
+    expect(saved).toEqual(["aaaa0000", "bbbb0000"]);
+    expect(noteB.textContent).toBe(savedCopy("bbbb0000"));
+    expect(buttonB.textContent).toBe("Downloaded");
+  });
+
+  it("a queued press for B is dropped when B is no longer on screen when A's card is done", async () => {
+    const readA = target(figure(), () => ({ ...asWorn, hash: "aaaa0000" }));
+    const readB = target(figure(), () => ({ ...asWorn, hash: "bbbb0000" }));
+    const readC = target(figure(), () => ({ ...asWorn, hash: "cccc0000" }));
+    let onScreen = readA;
+    let finish = () => {};
+    const save = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    const download = cardSaver({ current: () => onScreen, save });
+    const first = download(fakeButton(), { textContent: "" });
+    onScreen = readB;
+    const noteB = { textContent: "" as string | null };
+    await download(fakeButton(), noteB);
+    onScreen = readC; // stepped on again before A's card was done
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    finish();
+    await first;
+    expect(save).toHaveBeenCalledOnce();
+  });
+
+  it("when the read changed while its card drew, the button reads as itself at once, not Downloaded", async () => {
     const readA = target(figure(), () => ({ ...asWorn, hash: "aaaa0000" }));
     const readB = target(figure(), () => ({ ...asWorn, hash: "bbbb0000" }));
     let onScreen = readA;
     let finish = () => {};
     const save = vi.fn(() => new Promise<void>((r) => (finish = r)));
     const download = cardSaver({ current: () => onScreen, save });
-    const noteA = { textContent: "" as string | null };
-    const first = download(fakeButton(), noteA);
+    const button = fakeButton();
+    const first = download(button, { textContent: "" });
     onScreen = readB;
-    const noteB = { textContent: "" as string | null };
-    await download(fakeButton(), noteB);
-    expect(noteB.textContent).toBe(DRAWING_CARD);
     await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
     finish();
     await first;
-    expect(noteB.textContent).toBe(""); // never "Saved ... ratio-aaaa.png" under B
-    expect(noteA.textContent).toBe(""); // A is no longer on screen: its save row is B's now
-    expect(save).toHaveBeenCalledOnce();
+    expect(button.textContent).toBe("Download this read (free)");
+    expect(button.disabled).toBe(false);
+    const second = download(button, { textContent: "" }); // and B can be saved at once
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    finish();
+    await second;
   });
 
   it("every status line that echoed Drawing the card. for the same read hears how it ended", async () => {

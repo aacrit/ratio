@@ -362,9 +362,14 @@ export class Figure {
     return this.look !== null;
   }
 
-  /** The photo with its overlay at rest, the look whole when one is tried (never a look on its way out): for the saved card. */
+  /**
+   * The photo with its overlay at rest, the look whole when one is tried
+   * (never a look on its way out): for the saved card. Sized from this
+   * read's own photo, never the shared stage canvas, which the next read
+   * may already have resized while this card is drawing (as restore() does).
+   */
   still(): OffscreenCanvas {
-    const out = new OffscreenCanvas(this.element.width, this.element.height);
+    const out = new OffscreenCanvas(this.photo.width, this.photo.height);
     const ctx = out.getContext("2d");
     if (ctx) this.paint(ctx, true);
     return out;

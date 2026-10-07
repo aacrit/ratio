@@ -4,7 +4,9 @@
 // encodes, so S never looks inert (T7, R-09). While a card is being drawn,
 // any other press of S or a download button starts nothing and says
 // "Drawing the card." in its own status line; every such line is brought up
-// to date when the card is done. Once saved, "Downloaded" has its moment:
+// to date when the card is done. A press for another read (stepped to while
+// drawing) is kept in one queued slot and starts when the card in hand is
+// done, if that read is still on screen. Once saved, "Downloaded" has its moment:
 // another press for the same read repeats the saved line, while a press for
 // another read (stepped to with [ ]) starts that read's card at once, never
 // echoing a line about a read no longer on screen. The card is drawn from
@@ -51,6 +53,8 @@ interface Held {
   line: string;
   /** Status lines of presses dropped while it was drawing, each with the read on screen at its press. */
   echoed: Map<NoteLike, SaveTarget | null>;
+  /** The latest press, while drawing, for a read other than this one: it starts once this card is done. */
+  next: { button: ButtonLike; note: NoteLike; target: SaveTarget } | null;
 }
 
 /** True when focus has gone nowhere in particular (the disabled button dropped it), so giving it back moves nobody. */
@@ -68,7 +72,7 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
   /** Each button's pending return to its label, and whether it had focus when that export began. */
   const resets = new WeakMap<ButtonLike, { timer: ReturnType<typeof setTimeout>; hadFocus: boolean }>();
 
-  return async (button, note) => {
+  const download = async (button: ButtonLike, note: NoteLike): Promise<void> => {
     // The read being saved is fixed now: a new read started during the wait
     // must not swap in (its own recolour was never waited on).
     const c = deps.current();
@@ -76,7 +80,8 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
       // Held S, a double tap, the other button: one export at a time. The
       // dropped press says a card is being drawn, and hears how it ended.
       note.textContent = DRAWING_CARD;
-      held.echoed.set(note, c);
+      if (c && c !== held.target) held.next = { button, note, target: c };
+      else held.echoed.set(note, c);
       return;
     }
     if (held && (c === null || c === held.target)) {
@@ -86,7 +91,7 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
     }
     // Nothing held, or the card saved was another read's: this one starts now.
     if (!c) return;
-    const mine: Held = { target: c, drawing: true, line: DRAWING_CARD, echoed: new Map() };
+    const mine: Held = { target: c, drawing: true, line: DRAWING_CARD, echoed: new Map(), next: null };
     held = mine;
     // A button still reading "Downloaded" or "Could not draw the card"
     // keeps its real label, and the focus it had when that press began.
@@ -119,22 +124,33 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
     // the way a new read clears the save row: no line ever confirms a card
     // of a read not on screen. A press dropped for this same read hears the
     // same ending; one dropped for another read is cleared too.
-    note.textContent = deps.current() === c ? final : "";
+    const stillShown = deps.current() === c;
+    note.textContent = stillShown ? final : "";
     for (const [n, pressedFor] of mine.echoed) n.textContent = pressedFor === c ? final : "";
-    // A failure saved nothing, so there is nothing to protect: a retry may
-    // start at once. A saved card holds the lock while "Downloaded" shows.
-    if (!saved) {
-      if (held === mine) held = null;
-      button.disabled = false;
-    }
-    const timer = setTimeout(() => {
+    const restore = () => {
       resets.delete(button);
       if (held === mine) held = null;
       button.disabled = false;
       button.textContent = labels.get(button) ?? button.textContent;
       labels.delete(button);
       if (hadFocus && focusIsLost()) button.focus();
-    }, RESET_MS);
-    resets.set(button, { timer, hadFocus });
+    };
+    if (!stillShown) {
+      // Its read is gone from the screen: "Downloaded" would speak for the
+      // read now shown, so the button reads as itself at once, and the read
+      // now shown may be saved straight away.
+      restore();
+      const next = mine.next;
+      if (next && next.target === deps.current()) await download(next.button, next.note);
+      return;
+    }
+    // A failure saved nothing, so there is nothing to protect: a retry may
+    // start at once. A saved card holds the lock while "Downloaded" shows.
+    if (!saved) {
+      if (held === mine) held = null;
+      button.disabled = false;
+    }
+    resets.set(button, { timer: setTimeout(restore, RESET_MS), hadFocus });
   };
+  return download;
 }
