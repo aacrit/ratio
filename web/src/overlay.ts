@@ -477,6 +477,9 @@ export class Figure {
     });
     const anim = this.tuckAnim;
     void anim.done.then(() => {
+      // A cancelled glide resolves too (motion.ts): if a newer one cut it
+      // short, its numeral must not land mid-glide, so only the latest acts.
+      if (this.tuckAnim !== anim) return;
       s.near = Math.abs(toRatio - GOLDEN) <= 0.02;
       s.label = labelAtRest(true, toRatio);
       this.draw();

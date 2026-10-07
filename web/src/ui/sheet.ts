@@ -67,7 +67,7 @@ export class Sheet {
   private velocity = new Velocity();
   private listeners = new Set<(top: number, snap: Snap) => void>();
   private _snap: Snap = "peek";
-  /** True from the moment a wheel escalates the sheet until that spring settles, so a momentum-scroll trackpad's dozens of further events (all still arriving while the sheet is mid-flight) do not each restart it. */
+  /** True from the moment a wheel escalates the sheet until that spring settles, so a momentum-scroll trackpad's dozens of further events (all still arriving while the sheet is mid-flight) do not each restart it. Cleared by any snap or press too, so a cut-short spring never leaves the wheel switched off (review round 2). */
   private wheelSettling = false;
 
   constructor(
@@ -164,18 +164,25 @@ export class Sheet {
   }
 
   private wheel(e: WheelEvent): void {
-    if (this.wide.matches || this.wheelSettling) return;
+    if (this.wide.matches) return;
+    if (this.wheelSettling) {
+      // The rest of a momentum scroll: claim it, so it neither restarts the
+      // spring nor scrolls the (now full) body mid-flight.
+      e.preventDefault();
+      return;
+    }
     const target = wheelTarget(this._snap, e);
     if (!target) return;
     e.preventDefault();
-    if (reducedMotion()) {
-      this.snap(target);
-      return;
-    }
-    this.wheelSettling = true;
     this.snap(target);
-    void this.anim?.done.then(() => {
-      this.wheelSettling = false;
+    if (reducedMotion()) return;
+    const anim = this.anim;
+    if (!anim) return;
+    this.wheelSettling = true;
+    void anim.done.then(() => {
+      // Only this wheel's own spring ends its settle: a snap or a press
+      // that cut it short has already cleared the flag (review round 2).
+      if (this.anim === anim) this.wheelSettling = false;
     });
   }
 
@@ -187,6 +194,8 @@ export class Sheet {
     }
     this.measure();
     this.setSnap(to);
+    // Any other move ends a wheel's settle: the wheel must work again at once.
+    this.wheelSettling = false;
     this.anim?.cancel();
     const target = this.stops[to];
     if (reducedMotion()) {
@@ -202,6 +211,7 @@ export class Sheet {
     const inBody = this.body.contains(e.target as Node);
     if (inBody && this._snap === "full" && this.body.scrollTop > 0) return;
     // A press on a control is a press until it clearly moves; then it is a drag of the sheet.
+    this.wheelSettling = false;
     this.anim?.cancel();
     this.drag = { startY: this.y, startPointer: e.clientY, moved: false, id: e.pointerId };
     this.velocity.reset(e.clientY);
