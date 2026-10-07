@@ -1,50 +1,41 @@
-// Numerals that count up as they land (the `lands` spring: heavy, no
-// overshoot, because a measurement never shows a value it did not read).
-// Every number inside a string moves at once, keeping its own decimals, so
-// "0.64 : 0.36" lands as one pair and "1.45× · 0.55×" as one line. From a
-// previous string with the same numbers in the same places, each counts
-// from its old value (a tried look changing a reading); otherwise from 0.
-// Reduced motion writes the final text at once.
+// The sheet's numerals are final the moment they show (T10, R-09). They
+// used to count up from 0 (or from the previous look's values) on a spring,
+// each number in the string on its own, which put pairs on screen that no
+// reading could produce ("0.25 : 0.25", "0.42 : 0.24") and left the numeral
+// empty until the reveal had finished; a count still running when a look or
+// a new read replaced it could even land its old value over the new one.
+// Now the final text is written at once, in the same tick as the verdict
+// and the eyebrow, and replacing it simply writes the next final text. What
+// lands is the glow: `--color-tape-glow` flashes behind a numeral when its
+// value changes, or when the first read's signature arrives on the photo.
+// Reduced motion collapses the flash (design/tokens.css).
 
-import { type Animation, spring, springToken } from "../motion";
-
-const NUMBER = /-?\d+(?:\.\d+)?/g;
-
-interface Part {
-  from: number;
-  to: number;
-  decimals: number;
+interface NumeralEl {
+  textContent: string | null;
+  dataset: DOMStringMap;
+  /** Read once to restart the flash's CSS animation; absent in tests. */
+  readonly offsetWidth?: number;
+  addEventListener?: (type: "animationend", fn: () => void, opts: { once: true }) => void;
 }
 
-function parts(to: string, from?: string): { template: string[]; numbers: Part[] } {
-  const template = to.split(NUMBER);
-  const targets = [...to.matchAll(NUMBER)].map((m) => m[0]);
-  const starts = from ? [...from.matchAll(NUMBER)].map((m) => Number(m[0])) : [];
-  const same = starts.length === targets.length;
-  const numbers = targets.map((t, i) => ({ from: same ? starts[i] : 0, to: Number(t), decimals: (t.split(".")[1] ?? "").length }));
-  return { template, numbers };
+/** Writes `to` as the numeral's text now, final. Returns whether the text changed. */
+export function setNumeral(el: NumeralEl, to: string): boolean {
+  const changed = el.textContent !== to;
+  el.textContent = to;
+  return changed;
 }
 
-function render(template: string[], numbers: Part[], t: number): string {
-  let out = template[0];
-  numbers.forEach((n, i) => {
-    const v = n.from + (n.to - n.from) * t;
-    out += v.toFixed(n.decimals) + template[i + 1];
-  });
-  return out;
+/** Flashes the tape glow behind the numeral (`.hero-n[data-lands]` in style.css), restarting it if one is running. */
+export function flashNumeral(el: NumeralEl): void {
+  delete el.dataset.lands;
+  void el.offsetWidth; // a reflow, so the same attribute restarts the animation
+  el.dataset.lands = "";
+  // Cleared once it has played, so a later display change (Compact on or
+  // off) never replays it.
+  el.addEventListener?.("animationend", () => delete el.dataset.lands, { once: true });
 }
 
-/** Counts the element's text to `to`. Returns the animation; the text is final when it resolves, unless it was cancelled (cancel resolves it too). */
-export function countTo(el: HTMLElement, to: string, from?: string): Animation {
-  const { template, numbers } = parts(to, from);
-  if (!numbers.length || (from !== undefined && from === to)) {
-    el.textContent = to;
-    return { done: Promise.resolve(), cancel: () => {} };
-  }
-  el.dataset.counting = "";
-  const anim = spring(springToken("lands"), 0, 1, (t) => {
-    el.textContent = t >= 1 ? to : render(template, numbers, t);
-  });
-  void anim.done.then(() => delete el.dataset.counting);
-  return anim;
+/** A replacement (a look tried or removed, Esc, a new read): the final text at once, flashed when the value is new. */
+export function replaceNumeral(el: NumeralEl, to: string): void {
+  if (setNumeral(el, to)) flashNumeral(el);
 }

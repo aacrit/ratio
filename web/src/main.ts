@@ -31,10 +31,10 @@ import { Reader } from "./reader";
 import { setupRulebook } from "./rules";
 import { renderRulebook } from "./rules/render";
 import { chalkFigure } from "./tryon/figure";
-import { drawCard, saveCard } from "./ui/card";
+import { cardContentOf, drawCard, saveCard } from "./ui/card";
 import { cardSaver } from "./ui/save";
 import { setupCompact } from "./ui/compact";
-import { countTo } from "./ui/count";
+import { flashNumeral, setNumeral } from "./ui/count";
 import { type Shown, heroEyebrowOf, setupLooks, verdictOf } from "./ui/looks";
 import { revealKind } from "./ui/reveal";
 import { paletteStrip, renderRows } from "./ui/rows";
@@ -72,6 +72,7 @@ interface Current {
   figure: Figure;
   shown: () => Shown;
   settled: () => Promise<void>;
+  view: () => number;
   credit: string | null;
   read: Read;
 }
@@ -256,7 +257,11 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
 
     intro.hidden = true;
     result.hidden = false;
-    heroN.textContent = "";
+    // The hero numeral is final the moment the reading shows, in the same
+    // tick as its eyebrow and the verdict, on every read (T10, R-09: it used
+    // to stay empty until the whole reveal had played, then count up from 0
+    // through pairs no reading could produce).
+    setNumeral(heroN, read.reading.lines[0].measured);
     heroN.dataset.state = read.reading.lines[0].borderline ? "borderline" : read.reading.lines[0].state;
     heroEyebrow.textContent = heroEyebrowOf(read.reading.lines);
     verdict.textContent = verdictOf(read.reading.lines);
@@ -316,8 +321,11 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
       borderlineSlot,
       onTried: () => sendEvent("look_tried"),
       onShown: handOff,
+      // The saved line names the card of the view it was saved from: a look
+      // tried or removed clears it, as a new read does (T10, R-09).
+      onChange: () => (saveNote.textContent = ""),
     });
-    current = { figure, shown: looks.shown, settled: looks.settled, credit: sourceCredit, read };
+    current = { figure, shown: looks.shown, settled: looks.settled, view: looks.view, credit: sourceCredit, read };
     sheet.measure();
     sheet.snap("half");
 
@@ -340,10 +348,9 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     }
     if (gen !== showGen) return; // a newer read started while this one was revealing: let it finish its own work
     for (const b of lookButtons) b.disabled = false;
-    // The hero numeral counts only on the session's one signature; every
-    // other arrival (a restore, the strip, [ ], back/forward) sets it directly.
-    if (opts.quick) heroN.textContent = read.reading.lines[0].measured;
-    else countTo(heroN, read.reading.lines[0].measured);
+    // The session's one signature lands its numeral on the photo now: the
+    // hero numeral (already final) flashes with it. Later reads appear settled.
+    if (!opts.quick) flashNumeral(heroN);
     rendered.land();
     renderStrip(sessionStrip, sessionReads(), read.hash, (index) => void selectAndShow(index));
     // Skip only the URL write when a route change happened mid-reveal: the
@@ -938,7 +945,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     wrap.append(heading);
     const shown = c.shown();
     try {
-      const drawn = await drawCard({ still: c.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: c.credit ?? undefined });
+      const drawn = await drawCard(cardContentOf(shown, c.figure.still(), c.credit));
       const blob = await drawn.convertToBlob({ type: "image/png" });
       // A data: URL, not an object URL: the CSP's img-src allows this
       // origin and data: only, never blob:, and a data: URL needs no

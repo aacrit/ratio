@@ -18,7 +18,7 @@ import type { Read } from "../read";
 import type { Reader } from "../reader";
 import { chalkFigure } from "../tryon/figure";
 import { type Bands, type PhotoPlan, refuseAll, refusedCardCopy, refusedCopy, refusedSwatches, showsOnPhoto } from "../tryon/recolour";
-import { countTo } from "./count";
+import { replaceNumeral } from "./count";
 import { STATE_WORDS, paletteStrip, renderRows, stateLabel } from "./rows";
 import type { Sheet } from "./sheet";
 
@@ -49,6 +49,8 @@ export interface LooksDeps {
   onTried: () => void;
   /** Whatever is now on screen, as worn (look null) or a tried look: the Rulebook marks it. */
   onShown?: (shown: Shown, look: string | null) => void;
+  /** Called in the same tick a look is tried or removed, before anything else changes: whatever described the last view (the saved line) is cleared. */
+  onChange?: () => void;
 }
 
 /** The verdict reads as a judgement of a tried look, never of the outfit itself: "Trying navy for the lower piece: Works...". */
@@ -87,10 +89,15 @@ export interface Shown {
   title: string;
   lines: Read["reading"]["lines"];
   bins: Read["reading"]["bins"];
+  /** The reading hash of what is shown: the photo's as worn, the look's own when a look is tried. */
   hash: string;
   engine: string;
   /** A line for the card when the photo on it is not the look (a recolour refused as doubtful). */
   note?: string;
+  /** On a tried look: the photo's own reading hash, which the card's footer names (T10). As worn it is `hash` itself. */
+  photoHash?: string;
+  /** On a tried look: the look in everyday words, for the card's footer and filename. */
+  look?: string;
 }
 
 /** The plain verdict (engine/verdict.ts): whether it works, and the best look in everyday words. */
@@ -99,7 +106,7 @@ export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = [], b
 /** The sheet head's eyebrow under the hero numeral: the rule and its state. */
 export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].title}, ${stateLabel(lines[0])}`;
 
-export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => Promise<void> } {
+export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => Promise<void>; view: () => number } {
   const { read } = d;
   const looks = suggestLooks(read.reading.bins, read.reading.lines);
   d.verdict.textContent = verdictOf(read.reading.lines, looks, read.reading.bins);
@@ -113,7 +120,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   if (!looks.length) {
     if (intro) intro.textContent = looksIntroOf(read.reading.lines, 0);
     d.list.replaceChildren();
-    return { shown: () => shown, settled: () => Promise.resolve() };
+    return { shown: () => shown, settled: () => Promise.resolve(), view: () => 0 };
   }
   if (intro) intro.textContent = looksIntroOf(read.reading.lines, looks.length);
 
@@ -147,13 +154,20 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   const noteAsBuilt = note?.textContent ?? "";
   const before = new Map(read.reading.lines.map((l) => [l.rule, l.state] as const));
   let current: string | null = null;
+  /** Bumped in the same tick a look is tried or removed: the save row compares it to tell whether its card still matches the screen. */
+  let view = 0;
+  const changeView = () => {
+    view++;
+    d.onChange?.();
+  };
   const buttons = new Map<string, HTMLButtonElement>();
   const cards = new Map<string, HTMLElement>();
   /** The recoloured photo for each look, computed once in the worker. */
   const recoloured = new Map<string, Promise<Parameters<Figure["setLook"]>[0]>>();
 
-  const setHead = (lines: Read["reading"]["lines"], fromLines: Read["reading"]["lines"], bins: Read["reading"]["bins"], tried: Look | null) => {
-    countTo(d.heroN, lines[0].measured, fromLines[0].measured);
+  const setHead = (lines: Read["reading"]["lines"], bins: Read["reading"]["bins"], tried: Look | null) => {
+    // Final at once, never counted (T10): a replaced numeral is never left mid-way.
+    replaceNumeral(d.heroN, lines[0].measured);
     d.heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
     d.heroEyebrow.textContent = heroEyebrowOf(lines);
     // As worn, the verdict names the best look; on a tried look, it judges that look and says so up front, never as a verdict on the outfit itself.
@@ -162,7 +176,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   };
 
   const asWorn = async () => {
-    const from = shown.lines;
+    changeView();
     current = null;
     shown = asWornShown;
     d.onShown?.(shown, null);
@@ -180,7 +194,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     d.figure.setLook(null);
     d.wipe.hidden = true;
     document.body.dataset.compare = "off";
-    setHead(read.reading.lines, from, read.reading.bins, null);
+    setHead(read.reading.lines, read.reading.bins, null);
     renderRows(d.rows, read.reading.lines, read.reading.bins, { borderlineSlot: d.borderlineSlot, ...d.asWornExtras() }).land();
     d.paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
     d.hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
@@ -192,7 +206,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   const tryLook = async (look: Look) => {
     let landed: Promise<void> = Promise.resolve();
     if (current === look.id) return asWorn();
-    const from = shown.lines;
+    changeView();
     current = look.id;
     buttons.forEach((b, id) => {
       b.setAttribute("aria-pressed", String(id === look.id));
@@ -239,7 +253,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     if (title) title.textContent = look.title;
     const phrase = lookPhrase(look.moves);
     d.announce.textContent = `Trying: ${phrase}`;
-    setHead(look.lines, from, look.bins, look);
+    setHead(look.lines, look.bins, look);
     // On a phone the sheet drops to half so the photo and the wipe are in view.
     if (!d.sheet.isWide) d.sheet.snap("half");
     renderRows(d.rows, look.lines, look.bins, { before, borderlineSlot: d.borderlineSlot }).land();
@@ -247,7 +261,7 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
     const hh = await readingHash({ engine: ENGINE_VERSION, bins: look.bins });
     // A look the photo shows only in part says so on the card, naming the parts on the chalk figure.
     if (current === look.id) {
-      shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: refusedCardCopy(look.moves, plan) ?? undefined };
+      shown = { title: look.title, lines: look.lines, bins: look.bins, hash: hh, engine: ENGINE_VERSION, note: refusedCardCopy(look.moves, plan) ?? undefined, photoHash: read.hash, look: phrase };
       d.onShown?.(shown, look.title);
     }
     if (current === look.id) d.hash.textContent = `Trying a look. Same look, same reading. ${hh.slice(0, 4)} · ${ENGINE_VERSION}`;
@@ -326,5 +340,5 @@ export function setupLooks(d: LooksDeps): { shown: () => Shown; settled: () => P
   );
   // The cards arrive after the rows, settling one after another.
   requestAnimationFrame(() => d.list.classList.add("in"));
-  return { shown: () => shown, settled: () => pending.then(() => undefined, () => undefined) };
+  return { shown: () => shown, settled: () => pending.then(() => undefined, () => undefined), view: () => view };
 }

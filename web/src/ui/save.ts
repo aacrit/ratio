@@ -13,14 +13,22 @@
 // whatever is on screen once a look still landing has landed. "Saved" is
 // said once the PNG was handed to the browser as a download; where the
 // browser puts it is the browser's own business.
+//
+// "What is on screen" is the read and its view: trying or removing a look
+// changes the view (T10, R-09: "Saved to your downloads as ratio-0ef2.png."
+// stayed under the button after switching to a look). main.ts clears the
+// line in that same tick; here, a card whose view has since changed never
+// writes its line, and a press after a look change draws a new card rather
+// than repeating the last one's line.
 
-import type { CardContent } from "./card";
+import { type CardContent, cardContentOf, cardFileName } from "./card";
 import type { Shown } from "./looks";
 
 /** spec.md, "Download this read (free)": `Drawing the card.` → `Downloaded` → back; failure `Could not draw the card`. */
 export const DRAWING_CARD = "Drawing the card.";
 export const CARD_FAILED = "The card could not be drawn. Try the download again.";
-export const savedCopy = (hash: string): string => `Saved to your downloads as ratio-${hash.slice(0, 4)}.png.`;
+/** The saved line names the file exactly as saveCard names it: the photo's hash, and the look when the card is a look's. */
+export const savedCopy = (hash: string, look?: string): string => `Saved to your downloads as ${cardFileName({ hash, look })}.`;
 
 /** The read on screen, as far as a card needs it. */
 export interface SaveTarget {
@@ -29,7 +37,18 @@ export interface SaveTarget {
   /** Resolves once the last try or "as worn" in flight has landed. */
   settled(): Promise<void>;
   credit: string | null;
+  /** Changes in the same tick a look is tried or removed (ui/looks.ts). Absent: the view never changes. */
+  view?(): number;
 }
+
+/** A read in one view: what a card, and the line about it, belong to. */
+interface Screen {
+  target: SaveTarget;
+  view: number;
+}
+
+const screenOf = (target: SaveTarget): Screen => ({ target, view: target.view?.() ?? 0 });
+const sameScreen = (a: Screen | null, b: Screen | null): boolean => a !== null && b !== null && a.target === b.target && a.view === b.view;
 
 export interface ButtonLike {
   disabled: boolean;
@@ -46,15 +65,15 @@ export const RESET_MS = 1600;
 
 /** An export holding the lock, from the press until "Downloaded" has had its time. */
 interface Held {
-  /** The read it saves: a press for any other read is never answered with this export's lines. */
-  target: SaveTarget;
+  /** The read and view it saves: a press for any other is never answered with this export's lines. */
+  screen: Screen;
   drawing: boolean;
   /** The line it stands at: drawing, then saved. */
   line: string;
   /** Status lines of presses dropped while it was drawing, each with the read on screen at its press. */
-  echoed: Map<NoteLike, SaveTarget | null>;
-  /** The latest press, while drawing, for a read other than this one: it starts once this card is done. */
-  next: { button: ButtonLike; note: NoteLike; target: SaveTarget } | null;
+  echoed: Map<NoteLike, Screen | null>;
+  /** The latest press, while drawing, for a read or view other than this one: it starts once this card is done. */
+  next: { button: ButtonLike; note: NoteLike; screen: Screen } | null;
 }
 
 /** True when focus has gone nowhere in particular (the disabled button dropped it), so giving it back moves nobody. */
@@ -76,22 +95,23 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
     // The read being saved is fixed now: a new read started during the wait
     // must not swap in (its own recolour was never waited on).
     const c = deps.current();
+    const at = c ? screenOf(c) : null;
     if (held?.drawing) {
       // Held S, a double tap, the other button: one export at a time. The
       // dropped press says a card is being drawn, and hears how it ended.
       note.textContent = DRAWING_CARD;
-      if (c && c !== held.target) held.next = { button, note, target: c };
-      else held.echoed.set(note, c);
+      if (at && !sameScreen(at, held.screen)) held.next = { button, note, screen: at };
+      else held.echoed.set(note, at);
       return;
     }
-    if (held && (c === null || c === held.target)) {
-      // "Downloaded" still shows for this very read: say so again, save nothing more.
+    if (held && (at === null || sameScreen(at, held.screen))) {
+      // "Downloaded" still shows for this very read and view: say so again, save nothing more.
       note.textContent = held.line;
       return;
     }
-    // Nothing held, or the card saved was another read's: this one starts now.
-    if (!c) return;
-    const mine: Held = { target: c, drawing: true, line: DRAWING_CARD, echoed: new Map(), next: null };
+    // Nothing held, or the card saved was another read's or view's: this one starts now.
+    if (!c || !at) return;
+    const mine: Held = { screen: at, drawing: true, line: DRAWING_CARD, echoed: new Map(), next: null };
     held = mine;
     // A button still reading "Downloaded" or "Could not draw the card"
     // keeps its real label, and the focus it had when that press began.
@@ -110,9 +130,10 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
       // A look still being recoloured lands first: the card matches the photo and its note.
       await c.settled();
       const shown = c.shown();
-      await deps.save({ still: c.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: c.credit ?? undefined });
+      const content = cardContentOf(shown, c.figure.still(), c.credit);
+      await deps.save(content);
       saved = true;
-      final = savedCopy(shown.hash);
+      final = savedCopy(content.hash, content.look);
       button.textContent = "Downloaded";
     } catch {
       button.textContent = "Could not draw the card";
@@ -124,9 +145,10 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
     // the way a new read clears the save row: no line ever confirms a card
     // of a read not on screen. A press dropped for this same read hears the
     // same ending; one dropped for another read is cleared too.
-    const stillShown = deps.current() === c;
+    const now = deps.current();
+    const stillShown = sameScreen(now ? screenOf(now) : null, at);
     note.textContent = stillShown ? final : "";
-    for (const [n, pressedFor] of mine.echoed) n.textContent = pressedFor === c ? final : "";
+    for (const [n, pressedFor] of mine.echoed) n.textContent = stillShown && sameScreen(pressedFor, at) ? final : "";
     const restore = () => {
       resets.delete(button);
       if (held === mine) held = null;
@@ -136,12 +158,13 @@ export function cardSaver(deps: { current: () => SaveTarget | null; save: (c: Ca
       if (hadFocus && focusIsLost()) button.focus();
     };
     if (!stillShown) {
-      // Its read is gone from the screen: "Downloaded" would speak for the
-      // read now shown, so the button reads as itself at once, and the read
-      // now shown may be saved straight away.
+      // Its read or view is gone from the screen: "Downloaded" would speak
+      // for what is shown now, so the button reads as itself at once, and
+      // what is shown now may be saved straight away.
       restore();
       const next = mine.next;
-      if (next && next.target === deps.current()) await download(next.button, next.note);
+      const after = deps.current();
+      if (next && sameScreen(after ? screenOf(after) : null, next.screen)) await download(next.button, next.note);
       return;
     }
     // A failure saved nothing, so there is nothing to protect: a retry may

@@ -7,6 +7,7 @@
 import { shownColour } from "../engine/constants";
 import { byName, colourLabel } from "../engine/names";
 import type { AdviceLine, Bins, LineState } from "../engine/rules";
+import type { Shown } from "./looks";
 import { STATE_WORDS } from "./rows";
 
 const W = 1080;
@@ -57,10 +58,53 @@ export interface CardContent {
   note?: string;
   lines: AdviceLine[];
   bins: Bins;
+  /** The photo's own reading hash, on every card of that photo, look or not (T10). */
   hash: string;
   engine: string;
+  /** The tried look, in everyday words ("navy for the lower piece"), when the card is a look's. */
+  look?: string;
   /** Credit for a sample painting, when the photo is one. */
   credit?: string;
+}
+
+/**
+ * The card's footer promise. It names the photo's own hash on every card of
+ * that photo, so the as-worn card and a look's card agree (T10, R-09: a
+ * look's card said f8eb, its look hash, where the as-worn card said 0ef2),
+ * and a look's card says which look it shows.
+ */
+export const cardHashSegments = (c: Pick<CardContent, "hash" | "engine" | "look">): string[] => [`Same photo, same reading. ${c.hash.slice(0, 4)}`, c.engine, ...(c.look ? [`look: ${c.look}`] : [])];
+export const cardHashLine = (c: Pick<CardContent, "hash" | "engine" | "look">): string => cardHashSegments(c).join(" · ");
+
+/** The file the card is saved as: the photo's hash, plus the look as a filename-safe slug when the card is a look's. */
+export function cardFileName(c: Pick<CardContent, "hash" | "look">): string {
+  const hash4 = c.hash.slice(0, 4).replace(/[^0-9a-f]/gi, "");
+  const slug = (c.look ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 48)
+    .replace(/^-+|-+$/g, "");
+  return `ratio-${hash4}${slug ? `-${slug}` : ""}.png`;
+}
+
+/** What the card of what is on screen holds: the photo's hash (never a look's own) and the look's name. */
+export function cardContentOf(shown: Shown, still: OffscreenCanvas, credit: string | null): CardContent {
+  return { still, title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.photoHash ?? shown.hash, engine: shown.engine, look: shown.look, credit: credit ?? undefined };
+}
+
+/** Joins segments with " · " into lines no wider than maxWidth, breaking only between segments (a segment too long alone keeps a line of its own). */
+export function joinToWidth(segments: string[], measure: (s: string) => number, maxWidth: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const seg of segments) {
+    const next = line ? `${line} · ${seg}` : seg;
+    if (line && measure(next) > maxWidth) {
+      lines.push(line);
+      line = seg;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
@@ -165,9 +209,15 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
   ctx.fillRect(M, H - 104, W - 2 * M, 1);
   ctx.fillStyle = k.muted;
   ctx.font = `500 16px ${DATA}`;
-  ctx.fillText(`Same photo, same reading. ${c.hash.slice(0, 4)} · ${c.engine}`, M, H - 68);
+  const site = "ratio.voidvision.org · made in the tab";
+  const room = W - 2 * M - ctx.measureText(site).width - 32;
+  // One line as worn; a look's name may take a second line, between the
+  // footer rule and the credit.
+  const hashLines = joinToWidth(cardHashSegments(c), (t) => ctx.measureText(t).width, room).slice(0, 2);
+  const firstY = hashLines.length > 1 ? H - 82 : H - 68;
+  hashLines.forEach((l, i) => ctx.fillText(l, M, firstY + i * 20));
   ctx.textAlign = "right";
-  ctx.fillText("ratio.voidvision.org · made in the tab", W - M, H - 68);
+  ctx.fillText(site, W - M, firstY);
   ctx.textAlign = "left";
   if (c.credit) {
     ctx.font = `400 13px ${BODY}`;
@@ -183,7 +233,7 @@ export async function saveCard(c: CardContent): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `ratio-${c.hash.slice(0, 4)}.png`;
+  a.download = cardFileName(c);
   document.body.append(a);
   a.click();
   a.remove();
