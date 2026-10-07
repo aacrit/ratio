@@ -931,6 +931,16 @@ body[data-compare="on"] .figure {
   gap: 24px;
 }
 
+/* Compact (T8): the same sections, closer together, so the rule rows (the
+   point of turning it on) start sooner. */
+[data-compact] .reading {
+  gap: 10px;
+}
+
+[data-compact] .sheet-head {
+  gap: 8px;
+}
+
 .sheet-head {
   display: grid;
   gap: 12px;
@@ -952,6 +962,86 @@ body[data-compare="on"] .figure {
   font-size: clamp(1.6rem, 6vw, 2.3rem);
   line-height: 1.15;
   max-width: 34ch;
+}
+
+/* display: contents outside Compact: the wrapper adds no box, so the
+   verdict sits exactly where it always has in .peek-cluster's grid (T8:
+   "with Compact off, the default first view stays as designed"). */
+.verdict-wrap {
+  display: contents;
+}
+
+.verdict-compact-toggle {
+  display: none;
+}
+
+/* Compact (T8, R-09: the headline filled the fold at every width because
+   Compact folded the rule rows but never it). The full verdict is replaced
+   by one line, read back out of it (ui/headline.ts: never a second source
+   of truth), with the ratio sitting beside it instead of under it so the
+   pair costs one row of height, not two. The full sentence is a tap away. */
+[data-compact] .peek-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+[data-compact] .peek-cluster > .session-strip {
+  flex: 0 0 100%;
+}
+
+[data-compact] .verdict-wrap {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+[data-compact] .verdict-compact-toggle {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.verdict-compact-text {
+  display: block;
+  font-family: var(--font-display);
+  font-variation-settings: var(--display-settings);
+  font-size: clamp(1.15rem, 3.4vw, 1.5rem);
+  line-height: 1.25;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-compact] #verdict {
+  display: none;
+}
+
+/* The disclosure: a tap on the compact line reveals the full sentence
+   underneath it, kept smaller than its non-Compact size (spec.md: the
+   headline's type scale may be tightened) so opening it once does not
+   refill the fold it was just cleared of. */
+[data-compact] .verdict-wrap[data-open] #verdict {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  max-width: 48ch;
+}
+
+[data-compact] .ratio-row {
+  flex: none;
+  padding-top: 0;
 }
 
 .ratio-row {
@@ -1336,6 +1426,20 @@ body[data-compare="on"] .figure {
   margin-bottom: 12px;
 }
 
+/* The heading ("Looks to try") already says what the list is; Compact
+   drops the sentence under it the same way it drops a row's own prose. */
+[data-compact] .looks-intro {
+  display: none;
+}
+
+[data-compact] .look-list {
+  gap: 2px;
+}
+
+[data-compact] .section-title {
+  margin-bottom: 4px;
+}
+
 .look-list {
   list-style: none;
   margin: 0;
@@ -1464,6 +1568,40 @@ body[data-compare="on"] .figure {
   font: 500 0.72rem var(--font-data);
   letter-spacing: 0.04em;
   color: var(--color-cream-muted);
+}
+
+/* Compact (T8): a look card still names the look and keeps "Try it" and
+   "Why?" in reach, but drops the moves and changes prose that Compact's own
+   rows already fold elsewhere, and sits on one line (swatches and title
+   beside the button) instead of two stacked ones, so each card costs one
+   short row, not three. */
+[data-compact] .look {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 5px 12px;
+}
+
+[data-compact] .look-moves,
+[data-compact] .look-changes {
+  display: none;
+}
+
+[data-compact] .look-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-compact] .look-title {
+  font-size: 0.95rem;
+}
+
+[data-compact] .look-foot {
+  margin-top: 0;
 }
 
 /* ---- Feedback and the foot ---------------------------------------------------- */

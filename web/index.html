@@ -107,7 +107,12 @@
           <header class="sheet-head" id="sheet-head" tabindex="-1">
             <div class="peek-cluster" data-peek>
               <div id="session-strip" class="session-strip" hidden aria-label="This session's reads"></div>
-              <p id="verdict" class="verdict"></p>
+              <div class="verdict-wrap" id="verdict-wrap">
+                <button id="verdict-compact-toggle" class="verdict-compact-toggle" type="button" aria-expanded="false" aria-controls="verdict" hidden>
+                  <span id="verdict-compact-text" class="verdict-compact-text"></span>
+                </button>
+                <p id="verdict" class="verdict"></p>
+              </div>
               <div class="ratio-row">
                 <span id="hero-n" class="hero-n" data-ratio></span>
                 <p id="hero-eyebrow" class="eyebrow hero-eyebrow"></p>

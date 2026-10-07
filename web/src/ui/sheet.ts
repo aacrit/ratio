@@ -14,6 +14,35 @@ export type Snap = "peek" | "half" | "full";
 
 const WIDE = "(min-width: 1024px)";
 
+/**
+ * The grip's accessible state and label for each resting place (T8, R-09:
+ * the handle said "Expand the reading" with aria-expanded="true" while only
+ * half open - the same text at two different states, and a value that
+ * claimed it was already open while still offering to open it). Each of
+ * the three states now gets its own label, naming what the next press does;
+ * aria-expanded is false only at the fully collapsed peek.
+ */
+export function gripLabel(snap: Snap): { expanded: boolean; label: string } {
+  if (snap === "peek") return { expanded: false, label: "Expand the reading" };
+  if (snap === "half") return { expanded: true, label: "Expand the reading fully" };
+  return { expanded: true, label: "Collapse the reading" };
+}
+
+/**
+ * What a wheel or trackpad scroll over the sheet body should do. Below
+ * full, the body's overflow stays hidden (design/BRAND.md: "full ... and
+ * only then does it scroll inside"), so a scroll gesture there is the same
+ * cue a swipe up already is through the pointer handlers below: raise the
+ * sheet to full, where the rest of the reading (Shortcuts, Download,
+ * feedback) is reachable by scrolling in place. Once full, this returns
+ * null and the native scroll takes over. Scrolling back up (deltaY <= 0)
+ * is left alone: there is nothing to collapse on a wheel.
+ */
+export function wheelTarget(snap: Snap, deltaY: number): Snap | null {
+  if (snap === "full" || deltaY <= 0) return null;
+  return "full";
+}
+
 export class Sheet {
   private y = 0;
   private anim: Animation | null = null;
@@ -31,7 +60,7 @@ export class Sheet {
   ) {
     this.measure();
     this.place(this.stops.peek);
-    this.element.dataset.snap = "peek";
+    this.setSnap("peek");
     addEventListener("resize", () => this.measure(true));
     this.wide.addEventListener("change", () => this.measure(true));
     grip.addEventListener("click", () => {
@@ -49,6 +78,12 @@ export class Sheet {
     element.addEventListener("pointermove", (e) => this.move(e));
     element.addEventListener("pointerup", (e) => this.up(e));
     element.addEventListener("pointercancel", (e) => this.up(e));
+    // A wheel or trackpad scroll reaches the rest of the reading the same
+    // way a swipe up already does (T8, Sam's re-run: "can't be reached by
+    // swipe or wheel" - the pointer handlers below already raise the sheet
+    // on a drag; wheel input needs the same escalation since it never
+    // reaches the pointer handlers).
+    body.addEventListener("wheel", (e) => this.wheel(e), { passive: false });
     // Test hook, and a way for the page to ask for a resting place by event.
     element.addEventListener("ratio:snap", (e) => this.snap((e as CustomEvent<Snap>).detail));
   }
@@ -103,11 +138,20 @@ export class Sheet {
   private setSnap(s: Snap): void {
     this._snap = s;
     this.element.dataset.snap = s;
-    this.grip.setAttribute("aria-expanded", String(s !== "peek"));
-    this.grip.setAttribute("aria-label", s === "full" ? "Collapse the reading" : "Expand the reading");
-    // The body scrolls only when the sheet is fully up; below that a drag moves the sheet.
+    const { expanded, label } = gripLabel(s);
+    this.grip.setAttribute("aria-expanded", String(expanded));
+    this.grip.setAttribute("aria-label", label);
+    // The body scrolls only when the sheet is fully up; below that a drag (or a wheel, below) moves the sheet.
     this.body.style.overflowY = s === "full" || this.wide.matches ? "auto" : "hidden";
     if (s !== "full") this.body.scrollTop = 0;
+  }
+
+  private wheel(e: WheelEvent): void {
+    if (this.wide.matches) return;
+    const target = wheelTarget(this._snap, e.deltaY);
+    if (!target) return;
+    e.preventDefault();
+    this.snap(target);
   }
 
   /** Moves to a resting place, carrying `velocity` (px per second, downward positive) into the spring. */

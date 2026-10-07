@@ -566,6 +566,70 @@ async function run(name, viewport) {
   // aria-expanded must follow the toggle: every unopened row now says collapsed.
   const expandedAfterCompact = await page.$$eval(".row .row-h", (hs) => hs.map((h) => h.getAttribute("aria-expanded")));
   if (expandedAfterCompact.some((v) => v !== "false")) errors.push(`after turning Compact on, row heads still say aria-expanded ${expandedAfterCompact.join(",")}`);
+
+  // T8 (R-09, UX pass 3): Compact used to fold the rule rows but never the
+  // headline above them, so the first row sat below the fold at every
+  // width regardless. The headline now folds to one line (the verdict word
+  // and the one change, beside the ratio), with the full sentence a tap
+  // away.
+  const compactHeadlineText = (await page.textContent("#verdict-compact-text"))?.trim();
+  const compactToggleHidden = await page.isHidden("#verdict-compact-toggle");
+  note(`${name}: Compact headline: "${compactHeadlineText}" (toggle hidden: ${compactToggleHidden})`);
+  if (compactToggleHidden) errors.push("Compact did not reveal the one-line headline toggle");
+  if (!compactHeadlineText) errors.push("Compact's one-line headline is empty with a read on screen");
+  if (!phone) {
+    const firstRowYCompact = await page.evaluate(() => document.querySelector(".row")?.getBoundingClientRect().top ?? null);
+    note(`${name}: Compact on desktop (1280): first rule row at y=${firstRowYCompact}`);
+    if (firstRowYCompact === null || firstRowYCompact > 400) errors.push(`Compact on desktop left the first rule row at y=${firstRowYCompact}, not above 400`);
+  } else {
+    await snap("half");
+    await page.waitForTimeout(400);
+    const heroVisibleAtHalf = await page.evaluate(() => {
+      const r = document.getElementById("hero-n").getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= innerHeight;
+    });
+    note(`${name}: Compact on phone, sheet at half: ratio visible without scrolling: ${heroVisibleAtHalf}`);
+    if (!heroVisibleAtHalf) errors.push("Compact on phone at half did not keep the ratio visible");
+    await shot("13b-compact-half");
+    // The disclosure: tapping the compact line reveals the full sentence underneath it.
+    await page.click("#verdict-compact-toggle");
+    await page.waitForTimeout(200);
+    const disclosureOpen = await page.evaluate(() => getComputedStyle(document.getElementById("verdict")).display !== "none");
+    note(`${name}: tapping the compact headline discloses the full sentence: ${disclosureOpen}`);
+    if (!disclosureOpen) errors.push("tapping the compact headline did not disclose the full sentence");
+    await page.click("#verdict-compact-toggle"); // close it again
+    await page.waitForTimeout(200);
+  }
+
+  // T8 (Sam's re-run): at half height the sheet body's overflow stays
+  // hidden until full (design/BRAND.md: "only then does it scroll
+  // inside"), so a wheel/trackpad scroll there used to be a dead end,
+  // leaving Shortcuts, Download and feedback out of reach without finding
+  // the small handle. A wheel now reaches full the same way a swipe up
+  // already does; the grip's label and aria-expanded change with it.
+  if (phone) {
+    await snap("half");
+    await page.waitForTimeout(400);
+    const gripBefore = { expanded: await page.getAttribute("#grip", "aria-expanded"), label: await page.getAttribute("#grip", "aria-label") };
+    await page.evaluate(() => document.getElementById("sheet-body").dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 120 })));
+    await page.waitForTimeout(500);
+    const snapAfterWheel = await page.evaluate(() => document.getElementById("sheet").dataset.snap);
+    const gripAfter = { expanded: await page.getAttribute("#grip", "aria-expanded"), label: await page.getAttribute("#grip", "aria-label") };
+    note(`${name}: a wheel scroll at half: grip before ${JSON.stringify(gripBefore)}, sheet after "${snapAfterWheel}", grip after ${JSON.stringify(gripAfter)}`);
+    if (snapAfterWheel !== "full") errors.push(`a wheel scroll at half left the sheet at "${snapAfterWheel}", not full`);
+    if (gripAfter.label === gripBefore.label) errors.push("the grip's label did not change between half and full");
+    await page.evaluate(() => {
+      const body = document.getElementById("sheet-body");
+      body.scrollTo(0, body.scrollHeight);
+    });
+    await page.waitForTimeout(300);
+    const shortcutsReachable = await page.isVisible("#shortcuts-help");
+    note(`${name}: Shortcuts reachable by scrolling the body once the wheel raised the sheet to full: ${shortcutsReachable}`);
+    if (!shortcutsReachable) errors.push("scrolling the sheet body at full did not reach Shortcuts");
+    await snap("half"); // leave the sheet where the rest of this run expects it
+    await page.waitForTimeout(400);
+  }
+
   if (phone) {
     await snap("full");
     await page.waitForTimeout(500);
