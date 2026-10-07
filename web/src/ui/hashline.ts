@@ -11,8 +11,8 @@
 // Pure and DOM-free: the tests hold every surface to it.
 
 export interface HashLineOf {
-  /** The photo's own reading hash (the outfit as worn). */
-  photoHash: string;
+  /** The photo's own reading hash (the outfit as worn), or null when it is not known (a stored look without its as-worn reading): then no photo hash is printed, never the look's in its place. */
+  photoHash: string | null;
   engine: string;
   /** The tried look: its own reading hash and its title. */
   look?: { hash: string; name: string } | null;
@@ -22,7 +22,8 @@ const hex4 = (h: string) => h.slice(0, 4);
 
 /** The hash line in parts, the order they are read in; the card wraps between them, never inside one. */
 export function hashSegments(h: HashLineOf): string[] {
-  return [`Same photo, same reading. ${hex4(h.photoHash)}`, ...(h.look ? [`look ${hex4(h.look.hash)}: ${h.look.name}`] : []), h.engine];
+  const photo = h.photoHash !== null ? [`Same photo, same reading. ${hex4(h.photoHash)}`] : [];
+  return [...photo,...(h.look ? [`look ${hex4(h.look.hash)}: ${h.look.name}`] : []), h.engine];
 }
 
 /** The hash line as one string, for the screen and the Rulebook's chip. */
@@ -37,15 +38,19 @@ export interface ShownHashes {
 }
 
 /** The hash line's inputs for what is on screen, as worn or a tried look. */
-export const hashesOfShown = (s: ShownHashes): HashLineOf => ({
+export const hashesOfShown = (s: ShownHashes): HashLineOf & { photoHash: string } => ({
   photoHash: s.photoHash ?? s.hash,
   engine: s.engine,
   look: s.photoHash !== undefined && s.look ? { hash: s.hash, name: s.look } : null,
 });
 
-/** The hash line's inputs for the Rulebook's hand-off (rules/handoff.ts): the as-worn hash, and the look's when one was tried last. */
-export const hashesOfLastRead = (r: { engine: string; hash: string; look: string | null; worn?: { hash: string } }): HashLineOf => ({
-  photoHash: r.worn?.hash ?? r.hash,
-  engine: r.engine,
-  look: r.look !== null && r.worn ? { hash: r.hash, name: r.look } : null,
-});
+/**
+ * The hash line's inputs for the Rulebook's hand-off (rules/handoff.ts): the
+ * as-worn hash, and the look's when one was tried last. A look stored without
+ * its as-worn reading (withWorn could not attach one) is printed as the look,
+ * with no photo hash: its hash is never passed off as the photo's.
+ */
+export const hashesOfLastRead = (r: { engine: string; hash: string; look: string | null; worn?: { hash: string } }): HashLineOf => {
+  if (r.look === null) return { photoHash: r.hash, engine: r.engine, look: null };
+  return { photoHash: r.worn?.hash ?? null, engine: r.engine, look: { hash: r.hash, name: r.look } };
+};

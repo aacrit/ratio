@@ -107,8 +107,8 @@ export const verdictOf = (lines: Read["reading"]["lines"], looks: Look[] = [], b
 /** The sheet head's eyebrow under the hero numeral: the rule and its state. */
 export const heroEyebrowOf = (lines: Read["reading"]["lines"]) => `${lines[0].title}, ${stateLabel(lines[0])}`;
 
-/** The card's note while the tuck is shown on the as-worn photo: the break line moved, the readings did not. */
-export const TUCK_NOTE = "Tuck shown: the break line on the photo is where a front tuck would put it. The readings are as worn.";
+/** The card's note while the proportion advice's change is shown on the as-worn photo (a tuck, a belt or a shorter upper piece all move the break to the waist): the break line moved, the readings did not. */
+export const TUCK_NOTE = "Shown with the break at the waist, where the advice moves it. The readings are as worn.";
 
 /** The sheet head's three texts. */
 export interface HeadEls {

@@ -246,6 +246,92 @@ describe("the tuck shown on the photo is a change of view, and the card marks it
   });
 });
 
+describe("the shown change is worded for every band (T10 review 2)", () => {
+  it("the card note and the button name no tuck or belt: every band's change moves the break to the waist", async () => {
+    const { TUCK_NOTE } = await import("../web/src/ui/looks");
+    expect(TUCK_NOTE).toBe("Shown with the break at the waist, where the advice moves it. The readings are as worn.");
+    expect(TUCK_NOTE).not.toMatch(/tuck|belt/i);
+    const main = readFileSync(new URL("../web/src/main.ts", import.meta.url), "utf8");
+    expect(main).toContain('"Show the change"');
+    expect(main).not.toContain('"Show the tuck"');
+  });
+});
+
+describe("a stored look without its as-worn reading never passes its hash off as the photo's", () => {
+  it("prints the look as the look, with no photo hash", () => {
+    const lone = lastReadOf({ engine: ENGINE_VERSION, hash: "f8ebbbbb", source: "photo", look: TITLE, bins, lines: readBins(bins) });
+    const line = hashLine(hashesOfLastRead(lone));
+    expect(line).toBe(`look f8eb: ${TITLE} · ${ENGINE_VERSION}`);
+    expect(line).not.toContain("Same photo");
+  });
+});
+
+describe("the signature's flash comes from the label landing (Figure.play onLanded)", () => {
+  let browser: ReturnType<typeof installFakeBrowser>;
+  beforeEach(() => {
+    browser = installFakeBrowser();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const measure = { top: 10, bottom: 90, breakRow: 50, waistRow: 40, left: 30, right: 70, centerX: 50, topColour: { L: 0.8, a: 0, b: 0.05 }, bottomColour: { L: 0.2, a: 0, b: 0 }, fit: null };
+  async function figure() {
+    const { Figure } = await import("../web/src/overlay");
+    const { FakeCanvas, solid } = await import("./helpers/fake-canvas");
+    return new Figure(new FakeCanvas() as unknown as HTMLCanvasElement, solid(100, 100, [20, 20, 20, 255]), { width: 100, height: 100 }, measure as never, { engine: ENGINE_VERSION, bins, lines: readBins(bins) });
+  }
+  const labelOf = (f: object) => (f as unknown as { scene: { label: number | null } }).scene.label;
+  /** Advances time 16 ms a frame, with its microtasks, until `done` or 6 s pass. */
+  async function run(done: () => boolean) {
+    for (let i = 0; i < 400 && !done(); i++) {
+      vi.advanceTimersByTime(16);
+      browser.frames.flush(performance.now());
+      for (let k = 0; k < 5; k++) await Promise.resolve();
+    }
+  }
+
+  it("runs once, in the frame the label lands, never before it, even past the 2.5 s cap", async () => {
+    const f = await figure();
+    const atLanding: (number | null)[] = [];
+    let finished = false;
+    void f.play({ onLanded: () => atLanding.push(labelOf(f)) }).then(() => (finished = true));
+    await run(() => finished);
+    expect(finished).toBe(true);
+    expect(atLanding).toEqual([bins.proportion]); // the label was already there when it fired
+  });
+
+  it("a key or tap that skips the signature lands it at once", async () => {
+    const f = await figure();
+    const atLanding: (number | null)[] = [];
+    let finished = false;
+    void f.play({ onLanded: () => atLanding.push(labelOf(f)) }).then(() => (finished = true));
+    f.skipReveal();
+    await run(() => finished);
+    expect(atLanding).toEqual([bins.proportion]);
+  });
+
+  it("never runs for a quick settle", async () => {
+    const f = await figure();
+    const landed = vi.fn();
+    let finished = false;
+    void f.play({ quick: true, onLanded: landed }).then(() => (finished = true));
+    await run(() => finished);
+    expect(finished).toBe(true);
+    expect(landed).not.toHaveBeenCalled();
+  });
+
+  it("main.ts flashes the hero from onLanded, not after the reveal's 2.5 s race", () => {
+    const main = readFileSync(new URL("../web/src/main.ts", import.meta.url), "utf8");
+    const body = main.slice(main.indexOf("const showRead = async"), main.indexOf("const selectAndShow"));
+    expect(body).toMatch(/figure\.play\(\{ quick: opts\.quick, onLanded \}\)/);
+    expect(body.match(/flashNumeral\(heroN\)/g)).toHaveLength(1);
+    expect(body.indexOf("flashNumeral(heroN)")).toBeLessThan(body.indexOf("figure.play("));
+  });
+});
+
 describe("the saved line only ever describes the card for what is on screen", () => {
   beforeEach(() => installFakeBrowser());
   afterEach(() => {

@@ -284,7 +284,11 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
       const tuck = document.createElement("button");
       tuck.type = "button";
       tuck.className = "btn ghost small";
-      tuck.textContent = "Show the tuck";
+      // Neutral, whatever the band advises (a tuck, a belt, a shorter upper
+      // piece): every one of them moves the break to the waist, which is
+      // what this shows (T10 review 2).
+      tuck.textContent = "Show the change";
+      tuck.dataset.action = "show-change";
       let on = false;
       tuck.addEventListener("click", () => {
         on = !on;
@@ -292,7 +296,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
         // and the card marks the tuck, since the break line it draws moved.
         looksApi?.setTuck(on);
         figure.showTuck(on);
-        tuck.textContent = on ? "Show it as worn" : "Show the tuck";
+        tuck.textContent = on ? "Show it as worn" : "Show the change";
       });
       return { extra: { proportion: tuck } };
     };
@@ -344,17 +348,23 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     const skip = () => figure.skipReveal();
     addEventListener("keydown", skip, { signal: revealAbort.signal });
     addEventListener("pointerdown", skip, { signal: revealAbort.signal });
+    // The session's one signature lands its numeral on the photo: the hero
+    // numeral (already final) flashes in that same frame, from play() itself,
+    // so the 2.5 s cap below can never fire it early (T10 review 2). Only
+    // while this read, as worn, is still the one on screen. Later reads
+    // appear settled and do not flash.
+    const viewAtReveal = looks.view();
+    const onLanded = () => {
+      if (!opts.quick && gen === showGen && looks.view() === viewAtReveal) flashNumeral(heroN);
+    };
     try {
-      await Promise.race([figure.play({ quick: opts.quick }), new Promise((r) => setTimeout(r, 2500))]);
+      await Promise.race([figure.play({ quick: opts.quick, onLanded }), new Promise((r) => setTimeout(r, 2500))]);
     } finally {
       revealAbort.abort();
       if (gen === showGen) delete document.body.dataset.revealing;
     }
     if (gen !== showGen) return; // a newer read started while this one was revealing: let it finish its own work
     for (const b of lookButtons) b.disabled = false;
-    // The session's one signature lands its numeral on the photo now: the
-    // hero numeral (already final) flashes with it. Later reads appear settled.
-    if (!opts.quick) flashNumeral(heroN);
     rendered.land();
     renderStrip(sessionStrip, sessionReads(), read.hash, (index) => void selectAndShow(index));
     // Skip only the URL write when a route change happened mid-reveal: the

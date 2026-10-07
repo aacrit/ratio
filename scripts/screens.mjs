@@ -159,6 +159,27 @@ async function readPhotoShot(page, name, id, snap, phone, errors) {
   const heroAtShot = heroProblem(await page.textContent("#hero-n"), { pair: id === "p1", expected: firstRow });
   if (heroAtShot) errors.push(`${id}: the hero numeral in the 9-${id} shot ${heroAtShot}`);
   await shot(page, name, `9-${id}`);
+
+  // T10 review 2: the proportion advice's change shown on the photo is a
+  // change of view; its card says so, and the saved line names that card.
+  const change = await page.$('[data-action="show-change"]');
+  if (change) {
+    await change.click();
+    await page.waitForTimeout(1200); // the break line glides to the waist
+    const label = (await change.textContent())?.trim();
+    const [card] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), page.click("#save-card")]);
+    const file = path.join(out, `${name}-9-${id}-change-card.png`);
+    await card.saveAs(file);
+    await page.waitForTimeout(300);
+    const saved = (await page.textContent("#save-note"))?.trim();
+    note(`${name}: ${id}: card saved with the change shown (${card.suggestedFilename()}); button "${label}"; saved line "${saved}"`);
+    if (label !== "Show it as worn") errors.push(`${id}: the change button reads "${label}" while the change is shown`);
+    if (!saved?.includes(card.suggestedFilename())) errors.push(`${id}: the saved line after a card with the change shown was "${saved}"`);
+    await change.click(); // back to as worn: the saved line must clear
+    await page.waitForTimeout(200);
+    const cleared = (await page.textContent("#save-note"))?.trim();
+    if (cleared) errors.push(`${id}: the saved line stayed after the change was hidden ("${cleared}")`);
+  } else note(`${name}: ${id}: no change to show (its proportion asks for none)`);
 }
 
 const shot = async (page, name, step) => {
@@ -349,6 +370,16 @@ async function run(name, viewport) {
     note(`${name}: #save-note after trying a look: "${afterTry}"`);
     if (afterTry) errors.push(`the saved line stayed under the button after a look was tried ("${afterTry}")`);
     await page.waitForTimeout(1500);
+    // T10 review 2: the Rulebook's chip, after a look, carries the very hash line Read shows for it.
+    const screenLine = (await page.textContent("#reading-hash"))?.trim() ?? "";
+    await page.click("#rules-tab");
+    await page.waitForTimeout(500);
+    const chipText = (await page.textContent("#yours-chip"))?.replace(/\s+/g, " ").trim() ?? "";
+    note(`${name}: Rulebook chip after a look: "${chipText}" (Read's hash line: "${screenLine}")`);
+    if (!chipText.includes(screenLine.replace(/\s+/g, " "))) errors.push(`the Rulebook chip after a look ("${chipText}") does not carry Read's hash line ("${screenLine}")`);
+    if (phone) await shot("5d-rules-chip-look");
+    await page.click("#back-to-read");
+    await page.waitForTimeout(600);
     if (await page.isVisible(".trying-back")) {
       await page.click(".trying-back"); // as worn again, so the chalk-only search below starts clean
       await page.waitForTimeout(600);
