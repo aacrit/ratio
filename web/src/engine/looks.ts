@@ -17,7 +17,7 @@
 //   no shoes in a new colour when no shoes were read; and every look shows
 //   at least one rule that changes, or it is not offered.
 
-import type { BinnedSwatch } from "./colour-rules";
+import { type BinnedSwatch, clearFits } from "./colour-rules";
 import { colourName, familyOf } from "./names";
 import { binShares, isNeutral } from "./constants";
 import { ACCENT_SHARE, CLEAR_HUE, type Piece, accentOf as accentIn, isShoes, pieceOf, pieces as placedPieces } from "./pieces";
@@ -164,7 +164,8 @@ function pieceName(b: Bins, i: number, p: ReturnType<typeof pieces>): string {
   const piece = pieceOf(i, p);
   if (piece !== "other") return PIECE_NAME[piece];
   const s = b.palette[i];
-  const name = `${cap(plain(s))} detail`;
+  // A small one (an accent's size or less) is a detail; a larger one is a piece of its own.
+  const name = `${cap(plain(s))} ${s.share > ACCENT_SHARE ? "piece" : "detail"}`;
   const twin = b.palette.some((x, j) => j !== i && x.share > 0 && pieceOf(j, p) === "other" && plain(x) === plain(s));
   return twin ? `${name} ${s.y < b.waist ? "above" : "below"} the waist` : name;
 }
@@ -243,7 +244,9 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
     // out" over a grey that had no hue): a colour loses its hue; a neutral
     // only changes value, and the reason names what that value does.
     const deep = 0.2;
-    options.push({ L: s.L, C: 0, h: 0, why: isNeutral(s) ? "the same value in a plainer neutral" : "a neutral at the piece's own lightness takes the hue out and keeps its value" });
+    // A neutral at the piece's own lightness, only for a colour: on a piece
+    // that is already a neutral it is the same neutral (sameColour), never offered.
+    if (!isNeutral(s)) options.push({ L: s.L, C: 0, h: 0, why: "a neutral at the piece's own lightness takes the hue out and keeps its value" });
     options.push({ L: deep, C: 0, h: 0, why: isNeutral(s) ? deeperNeutralWhy(b, i, p, deep) : "a deep neutral takes the hue out, and a neutral sits with any hue" });
     // Navy and denim: the two blues most wardrobes already have.
     const blue = "a low-chroma blue most wardrobes hold, behaves almost as a neutral";
@@ -288,7 +291,7 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
     // A muted red is still called red: only a real step down in chroma counts here.
-    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: `${pieceName(b, i, p)} muted to ${plain(o)}`, detail: `Step ${inSentence(pieceName(b, i, p))} down to a muted ${plain(o)}: one colour stays at full strength, the other steps back.`, ...(pieceOf(i, p) === "other" ? { of: inSentence(pieceName(b, i, p)) } : {}) });
+    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: pieceOf(i, p) === "other" ? `${pieceName(b, i, p)}, muted` : `${pieceName(b, i, p)} muted to ${plain(o)}`, detail: `Step ${inSentence(pieceName(b, i, p))} down to a muted ${plain(o)}: one colour stays at full strength, the other steps back.`, ...(pieceOf(i, p) === "other" ? { of: inSentence(pieceName(b, i, p)) } : {}) });
   }
 
   // Accent: a tenth of the area. The complement of the lead hue when the lead
@@ -322,6 +325,8 @@ const id = (moves: Move[]) =>
 
 /** The three best looks for these bins, best first. Empty when nothing improves the reading. */
 export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
+  // The harmony fit memo serves this reading's candidates only.
+  clearFits();
   const before = scoreOf(lines);
   const { moves: singles, pairs } = candidates(b, lines);
   const combos: Move[][] = singles.map((m) => [m]);

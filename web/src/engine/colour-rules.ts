@@ -104,11 +104,15 @@ function outsideTable(t: Template): Float64Array {
  * Fits already made, by template and the swatches' hues and shares in
  * order. The looks re-read hundreds of candidates that share most of a
  * palette, so the same fit is asked for again and again. A pure function's
- * result, so remembering it never changes a reading; the memo is emptied
- * when it grows large.
+ * result, so remembering it never changes a reading. It lasts one reading:
+ * suggestLooks empties it first (clearFits), and it is also emptied if it
+ * ever grows large.
  */
 const FITS = new Map<string, { rot: number; cost: number }>();
 const FITS_MAX = 50_000;
+
+/** Empties the fit memo, so it lasts one reading (looks.ts suggestLooks). */
+export const clearFits = (): void => FITS.clear();
 
 /** Best rotation of a template for the chromatic swatches: least area-weighted distance outside. */
 export function fitTemplate(chromatic: BinnedSwatch[], t: Template): { rot: number; cost: number } {

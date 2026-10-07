@@ -6,7 +6,7 @@
 
 import { expect } from "vitest";
 import { SATURATED_CHROMA, isNeutral } from "../../web/src/engine/constants";
-import { type Look, accentOf, accentWords, pieceOf, pieces, suggestLooks } from "../../web/src/engine/looks";
+import { ACCENT_SHARE, type Look, accentOf, accentWords, pieceOf, pieces, suggestLooks } from "../../web/src/engine/looks";
 import { measuredCopy } from "../../web/src/engine/measured";
 import { byName, colourName } from "../../web/src/engine/names";
 import { RULEBOOK } from "../../web/src/engine/rulebook";
@@ -172,6 +172,16 @@ function reasonProblems(s: Shown, look: Look, label: string, out: string[]): voi
     const say = (why: string) => out.push(`${label}: "${m.detail}" ${why}`);
     if (m.kind !== "recolour") continue;
     const was = s.bins.palette[m.swatch];
+    // No title says one colour name twice ("Bottle green detail muted to bottle green").
+    // Longer names are counted and taken out first, so "steel blue" does not count as a "blue".
+    let rest = m.title.toLowerCase();
+    for (const c of [...new Set([colourName(was.L, was.C, was.h), colourName(m.L, m.C, m.h)])].sort((x, y) => y.length - x.length)) {
+      const parts = rest.split(c.toLowerCase());
+      if (parts.length - 1 > 1) out.push(`${label}: "${m.title}" says ${c} ${parts.length - 1} times`);
+      rest = parts.join("|");
+    }
+    // A smaller piece over an accent's share is a piece, not a detail.
+    if (m.piece === "other" && /detail\b/.test(m.title) && was.share > ACCENT_SHARE) out.push(`${label}: "${m.title}" calls a ${was.share} share a detail`);
     if (/takes the hue out/.test(m.detail) && isNeutral(was)) say("but the piece was already a neutral");
     const anchor = m.detail.match(/(?:takes the hue of|sits beside|sits opposite|sits nearly opposite) the (.+?) in the outfit/)?.[1];
     if (anchor !== undefined && !names.has(anchor)) say(`but the outfit has no ${anchor}`);
