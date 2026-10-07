@@ -15,6 +15,8 @@
 
 import { hueGap } from "./color";
 import { CONTRAST_EDGES, NEUTRAL_CHROMA, SATURATED_CHROMA, SHARES_REFERENCE, SHARE_EDGES, VALUE_GAP_EDGES, VIBRATION, isNeutral, nearEdge } from "./constants";
+import { colourName } from "./names";
+import type { Garment, Recolour } from "./pieces";
 import type { AdviceLine } from "./rules";
 
 export interface BinnedSwatch {
@@ -41,6 +43,11 @@ function place(s: BinnedSwatch, waist: number): string {
   return "lower piece";
 }
 
+/** The garment a swatch's place names, for AdviceLine.recolours. */
+export function garmentAt(s: { y: number }, waist: number): Garment {
+  return s.y > 0.9 ? "shoes" : s.y < waist ? "upper" : "lower";
+}
+
 // ---- 1. Harmony: Matsuda's templates --------------------------------------
 
 interface Template {
@@ -65,15 +72,85 @@ export const TEMPLATES: Template[] = [
 
 /** Degrees outside the nearest sector, 0 when inside. */
 function outside(h: number, rot: number, t: Template): number {
-  return Math.min(...t.sectors.map(([off, w]) => Math.max(0, hueGap(h, (rot + off) % 360) - w / 2)));
+  let min = Infinity;
+  for (const [off, w] of t.sectors) {
+    const d = Math.max(0, hueGap(h, (rot + off) % 360) - w / 2);
+    if (d < min) min = d;
+  }
+  return min;
 }
+
+/**
+ * Degrees outside a template, by (rot − h) mod 360, for whole-degree hues.
+ * For an integer hue h and rotation rot, hueGap(h, (rot + off) % 360) is
+ * the circular distance between them, which depends only on that
+ * difference, so outside(h, rot, t) === outside(0, (rot − h) mod 360, t)
+ * exactly: the same integers, the same subtraction of w / 2. The looks
+ * re-read many candidates, and this table makes each fit a lookup instead
+ * of a recomputation without changing a single value.
+ */
+const OUTSIDE_TABLES = new Map<string, Float64Array>();
+function outsideTable(t: Template): Float64Array {
+  let table = OUTSIDE_TABLES.get(t.id);
+  if (!table) {
+    table = new Float64Array(360);
+    for (let d = 0; d < 360; d++) table[d] = outside(0, d, t);
+    OUTSIDE_TABLES.set(t.id, table);
+  }
+  return table;
+}
+
+/**
+ * Fits already made, by template and the swatches' hues and shares in
+ * order. The looks re-read hundreds of candidates that share most of a
+ * palette, so the same fit is asked for again and again. A pure function's
+ * result, so remembering it never changes a reading. It lasts one reading:
+ * suggestLooks empties it first (clearFits), and it is also emptied if it
+ * ever grows large.
+ */
+const FITS = new Map<string, { rot: number; cost: number }>();
+const FITS_MAX = 50_000;
+
+/** Empties the fit memo, so it lasts one reading (looks.ts suggestLooks). */
+export const clearFits = (): void => FITS.clear();
 
 /** Best rotation of a template for the chromatic swatches: least area-weighted distance outside. */
 export function fitTemplate(chromatic: BinnedSwatch[], t: Template): { rot: number; cost: number } {
+  let key = t.id;
+  for (const c of chromatic) key += `|${c.h}:${c.share}`;
+  const known = FITS.get(key);
+  if (known) return { rot: known.rot, cost: known.cost };
+  const fit = computeFit(chromatic, t);
+  if (FITS.size >= FITS_MAX) FITS.clear();
+  FITS.set(key, fit);
+  return { rot: fit.rot, cost: fit.cost };
+}
+
+function computeFit(chromatic: BinnedSwatch[], t: Template): { rot: number; cost: number } {
+  // The same arithmetic, in the same order, as a reduce over the swatches:
+  // each share over the total, times the degrees outside, summed left to right.
   const total = chromatic.reduce((s, c) => s + c.share, 0) || 1;
+  const n = chromatic.length;
+  // Each weight is the very division the reduce made, made once.
+  const weights = chromatic.map((c) => c.share / total);
+  const exact = chromatic.every((c) => Number.isInteger(c.h) && c.h >= 0 && c.h < 360);
   let best = { rot: 0, cost: Infinity };
+  if (exact) {
+    const table = outsideTable(t);
+    const hues = chromatic.map((c) => c.h);
+    for (let rot = 0; rot < 360; rot++) {
+      let cost = 0;
+      for (let k = 0; k < n; k++) {
+        const d = rot - hues[k];
+        cost = cost + weights[k] * table[d < 0 ? d + 360 : d];
+      }
+      if (cost < best.cost - 1e-9) best = { rot, cost };
+    }
+    return best;
+  }
   for (let rot = 0; rot < 360; rot++) {
-    const cost = chromatic.reduce((s, c) => s + (c.share / total) * outside(c.h, rot, t), 0);
+    let cost = 0;
+    for (let k = 0; k < n; k++) cost = cost + weights[k] * outside(chromatic[k].h, rot, t);
     if (cost < best.cost - 1e-9) best = { rot, cost };
   }
   return best;
@@ -82,7 +159,11 @@ export function fitTemplate(chromatic: BinnedSwatch[], t: Template): { rot: numb
 /** Area-weighted degrees outside a template that still counts as a fit. */
 export const FIT_TOLERANCE = 4;
 
-export function harmonyLine(palette: BinnedSwatch[], waist: number): AdviceLine {
+/** A swatch's recolour, named: the garment where it sits and its plain colour name. */
+const recolourOf = (s: BinnedSwatch, waist: number): Recolour => ({ garment: garmentAt(s, waist), colour: colourName(s.L, s.C, s.h) });
+
+/** The harmony line. `shoesKept`: another line keeps the shoes as worn, so the colour named outside the scheme is never the shoes while another piece can be. */
+export function harmonyLine(palette: BinnedSwatch[], waist: number, ctx: { shoesKept?: boolean } = {}): AdviceLine {
   const chromatic = palette.filter((s) => !isNeutral(s));
   const base = { rule: "harmony" as const, title: "Harmony", borderline: false };
   if (chromatic.length === 0) {
@@ -96,12 +177,15 @@ export function harmonyLine(palette: BinnedSwatch[], waist: number): AdviceLine 
   for (const t of TEMPLATES) {
     const fit = fitTemplate(chromatic, t);
     if (fit.cost <= FIT_TOLERANCE) {
-      return { ...base, borderline: nearFit(fit.cost), measured: `${t.id} · ${hueList(chromatic)}`, state: "golden", text: `The hues fit the ${t.name} template (${t.gloss}), a classic harmony. Keep any new piece inside it, or neutral.` };
+      // The row shows the plain name ("analogous"); Matsuda's letter stays in the Rulebook's maths (Mara, UX pass 3: clients don't know "V").
+      return { ...base, borderline: nearFit(fit.cost), measured: `${t.name} · ${hueList(chromatic)}`, state: "golden", text: `The hues fit the ${t.name} template (${t.gloss}), a classic harmony. Keep any new piece inside it, or neutral.` };
     }
   }
   // Nothing fits: find the colour whose removal lets the rest fit best, and name it.
-  let worst = chromatic[0], bestRest = Infinity;
-  for (const c of chromatic) {
+  const kept = (s: BinnedSwatch) => !!ctx.shoesKept && garmentAt(s, waist) === "shoes";
+  const candidates = chromatic.some((s) => !kept(s)) ? chromatic.filter((s) => !kept(s)) : chromatic;
+  let worst = candidates[0], bestRest = Infinity;
+  for (const c of candidates) {
     const rest = chromatic.filter((x) => x !== c);
     const cost = Math.min(...TEMPLATES.map((t) => fitTemplate(rest, t).cost));
     if (cost < bestRest) { bestRest = cost; worst = c; }
@@ -112,13 +196,20 @@ export function harmonyLine(palette: BinnedSwatch[], waist: number): AdviceLine 
     borderline: nearFit(closest),
     measured: hueList(chromatic),
     state: "advice",
+    recolours: [recolourOf(worst, waist)],
     text: `The hues fit no classic harmony template. The ${place(worst, waist)} at ${deg(worst.h)} sits outside the scheme the others share; a neutral there, or a hue beside one of the others, would settle it.`,
   };
 }
 
 // ---- 2. Value structure -----------------------------------------------------
 
-export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: number): AdviceLine {
+/**
+ * The value line. `shoes`: "free" when darker shoes may be suggested on
+ * their own; "matched" when the shoes carry the leg line on, so they darken
+ * only with the lower piece, as a pair; "none" when no shoes were read or
+ * they are the outfit's accent, kept as worn (T6).
+ */
+export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: number, ctx: { shoes: "free" | "matched" | "none" } = { shoes: "free" }): AdviceLine {
   const ls = palette.filter((s) => s.share >= 0.05).map((s) => s.L);
   const range = Math.max(...ls) - Math.min(...ls);
   const band = range < CONTRAST_EDGES[0] ? "low" : range < CONTRAST_EDGES[1] ? "medium" : "high";
@@ -131,14 +222,26 @@ export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: numbe
     return { ...base, state: "neutral", text: `The upper and lower pieces sit at nearly the same lightness (${pct(upperL)} and ${pct(lowerL)}), so the figure reads as one tonal shape and the eye looks for edges elsewhere. Overall, ${key}.` };
   }
   if (upperL < lowerL) {
-    return { ...base, state: gap > VALUE_GAP_EDGES[1] ? "advice" : "neutral", text: `Dark over light: the upper piece (lightness ${pct(upperL)}) is darker than the lower (${pct(lowerL)}), so the visual weight sits high. Painters ground a figure with the darker value below; a darker lower piece or darker shoes would do it. Overall, ${key}.` };
+    const advice = gap > VALUE_GAP_EDGES[1];
+    const fix = {
+      free: "a darker lower piece or darker shoes would do it",
+      matched: "a darker lower piece and shoes to match would do it",
+      none: "a darker lower piece would do it",
+    }[ctx.shoes];
+    const recolours: Recolour[] = ctx.shoes === "free" ? [{ garment: "lower" }, { garment: "shoes" }] : ctx.shoes === "matched" ? [{ garment: "lower" }, { garment: "shoes", matched: true }] : [{ garment: "lower" }];
+    return { ...base, state: advice ? "advice" : "neutral", recolours, text: `Dark over light: the upper piece (lightness ${pct(upperL)}) is darker than the lower (${pct(lowerL)}), so the visual weight sits high. Painters ground a figure with the darker value below; ${fix}. Overall, ${key}.` };
   }
   return { ...base, state: "neutral", text: `Light over dark (${pct(upperL)} above ${pct(lowerL)}): the weight sits low and the figure reads grounded. Overall, ${key}.` };
 }
 
 // ---- 3. Shares: 60-30-10 ----------------------------------------------------
 
-export function sharesLine(palette: BinnedSwatch[]): AdviceLine {
+/**
+ * The shares line. `accent`: the outfit already has an accent, so a column
+ * is not told to add one. `shoesKept`: the leg line keeps the shoes (they
+ * continue the lower piece), so the accent it offers is not on the shoes.
+ */
+export function sharesLine(palette: BinnedSwatch[], ctx: { accent: boolean; shoesKept?: boolean } = { accent: false }): AdviceLine {
   const [a = 0, b = 0, c = 0] = palette.map((s) => s.share);
   const measured = [a, b, c].filter((v) => v > 0).map(pct).join(" · ");
   const off = Math.abs(a - SHARES_REFERENCE[0]) + Math.abs(b - SHARES_REFERENCE[1]) + Math.abs(c - SHARES_REFERENCE[2]);
@@ -146,7 +249,9 @@ export function sharesLine(palette: BinnedSwatch[]): AdviceLine {
   const borderline = nearEdge(a, [SHARE_EDGES.column], 0.05) || nearEdge(Math.abs(a - b), [SHARE_EDGES.compete], 0.05) || nearEdge(off, [SHARE_EDGES.near6030], 0.05);
   const base = { rule: "shares" as const, title: "Colour shares", measured, borderline };
   if (a >= SHARE_EDGES.column) {
-    return { ...base, state: "neutral", text: `One colour covers ${pct(a)} of the outfit. That is a column, calm and long. If you want a focal point, an accent near 0.10 (shoes, a belt, a bag) gives the eye a place to rest.` };
+    if (ctx.accent) return { ...base, state: "neutral", text: `One colour covers ${pct(a)} of the outfit. That is a column, calm and long, and the outfit's accent gives the eye a place to rest.` };
+    const where = ctx.shoesKept ? "a belt, a bag, a scarf" : "shoes, a belt, a bag";
+    return { ...base, state: "neutral", ...(ctx.shoesKept ? {} : { recolours: [{ garment: "shoes" as const }] }), text: `One colour covers ${pct(a)} of the outfit. That is a column, calm and long. If you want a focal point, an accent near 0.10 (${where}) gives the eye a place to rest.` };
   }
   if (Math.abs(a - 0.62) <= 0.04 && c < 0.05) {
     return { ...base, state: "golden", text: `Two colours split the outfit ${pct(a)} : ${pct(b)}, near the golden section. One leads and one answers.` };
@@ -171,7 +276,8 @@ export function sharesLine(palette: BinnedSwatch[]): AdviceLine {
 /** Warm: reds, oranges, yellows on the OKLCH wheel; cool: greens, blues, violets. */
 const isWarm = (h: number) => h < 110 || h >= 345;
 
-export function chromaLine(palette: BinnedSwatch[], waist: number): AdviceLine {
+/** The chroma line. `shoesKept`: another line keeps the shoes as worn, so a vibration with them is settled on the other piece. */
+export function chromaLine(palette: BinnedSwatch[], waist: number, ctx: { shoesKept?: boolean } = {}): AdviceLine {
   const chromatic = palette.filter((s) => !isNeutral(s));
   const loud = chromatic.filter((s) => s.C >= SATURATED_CHROMA);
   const warm = chromatic.filter((s) => isWarm(s.h)).reduce((t, s) => t + s.share, 0);
@@ -185,7 +291,14 @@ export function chromaLine(palette: BinnedSwatch[], waist: number): AdviceLine {
     for (let j = i + 1; j < chromatic.length; j++) {
       const p = chromatic[i], q = chromatic[j];
       if (p.C >= VIBRATION.minChroma && q.C >= VIBRATION.minChroma && hueGap(p.h, q.h) >= VIBRATION.minHueGap && Math.abs(p.L - q.L) < VIBRATION.maxLightnessGap) {
-        return { ...base, state: "advice", text: `The ${place(p, waist)} and the ${place(q, waist)} are near-complements at almost the same lightness (the value row shows each). Josef Albers showed such pairs vibrate where they meet. Separate them by value, one clearly lighter, or set a neutral between them. The palette is ${temp}.` };
+        const said = `The ${place(p, waist)} and the ${place(q, waist)} are near-complements at almost the same lightness (the value row shows each). Josef Albers showed such pairs vibrate where they meet.`;
+        // Shoes another line keeps (the accent, or shoes carrying the leg line on) are not asked to change: the other piece is (T6).
+        const shoeSide = garmentAt(p, waist) === "shoes" ? p : garmentAt(q, waist) === "shoes" ? q : null;
+        const other = shoeSide === p ? q : p;
+        if (ctx.shoesKept && shoeSide && garmentAt(other, waist) !== "shoes") {
+          return { ...base, state: "advice", recolours: [recolourOf(other, waist)], text: `${said} Keep the shoes and separate the ${place(other, waist)} from them by value, clearly lighter or darker, or set a neutral between them. The palette is ${temp}.` };
+        }
+        return { ...base, state: "advice", recolours: [recolourOf(p, waist), recolourOf(q, waist)], text: `${said} Separate them by value, one clearly lighter, or set a neutral between them. The palette is ${temp}.` };
       }
     }
   if (loud.length >= 2 && Math.max(...loud.map((p) => Math.max(...loud.map((q) => hueGap(p.h, q.h))))) > 60) {

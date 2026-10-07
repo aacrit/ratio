@@ -5,7 +5,7 @@
 
 import { byName, colourLabel, colourName } from "./names";
 import { pieces } from "./pieces";
-import { volumeWords } from "./shape-rules";
+import { UPPER_REF, volumeWords } from "./shape-rules";
 import { type AdviceLine, type Bins, ratioText } from "./rules";
 
 const two = (v: number) => v.toFixed(2);
@@ -36,8 +36,9 @@ export function measuredCopy(line: AdviceLine, bins: Bins): string {
           ? bins.fitWhy === "arms"
             ? "Upper piece not read: an arm or a hand lies over its edges on every row"
             : "Upper piece not read: its width could not be read on these rows"
-          : `Upper piece ${two(bins.fit.top)}× the shoulder width${bins.fitOneSide ? ", read on one side," : ""} on the torso rows no arm spoils, ${w.top}`;
-      const legs = bins.fit.legs === null ? "the legs not read" : `each leg ${two(bins.fit.legs)}× at the knee, ${w.legs}`;
+          : `Upper piece ${two(bins.fit.top)}× ${UPPER_REF}${bins.fitOneSide ? ", read on one side," : ""} on the rows no arm crosses, ${w.top}`;
+      // Garment lines only, never a body measure (T6): the lower piece at its knee line, against the upper piece's shoulder line.
+      const legs = bins.fit.legs === null ? "lower piece not read" : `lower piece ${two(bins.fit.legs)}× at the knee line, ${w.legs}`;
       return `${upper}; ${legs}.`;
     }
     case "legline": {

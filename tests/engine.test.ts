@@ -10,7 +10,13 @@ import { CATEGORY, type Landmark, type Mask, measureOutfit } from "../web/src/en
 import { downsample, targetSize } from "../web/src/engine/resample";
 import { type BinnedSwatch, TEMPLATES, chromaLine, fitTemplate, harmonyLine, sharesLine, valueLine } from "../web/src/engine/colour-rules";
 import { extractPalette } from "../web/src/engine/palette";
-import { JUDGING_WORDS, readOutfit } from "../web/src/engine/rules";
+import { type Bins, JUDGING_WORDS, bodyMeasureIn, readBins, readOutfit } from "../web/src/engine/rules";
+import { renderRulebook } from "../web/src/rules/render";
+import { SCALES } from "../web/src/rules/model";
+import { suggestLooks } from "../web/src/engine/looks";
+import { measuredCopy } from "../web/src/engine/measured";
+import { RULEBOOK } from "../web/src/engine/rulebook";
+import { verdictOf } from "../web/src/engine/verdict";
 
 const W = 200;
 const H = 400;
@@ -157,6 +163,30 @@ describe("colour theory", () => {
     expect(fitTemplate([sw(0.5, 0.1, 30, 0.6), sw(0.3, 0.1, 120, 0.4)], I).cost).toBeGreaterThan(0);
   });
 
+  it("the fit's lookup table gives exactly the values of the original reduce, rotation and cost to the bit (T6)", () => {
+    // The original fitTemplate, kept here as the reference.
+    const ref = (chromatic: BinnedSwatch[], t: (typeof TEMPLATES)[number]) => {
+      const outside = (h: number, rot: number) => Math.min(...t.sectors.map(([off, w]) => Math.max(0, hueGap(h, (rot + off) % 360) - w / 2)));
+      const total = chromatic.reduce((s, c) => s + c.share, 0) || 1;
+      let best = { rot: 0, cost: Infinity };
+      for (let rot = 0; rot < 360; rot++) {
+        const cost = chromatic.reduce((s, c) => s + (c.share / total) * outside(c.h, rot), 0);
+        if (cost < best.cost - 1e-9) best = { rot, cost };
+      }
+      return best;
+    };
+    let seed = 11;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 400; i++) {
+      const n = 2 + Math.floor(rand() * 3);
+      const cs = Array.from({ length: n }, () => sw(0.5, 0.1, Math.floor(rand() * 360), Number((0.05 + rand() * 0.5).toFixed(2))));
+      for (const t of TEMPLATES) expect(fitTemplate(cs, t), `${t.id} ${cs.map((c) => `${c.h}:${c.share}`).join(" ")}`).toEqual(ref(cs, t));
+    }
+    // A hue off the whole degrees takes the direct path, same answer.
+    const odd = [sw(0.5, 0.1, 30.5, 0.6), sw(0.5, 0.1, 211.25, 0.4)];
+    for (const t of TEMPLATES) expect(fitTemplate(odd, t)).toEqual(ref(odd, t));
+  });
+
   it("names the colour outside the scheme when no template fits", () => {
     const line = harmonyLine([sw(0.5, 0.12, 30, 0.4, 0.3), sw(0.5, 0.12, 150, 0.3, 0.7), sw(0.5, 0.12, 270, 0.3, 0.95)], 0.38);
     expect(line.state).toBe("advice");
@@ -210,5 +240,65 @@ describe("copy law (V4, design lint)", () => {
       for (const word of JUDGING_WORDS) expect(text.toLowerCase(), text).not.toContain(word);
       expect(text).not.toContain("—");
     }
+  });
+
+  // T6 (Mara, UX pass 3): "Each leg reads narrow (0.40× the shoulder width at
+  // the knee)" is heard as a remark on the client's legs and shoulders. Every
+  // line names the garment: advice, Measured copy, verdict and look reasons,
+  // including each volume case (both read, one read, none read) and each
+  // leg-line case (continuing, contrasting, accent shoes, not read).
+  function everyGarmentLine(): string[] {
+    const out = allLines();
+    const base = (over: Partial<Bins>): Bins => ({
+      proportion: 0.5,
+      waist: 0.38,
+      top: { L: 0.3, C: 0, h: 0 },
+      bottom: { L: 0.5, C: 0.1, h: 150 },
+      palette: [sw(0.3, 0, 0, 0.55, 0.3), sw(0.5, 0.1, 150, 0.35, 0.65), sw(0.7, 0.14, 35, 0.1, 0.95)],
+      fit: { top: 1.5, legs: 0.7 },
+      ...over,
+    });
+    const variants: Bins[] = [];
+    for (const fit of [null, { top: 1.0, legs: 0.3 }, { top: 1.5, legs: null }, { top: null, legs: 0.4 }, { top: 1.7, legs: 0.9 }, { top: 1.2, legs: 0.5 }])
+      for (const fitWhy of [undefined, "arms" as const])
+        for (const shoesL of [0.5, 0.9])
+          for (const front of [undefined, true as const])
+            variants.push(base({ fit, ...(fitWhy ? { fitWhy } : {}), ...(front ? { front } : {}), palette: [sw(0.3, 0, 0, 0.55, 0.3), sw(0.5, 0.1, 150, 0.35, 0.65), sw(shoesL, shoesL > 0.6 ? 0.14 : 0, 35, 0.1, 0.95)] }));
+    variants.push(base({ palette: [sw(0.3, 0, 0, 0.6, 0.3), sw(0.5, 0.1, 150, 0.4, 0.65)], shoesWhy: "cut_off" }), base({ proportion: null, bottom: { L: 0.3, C: 0, h: 0 }, palette: [sw(0.3, 0, 0, 0.9, 0.5), sw(0.32, 0, 0, 0.1, 0.95)] }));
+    for (const b of variants) {
+      const lines = readBins(b);
+      const looks = suggestLooks(b, lines);
+      out.push(verdictOf(lines, looks, b), ...lines.flatMap((l) => [l.text, measuredCopy(l, b), RULEBOOK[l.rule].rule]), ...looks.flatMap((k) => [k.title, ...k.moves.map((m) => m.detail)]));
+    }
+    return out;
+  }
+
+  it("never makes a body part the thing measured: garment lines only (T6)", () => {
+    // The lint catches the old copy.
+    const old = "Each leg reads narrow (0.40× the shoulder width at the knee).";
+    expect(bodyMeasureIn(old)).not.toBeNull();
+    // Body words alone are caught; the tailor's garment lines are not.
+    for (const t of ["a bust dart", "at the knee", "over the shoulders", "the thigh", "chest width", "a neck", "your build", "the hips"]) expect(bodyMeasureIn(t), t).not.toBeNull();
+    for (const t of ["the knee line", "its shoulder line", "the hip line", "the shoulder points the pose marks", "a neckline", "the figure"]) expect(bodyMeasureIn(t), t).toBeNull();
+    const texts = everyGarmentLine();
+    expect(texts.length).toBeGreaterThan(400);
+    for (const text of texts) {
+      expect(bodyMeasureIn(text), text).toBeNull();
+      for (const word of JUDGING_WORDS) expect(text.toLowerCase(), text).not.toContain(word);
+      expect(text).not.toContain("—");
+    }
+  });
+
+  it("the Rulebook speaks the same way: maths, edge names, scale titles, labels and every instrument's aria label (T6)", () => {
+    // The rendered Rulebook page holds every rule, maths, edge name, scale
+    // title and aria label, attributes included.
+    const page = renderRulebook().replace(/&#39;/g, "'");
+    const hit = bodyMeasureIn(page);
+    const at = hit === null ? -1 : page.toLowerCase().indexOf(hit.toLowerCase());
+    expect(hit, at < 0 ? "" : page.slice(Math.max(0, at - 80), at + 60)).toBeNull();
+    for (const e of Object.values(RULEBOOK)) for (const t of [e.rule, e.maths, ...e.edges.map((x) => x.name)]) expect(bodyMeasureIn(t), t).toBeNull();
+    for (const s of SCALES) for (const t of [s.title, s.label, ...s.bands]) expect(bodyMeasureIn(t), t).toBeNull();
+    // Honest about the reference: the shoulder line is the span between the shoulder points the pose marks.
+    expect(RULEBOOK.volume.maths).toMatch(/span between the two shoulder points the pose model marks/);
   });
 });

@@ -12,8 +12,10 @@
 // next rule on the mark), then the best look. Deterministic: a pure
 // function of the lines, the bins and the looks.
 
-import { type Look, type Move, accentWords } from "./looks";
-import { colourName } from "./names";
+import { type Look, type Move, accentOf, accentWords, pieces } from "./looks";
+import { SATURATED_CHROMA, isNeutral } from "./constants";
+import { byName, colourName } from "./names";
+import { pieceOf } from "./pieces";
 import type { AdviceLine, Bins } from "./rules";
 import { PROPORTION_BANDS, tuckable } from "./rules";
 import { topFit, legFit } from "./shape-rules";
@@ -26,8 +28,9 @@ export function plainMove(m: Move): string {
   const name = colourName(m.L, m.C, m.h);
   if (m.kind === "accent") return `${name} shoes`;
   // A muted red is still called red: the verdict says it is the muted one.
-  if (m.muted) return m.piece === "shoes" ? `muted ${name} shoes` : `a muted ${name} for ${PIECE_WORDS[m.piece]}`;
-  return m.piece === "shoes" ? `${name} shoes` : `${name} for ${PIECE_WORDS[m.piece]}`;
+  const of = m.of ?? PIECE_WORDS[m.piece];
+  if (m.muted) return m.piece === "shoes" ? `muted ${name} shoes` : `a muted ${name} for ${of}`;
+  return m.piece === "shoes" ? `${name} shoes` : `${name} for ${of}`;
 }
 
 export const listed = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
@@ -83,15 +86,62 @@ export function leadSentence(line: AdviceLine, bins: Bins | undefined): string |
       return null;
     case "legline":
       if (line.state === "unread") return null;
-      return line.state === "golden" ? "The shoes carry the leg line to the floor." : "The shoes end the leg line at the ankle, a point of their own.";
+      return line.state === "golden" ? "The shoes carry the leg line to the floor." : "The shoes break the leg line, a point of their own.";
   }
 }
 
-/** What to keep: the outfit's accent first, then the first other rule on the mark. */
-function keepSentence(lines: AdviceLine[], lead: AdviceLine | undefined, bins: Bins | undefined): string | null {
+/**
+ * Whether the outfit's accent survives the reading: no move of the look
+ * offered recolours its own swatch, and no line names its colour for a
+ * change. Judged on the swatch, not on where it sits (review round 1: a bag
+ * at the hip is not the lower piece). Noor, UX pass 3: "Keep the coral
+ * shoes" over a row asking for other shoes.
+ */
+function accentKept(lines: AdviceLine[], bins: Bins, look: Look | undefined): boolean {
+  const i = accentOf(bins);
+  if (i < 0) return false;
+  const shoes = pieces(bins).shoes;
+  if ((look?.moves ?? []).some((m) => (m.kind === "recolour" && m.swatch === i) || (m.kind === "accent" && i === shoes))) return false;
+  const s = bins.palette[i];
+  const name = colourName(s.L, s.C, s.h);
+  const piece = pieceOf(i, pieces(bins));
+  // A line that names colours names them; one that names only a garment (a
+  // darker lower piece) touches the accent when the accent is that garment
+  // (review round 2: a pink skirt kept while Value darkens the lower piece).
+  return !lines.some((l) => (l.recolours ?? []).some((r) => (r.colour !== undefined ? r.colour === name : r.garment === piece)));
+}
+
+/** The saturated colours, by name: what "the one saturated note" is. */
+const loudNames = (b: Bins) =>
+  byName(b.palette)
+    .filter((s) => !isNeutral(s) && s.C >= SATURATED_CHROMA)
+    .map((s) => s.name)
+    .join();
+
+/** Whether a look recolours the shoes, by an accent or a recolour of the shoe swatch. */
+const recoloursShoes = (look: Look) => look.moves.some((m) => m.kind === "accent" || (m.kind === "recolour" && m.piece === "shoes"));
+
+/**
+ * A rule on the mark may be kept only when the look offered leaves its
+ * measurement exactly as worn (review round 1: "Keep the hues as they are.
+ * Try violet for the lower piece"), and, for the leg line, when no line
+ * recolours the shoes on their own.
+ */
+function ruleKept(line: AdviceLine, lines: AdviceLine[], bins: Bins | undefined, look: Look | undefined): boolean {
+  const tried = look?.lines.find((l) => l.rule === line.rule);
+  if (look && tried?.measured !== line.measured) return false;
+  // The one saturated note is a colour, not a count; shoes the look recolours are not kept, even at the same lightness (review round 2).
+  if (look && line.rule === "chroma" && bins && loudNames(look.bins) !== loudNames(bins)) return false;
+  if (look && line.rule === "legline" && recoloursShoes(look)) return false;
+  if (line.rule === "legline") return !lines.some((l) => (l.recolours ?? []).some((r) => r.garment === "shoes" && !r.matched));
+  return true;
+}
+
+/** What to keep: the outfit's accent first, then the first other rule on the mark; never what a line or the look offered changes. */
+function keepSentence(lines: AdviceLine[], lead: AdviceLine | undefined, bins: Bins | undefined, look: Look | undefined): string | null {
   const accent = bins ? accentWords(bins) : null;
-  if (accent) return `Keep ${accent}.`;
-  const keep = byOrder(lines).find((l) => l.state === "golden" && l !== lead);
+  if (accent && bins && accentKept(lines, bins, look)) return `Keep ${accent}.`;
+  const keep = byOrder(lines).find((l) => l.state === "golden" && l !== lead && ruleKept(l, lines, bins, look));
   if (!keep) return null;
   const words: Record<AdviceLine["rule"], string> = {
     proportion: "the break where it is",
@@ -112,8 +162,22 @@ function keepSentence(lines: AdviceLine[], lead: AdviceLine | undefined, bins: B
  */
 export function looksIntroOf(lines: AdviceLine[], count: number): string {
   if (count > 0) return `${count === 1 ? "One look" : `${count} looks`} the rules prefer, judged by the same rulebook. Try one on the photo.`;
-  if (lines.some((l) => l.state === "advice")) return "No look here improves the reading without breaking another rule. The advice in the reading below says what would.";
-  return "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
+  if (lines.some((l) => l.state === "advice")) return "No look here improves the reading without taking another rule off the mark. The advice in the reading below says what would.";
+  // A rule not judged is never counted as fine (T6). A row may still offer
+  // an option (other shoes, an accent): said as a choice, never as a fix.
+  const judged = lines.some((l) => l.state === "unread") ? "Every rule Ratio could judge" : "Every reading";
+  const options = lines.some((l) => l.recolours?.length) ? " Where a row offers an option, it is a choice, not a fix." : "";
+  return `No rule asks for a change here. ${judged} is on the mark or fine, so the look stands as it is.${options}`;
+}
+
+/**
+ * The line over the looks when a reading is restored without its photo
+ * (main.ts): the looks show on the chalk figure, and with none it is the
+ * same sentence as a fresh read, never a copy that drifts from it.
+ */
+export function restoredLooksIntroOf(lines: AdviceLine[], count: number): string {
+  if (count > 0) return `${count === 1 ? "One look" : `${count} looks`} the rules prefer, judged by the same rulebook. Shown on the chalk figure: read the photo again to see it on the photo.`;
+  return looksIntroOf(lines, 0);
 }
 
 /** The change a rule's advice asks for, in a few plain words, for a verdict with no look to name. */
@@ -126,11 +190,11 @@ export function changeWords(line: AdviceLine, bins: Bins | undefined): string {
       return longTop ? "a belt at the waist" : "a front tuck, if the upper piece tucks";
     }
     case "volume":
-      return bins && !tuckable(bins) ? "a narrower leg" : "a tuck, if the upper piece tucks, or a narrower leg";
+      return bins && !tuckable(bins) ? "a narrower lower piece" : "a tuck, if the upper piece tucks, or a narrower lower piece";
     case "harmony":
       return "a neutral, or a neighbouring hue, for the colour outside the scheme";
     case "value":
-      return "a darker lower piece or darker shoes";
+      return line.recolours?.some((r) => r.garment === "shoes") ? (line.recolours.some((r) => r.matched) ? "a darker lower piece and shoes to match" : "a darker lower piece or darker shoes") : "a darker lower piece";
     case "chroma":
       return "one colour at full strength and the others muted";
     case "shares":
@@ -155,7 +219,7 @@ export function verdictOf(lines: AdviceLine[], looks: Look[], bins?: Bins): stri
       break;
     }
   }
-  const keep = keepSentence(lines, lead, bins);
+  const keep = keepSentence(lines, lead, bins, looks[0]);
   const best = looks[0];
   // With no look to offer, the verdict still names the change the leading advice asks for.
   const tryIt = best

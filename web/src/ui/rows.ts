@@ -18,7 +18,8 @@ import { tuckable } from "../engine/rules";
 // The rule each line is held against, said once, from the rulebook.
 export const RULE_COPY = Object.fromEntries(Object.entries(RULEBOOK).map(([id, e]) => [id, e.rule])) as Record<AdviceLine["rule"], string>;
 
-export const STATE_WORDS: Record<LineState, string> = { golden: "on the mark", neutral: "fine", advice: "advice", unread: "not read" };
+// A rule that was not judged (unread, or volume with one part read) says so; it is never "fine" (T6).
+export const STATE_WORDS: Record<LineState, string> = { golden: "on the mark", neutral: "fine", advice: "advice", unread: "not judged" };
 
 /** The Measured line of each rule lives in the engine, beside the rules it quotes. */
 export { measuredCopy };

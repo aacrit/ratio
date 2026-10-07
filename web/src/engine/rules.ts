@@ -12,15 +12,20 @@ import { type Lab, labToLch } from "./color";
 import { type BinnedSwatch, NEUTRAL_CHROMA, chromaLine, harmonyLine, sharesLine, valueLine } from "./colour-rules";
 import { binShares, isNeutral } from "./constants";
 import { byName } from "./names";
-import { pieces } from "./pieces";
+import { type Recolour, accentOf, pieceOf, pieces } from "./pieces";
 import type { RuleId } from "./rulebook";
-import { type Fit, legLine, legUnread, volumeLine, volumeUnread } from "./shape-rules";
+import { type Fit, legBorderline, legLine, legUnread, shoesContinue, volumeLine, volumeUnread } from "./shape-rules";
 import type { OutfitMeasure, ShoesWhy } from "./measure";
 import type { Swatch } from "./palette";
 
 export { NEUTRAL_CHROMA };
 
-export const ENGINE_VERSION = "ratio-engine/0.9.0";
+// 0.10.0 (T6, UX pass 3): every line agrees with the others and names the
+// garment. Volume names the upper piece's shoulder line, never a body width;
+// a half-read volume is "unread" (not judged), never "fine"; the proportion
+// line's shoe clause follows the leg line; accent shoes are never asked to
+// change; harmony's Measured shows the plain name; every look move says why.
+export const ENGINE_VERSION = "ratio-engine/0.10.0";
 
 export const GOLDEN = 0.382;
 export const PROPORTION_BIN = 0.02;
@@ -42,6 +47,45 @@ export type ProportionBand = (typeof PROPORTION_BANDS)[number]["id"];
 
 export const JUDGING_WORDS = ["flaw", "flatter", "slim", "fat", "ugly", "unflattering", "hide", "problem area", "beautiful", "attractive", "should be ashamed", "wrong body"];
 
+/**
+ * Phrases that make a body part the thing measured (Mara, UX pass 3: "each
+ * leg reads narrow, 0.40× the shoulder width"). No line the rulebook, the
+ * Measured copy, the verdict or a look can produce contains one
+ * (tests/engine.test.ts, tests/advice-agrees.test.ts). Where a line names
+ * a place on the figure it names the garment's line: the shoulder line or
+ * the knee line of a piece, the hem, the shoe.
+ */
+export const BODY_MEASURE_WORDS = ["each leg", "your leg", "the legs", "her leg", "his leg", "shoulder width", "your shoulder", "the shoulders", "torso", "at the ankle", "your body", "your waist", "your hips", "the hips", "body shape", "body type"];
+
+/**
+ * Body words on their own (review round 1). The garment's lines a tailor
+ * drafts by, "knee line", "shoulder line" and "hip line", stay allowed, and
+ * so do "shoulder points", the pose landmarks the Rulebook names plainly as
+ * what it measures between. "Figure" is the drawn outline and stays.
+ */
+export const BODY_PART_PATTERNS: readonly RegExp[] = [
+  /\bknees?\b(?! line)/i,
+  /\bshoulders?\b(?! (line|points?)\b)/i,
+  /\bhips?\b(?! line)/i,
+  /\bthighs?\b/i,
+  /\bchest\b/i,
+  /\bbust\b/i,
+  /\bneck\b/i,
+  /\bbuild\b/i,
+];
+
+/** The first body-measure word or body part in a text, or null: the one lint every produced line, Rulebook text and Rules page label passes. */
+export function bodyMeasureIn(text: string): string | null {
+  const lower = text.toLowerCase();
+  const word = BODY_MEASURE_WORDS.find((w) => lower.includes(w));
+  if (word) return word;
+  for (const p of BODY_PART_PATTERNS) {
+    const m = text.match(p);
+    if (m) return m[0];
+  }
+  return null;
+}
+
 // golden: the measurement sits near the golden section (the gold accent means
 // only this). advice: a change is suggested. neutral: measured, nothing to change.
 // unread: the photo did not let Ratio measure it, and the line says why.
@@ -56,6 +100,13 @@ export interface AdviceLine {
   state: LineState;
   /** True when a measurement sits within half a bin of a band edge. */
   borderline: boolean;
+  /**
+   * The recolours this line's text suggests, as a fix (advice) or as an
+   * option a row offers. The verdict never keeps a colour any line
+   * recolours (T6). A cut change (a tuck, a shorter or narrower piece) is
+   * not a recolour.
+   */
+  recolours?: Recolour[];
 }
 
 export interface Bins {
@@ -132,15 +183,35 @@ export const tuckable = (b: Pick<Bins, "front">): boolean => !b.front;
 /** A ratio pair as one unit, thin spaces round the colon (design/BRAND.md). */
 export const ratioText = (r: number) => `${r.toFixed(2)} : ${(1 - r).toFixed(2)}`;
 
-function proportionLine(b: Bins, rawBreak: number | null): AdviceLine {
+/**
+ * What the leg line found, for the proportion line's shoe clause: the shoes
+ * continue the line, contrast with it, or were not read; and whether that
+ * finding sits at the leg line's edge (its borderline).
+ */
+export interface ShoeLine {
+  kind: "continue" | "contrast" | "unread";
+  borderline: boolean;
+}
+
+function proportionLine(b: Bins, rawBreak: number | null, shoes: ShoeLine): AdviceLine {
   if (b.proportion === null) {
+    // The shoe clause follows the leg line, so the two never disagree (Mara,
+    // UX pass 3: "Keep the shoes close in value to hold it" over white shoes
+    // the leg line said contrast).
+    // The clause can flip with the leg line, so it carries the leg line's
+    // borderline mark (law 2: never flipped silently).
+    const clause = {
+      continue: " The shoes sit close in value too, so the column runs on to the floor; the leg line says more.",
+      contrast: " The shoes contrast with it, so the column stops where the shoes begin; the leg line says more.",
+      unread: "",
+    }[shoes.kind];
     return {
       rule: "proportion",
       title: "Proportion",
       measured: "one column",
-      text: "Top and bottom read as one colour, so the eye runs head to foot without a break. A single column is the longest line an outfit can draw. Keep the shoes close in value to hold it.",
+      text: `Top and bottom read as one colour, so the eye runs head to foot without a break. A single column is the longest line an outfit can draw.${clause}`,
       state: "neutral",
-      borderline: false,
+      borderline: clause !== "" && shoes.borderline,
     };
   }
   const r = b.proportion;
@@ -170,6 +241,7 @@ function proportionLine(b: Bins, rawBreak: number | null): AdviceLine {
       state: "advice",
     },
   };
+  // A tuck, a belt or a shorter upper piece changes the cut, never a colour: no recolours.
   return { rule: "proportion", title: "Proportion", measured, ...texts[id], borderline };
 }
 
@@ -185,18 +257,36 @@ export interface OutfitReading {
  * exactly the rules that judged the outfit.
  */
 export function readBins(bins: Bins, rawBreak: number | null = bins.proportion): AdviceLine[] {
-  const lines = [proportionLine(bins, rawBreak)];
+  const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
+  const legRead = p.lower >= 0 && p.shoes >= 0;
+  // Accent shoes: the outfit's accent is the shoe swatch (and not also a
+  // piece). The verdict keeps them, so no line recolours them.
+  const accent = accentOf(bins.palette);
+  const shoesAccent = accent >= 0 && pieceOf(accent, p) === "shoes";
+  const shoeLine: ShoeLine = {
+    kind: !legRead ? "unread" : shoesContinue(bins.palette[p.lower].L, bins.palette[p.shoes].L) ? "continue" : "contrast",
+    borderline: legRead && legBorderline(Math.abs(bins.palette[p.lower].L - bins.palette[p.shoes].L)),
+  };
+  // Shoes another line keeps as worn: the accent, or shoes carrying the leg line on.
+  const shoesKept = shoesAccent || shoeLine.kind === "continue";
+  const lines = [proportionLine(bins, rawBreak, shoeLine)];
   if (bins.fit) lines.push(volumeLine(bins.fit, { oneSide: bins.fitOneSide, front: bins.front, why: bins.fitWhy }));
   else if (bins.fitWhy) lines.push(volumeUnread(bins.fitWhy));
-  const p = pieces(bins.palette, bins.waist, { top: bins.top, bottom: bins.bottom });
-  if (p.lower >= 0 && p.shoes >= 0) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L));
+  if (legRead) lines.push(legLine(bins.palette[p.lower].L, bins.palette[p.shoes].L, shoesAccent));
   else if (p.shoes < 0 && bins.shoesWhy) lines.push(legUnread(bins.shoesWhy));
   if (bins.palette.length) {
     // Harmony, shares and chroma read the palette as people name it, one
     // name, one entry; value reads every swatch's own lightness, so a light
     // grey over a dark grey keeps its range.
     const named = byName(bins.palette);
-    lines.push(harmonyLine(named, bins.waist), valueLine(bins.palette, bins.top.L, bins.bottom.L), sharesLine(named), chromaLine(named, bins.waist));
+    lines.push(
+      harmonyLine(named, bins.waist, { shoesKept }),
+      // Darker shoes on their own only for shoes no other line keeps; shoes
+      // that carry the leg line on darken with the lower piece, as a pair.
+      valueLine(bins.palette, bins.top.L, bins.bottom.L, { shoes: p.shoes < 0 || shoesAccent ? "none" : shoeLine.kind === "continue" ? "matched" : "free" }),
+      sharesLine(named, { accent: accent >= 0, shoesKept: shoeLine.kind === "continue" }),
+      chromaLine(named, bins.waist, { shoesKept }),
+    );
   }
   return lines;
 }

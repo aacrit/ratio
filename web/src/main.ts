@@ -25,7 +25,7 @@ import type { Pixels } from "./engine/resample";
 import type { AdviceLine, Bins } from "./engine/rules";
 import { ENGINE_VERSION, readBins } from "./engine/rules";
 import { type Look, suggestLooks } from "./engine/looks";
-import { lookPhrase } from "./engine/verdict";
+import { lookPhrase, restoredLooksIntroOf } from "./engine/verdict";
 import type { Read } from "./read";
 import { Reader } from "./reader";
 import { setupRulebook } from "./rules";
@@ -417,11 +417,8 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
 
     looksSection.hidden = false;
     const introEl = looksSection.querySelector<HTMLElement>(".looks-intro");
-    if (introEl) {
-      introEl.textContent = looks.length
-        ? `${looks.length === 1 ? "One look" : `${looks.length} looks`} the rules prefer, judged by the same rulebook. Shown on the chalk figure: read the photo again to see it on the photo.`
-        : "The rules would change nothing here. Every reading is on the mark or fine, so the look stands as it is.";
-    }
+    // The same sentence a fresh read shows (engine/verdict.ts), never a copy that drifts from it (T6).
+    if (introEl) introEl.textContent = restoredLooksIntroOf(asWornLines, looks.length);
     let activeId: string | null = null;
     const buttons = new Map<string, HTMLButtonElement>();
     looksList.replaceChildren(
