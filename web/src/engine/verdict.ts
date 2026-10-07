@@ -13,7 +13,9 @@
 // function of the lines, the bins and the looks.
 
 import { type Look, type Move, accentOf, accentWords, pieces } from "./looks";
-import { colourName } from "./names";
+import { SATURATED_CHROMA, isNeutral } from "./constants";
+import { byName, colourName } from "./names";
+import { pieceOf } from "./pieces";
 import type { AdviceLine, Bins } from "./rules";
 import { PROPORTION_BANDS, tuckable } from "./rules";
 import { topFit, legFit } from "./shape-rules";
@@ -101,9 +103,22 @@ function accentKept(lines: AdviceLine[], bins: Bins, look: Look | undefined): bo
   if ((look?.moves ?? []).some((m) => (m.kind === "recolour" && m.swatch === i) || (m.kind === "accent" && i === shoes))) return false;
   const s = bins.palette[i];
   const name = colourName(s.L, s.C, s.h);
-  // A line that names colours names them; one that names only a garment (darker shoes) touches the accent only when the accent is those shoes.
-  return !lines.some((l) => (l.recolours ?? []).some((r) => (r.colour !== undefined ? r.colour === name : r.garment === "shoes" && i === shoes && !r.matched)));
+  const piece = pieceOf(i, pieces(bins));
+  // A line that names colours names them; one that names only a garment (a
+  // darker lower piece) touches the accent when the accent is that garment
+  // (review round 2: a pink skirt kept while Value darkens the lower piece).
+  return !lines.some((l) => (l.recolours ?? []).some((r) => (r.colour !== undefined ? r.colour === name : r.garment === piece)));
 }
+
+/** The saturated colours, by name: what "the one saturated note" is. */
+const loudNames = (b: Bins) =>
+  byName(b.palette)
+    .filter((s) => !isNeutral(s) && s.C >= SATURATED_CHROMA)
+    .map((s) => s.name)
+    .join();
+
+/** Whether a look recolours the shoes, by an accent or a recolour of the shoe swatch. */
+const recoloursShoes = (look: Look) => look.moves.some((m) => m.kind === "accent" || (m.kind === "recolour" && m.piece === "shoes"));
 
 /**
  * A rule on the mark may be kept only when the look offered leaves its
@@ -111,9 +126,12 @@ function accentKept(lines: AdviceLine[], bins: Bins, look: Look | undefined): bo
  * Try violet for the lower piece"), and, for the leg line, when no line
  * recolours the shoes on their own.
  */
-function ruleKept(line: AdviceLine, lines: AdviceLine[], look: Look | undefined): boolean {
+function ruleKept(line: AdviceLine, lines: AdviceLine[], bins: Bins | undefined, look: Look | undefined): boolean {
   const tried = look?.lines.find((l) => l.rule === line.rule);
   if (look && tried?.measured !== line.measured) return false;
+  // The one saturated note is a colour, not a count; shoes the look recolours are not kept, even at the same lightness (review round 2).
+  if (look && line.rule === "chroma" && bins && loudNames(look.bins) !== loudNames(bins)) return false;
+  if (look && line.rule === "legline" && recoloursShoes(look)) return false;
   if (line.rule === "legline") return !lines.some((l) => (l.recolours ?? []).some((r) => r.garment === "shoes" && !r.matched));
   return true;
 }
@@ -122,7 +140,7 @@ function ruleKept(line: AdviceLine, lines: AdviceLine[], look: Look | undefined)
 function keepSentence(lines: AdviceLine[], lead: AdviceLine | undefined, bins: Bins | undefined, look: Look | undefined): string | null {
   const accent = bins ? accentWords(bins) : null;
   if (accent && bins && accentKept(lines, bins, look)) return `Keep ${accent}.`;
-  const keep = byOrder(lines).find((l) => l.state === "golden" && l !== lead && ruleKept(l, lines, look));
+  const keep = byOrder(lines).find((l) => l.state === "golden" && l !== lead && ruleKept(l, lines, bins, look));
   if (!keep) return null;
   const words: Record<AdviceLine["rule"], string> = {
     proportion: "the break where it is",
@@ -175,7 +193,7 @@ export function changeWords(line: AdviceLine, bins: Bins | undefined): string {
     case "harmony":
       return "a neutral, or a neighbouring hue, for the colour outside the scheme";
     case "value":
-      return line.recolours?.some((r) => r.garment === "shoes") ? (line.recolours.some((r) => r.matched) ? "a darker lower piece, with the shoes to match" : "a darker lower piece or darker shoes") : "a darker lower piece";
+      return line.recolours?.some((r) => r.garment === "shoes") ? (line.recolours.some((r) => r.matched) ? "a darker lower piece and shoes to match" : "a darker lower piece or darker shoes") : "a darker lower piece";
     case "chroma":
       return "one colour at full strength and the others muted";
     case "shares":

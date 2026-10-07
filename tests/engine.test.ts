@@ -163,6 +163,30 @@ describe("colour theory", () => {
     expect(fitTemplate([sw(0.5, 0.1, 30, 0.6), sw(0.3, 0.1, 120, 0.4)], I).cost).toBeGreaterThan(0);
   });
 
+  it("the fit's lookup table gives exactly the values of the original reduce, rotation and cost to the bit (T6)", () => {
+    // The original fitTemplate, kept here as the reference.
+    const ref = (chromatic: BinnedSwatch[], t: (typeof TEMPLATES)[number]) => {
+      const outside = (h: number, rot: number) => Math.min(...t.sectors.map(([off, w]) => Math.max(0, hueGap(h, (rot + off) % 360) - w / 2)));
+      const total = chromatic.reduce((s, c) => s + c.share, 0) || 1;
+      let best = { rot: 0, cost: Infinity };
+      for (let rot = 0; rot < 360; rot++) {
+        const cost = chromatic.reduce((s, c) => s + (c.share / total) * outside(c.h, rot), 0);
+        if (cost < best.cost - 1e-9) best = { rot, cost };
+      }
+      return best;
+    };
+    let seed = 11;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 400; i++) {
+      const n = 2 + Math.floor(rand() * 3);
+      const cs = Array.from({ length: n }, () => sw(0.5, 0.1, Math.floor(rand() * 360), Number((0.05 + rand() * 0.5).toFixed(2))));
+      for (const t of TEMPLATES) expect(fitTemplate(cs, t), `${t.id} ${cs.map((c) => `${c.h}:${c.share}`).join(" ")}`).toEqual(ref(cs, t));
+    }
+    // A hue off the whole degrees takes the direct path, same answer.
+    const odd = [sw(0.5, 0.1, 30.5, 0.6), sw(0.5, 0.1, 211.25, 0.4)];
+    for (const t of TEMPLATES) expect(fitTemplate(odd, t)).toEqual(ref(odd, t));
+  });
+
   it("names the colour outside the scheme when no template fits", () => {
     const line = harmonyLine([sw(0.5, 0.12, 30, 0.4, 0.3), sw(0.5, 0.12, 150, 0.3, 0.7), sw(0.5, 0.12, 270, 0.3, 0.95)], 0.38);
     expect(line.state).toBe("advice");

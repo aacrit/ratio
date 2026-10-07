@@ -8,7 +8,7 @@
 //
 // Laws:
 // - Never fix one rule by breaking another: a look in which any line falls
-//   from on the mark or fine to "advice" is dropped.
+//   from on the mark or fine to "advice", or leaves the mark, is dropped.
 // - Only choices change: garment colour, tuck, belt, accent. Never the body.
 // - Honest to the photo (Mara, UX pass 2, 2026-10-04): never the colour a
 //   piece already wears (sameColour); never remove the outfit's accent, which
@@ -20,7 +20,7 @@
 import type { BinnedSwatch } from "./colour-rules";
 import { colourName, familyOf } from "./names";
 import { binShares, isNeutral } from "./constants";
-import { ACCENT_SHARE, CLEAR_HUE, type Piece, accentOf as accentIn, pieceOf, pieces as placedPieces } from "./pieces";
+import { ACCENT_SHARE, CLEAR_HUE, type Piece, accentOf as accentIn, isShoes, pieceOf, pieces as placedPieces } from "./pieces";
 import { type AdviceLine, type Bins, type LineState, readBins, tuckable } from "./rules";
 
 export type Move =
@@ -74,7 +74,10 @@ const labGap = (p: BinnedSwatch, q: BinnedSwatch) => {
 export function normalise(b: Bins): Bins {
   const merged: BinnedSwatch[] = [];
   for (const s of [...b.palette].sort((p, q) => q.share - p.share)) {
-    const into = merged.find((m) => labGap(m, s) < 0.06);
+    // The shoes stay their own swatch, as the palette reads them (palette.ts:
+    // read from the boxes round the feet, never merged into a garment), so
+    // shoes darkened to match the lower piece still read as shoes.
+    const into = merged.find((m) => labGap(m, s) < 0.06 && isShoes(m) === isShoes(s));
     if (into) {
       into.y = fix((into.y * into.share + s.y * s.share) / (into.share + s.share));
       into.share = fix(into.share + s.share);
@@ -150,9 +153,10 @@ const plain = (c: { L: number; C: number; h: number }) => colourName(c.L, c.C, c
 const PIECE_NAME: Record<Piece, string> = { upper: "Upper piece", lower: "Lower piece", shoes: "Shoes", other: "Accent" };
 const pieceName = (i: number, p: ReturnType<typeof pieces>) => PIECE_NAME[pieceOf(i, p)];
 
-/** Every candidate move for these bins, in a fixed order. */
-export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
+/** Every candidate move for these bins, in a fixed order, and the moves that only come as a pair (the value pair). */
+export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs: Move[][] } {
   const moves: Move[] = [];
+  const pairs: Move[][] = [];
   const state = (rule: AdviceLine["rule"]) => lines.find((l) => l.rule === rule)?.state;
   const p = pieces(b);
   const chromatic = b.palette.filter((s) => !isNeutral(s));
@@ -211,11 +215,24 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   }
 
   // Value: a darker lower piece grounds a top-heavy figure.
+  // When the value row darkens the shoes to match (they carry the leg line
+  // on), the move darkens both, as one look, never the lower piece alone
+  // (review round 2: a lower-only look broke the leg line it said to keep).
+  const valueLine = lines.find((l) => l.rule === "value");
+  const pairShoes = !!valueLine?.recolours?.some((r) => r.garment === "shoes" && r.matched) && p.shoes >= 0 && p.shoes !== p.lower && p.shoes !== accent;
   if (state("value") === "advice" && p.lower >= 0 && p.upper >= 0 && p.lower !== accent) {
     const s = b.palette[p.lower];
     const L = fix(Math.max(0.14, b.top.L - 0.2));
     const o = { L, C: s.C, h: s.h };
-    if (!sameColour(s, o)) moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: `Swap the lower piece for ${plain(o)}: a darker value below grounds the outfit.` });
+    if (!sameColour(s, o)) {
+      const lower: Move = { kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: `Swap the lower piece for ${plain(o)}: a darker value below grounds the outfit.` };
+      if (!pairShoes) moves.push(lower);
+      else {
+        const sh = b.palette[p.shoes];
+        const os = { L, C: sh.C, h: sh.h };
+        pairs.push([lower, { kind: "recolour", swatch: p.shoes, piece: "shoes", ...os, title: `Shoes in ${plain(os)}`, detail: `Darken the shoes to ${plain(os)} with it: the leg line runs on to the floor.` }]);
+      }
+    }
   }
 
   // Chroma: step one loud colour down to a muted version of itself: the
@@ -246,7 +263,12 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
       moves.push({ kind: "accent", ...a, title: `Shoes in ${plain(a)}`, detail: `Shoes in ${plain(a)}: an accent of about a tenth gives the eye a place to rest.` });
     }
   }
-  return moves;
+  return { moves, pairs };
+}
+
+/** Every single candidate move for these bins, in a fixed order. */
+export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
+  return candidates(b, lines).moves;
 }
 
 /** The ideas a look's colour moves stand for: a piece and a hue family ("lower:green"). */
@@ -259,8 +281,13 @@ const id = (moves: Move[]) =>
 /** The three best looks for these bins, best first. Empty when nothing improves the reading. */
 export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
   const before = scoreOf(lines);
-  const singles = candidateMoves(b, lines);
+  const { moves: singles, pairs } = candidates(b, lines);
   const combos: Move[][] = singles.map((m) => [m]);
+  // A pair that only comes together (the value pair), alone or with a tuck or a belt.
+  for (const pair of pairs) {
+    combos.push(pair);
+    for (const m of singles) if (m.kind === "break") combos.push([m, ...pair]);
+  }
   // Pairs: a proportion move with a colour move, or two colour moves on
   // different pieces.
   for (let i = 0; i < singles.length; i++)
@@ -278,11 +305,18 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
   combos.forEach((moves) => {
     const bins = normalise(moves.reduce(applyMove, b));
     const after = readBins(bins);
-    // Never fix one rule by breaking another.
-    const worse = after.some((l) => {
-      const was = lines.find((x) => x.rule === l.rule);
-      return l.state === "advice" && was !== undefined && was.state !== "advice";
-    });
+    // Never fix one rule by breaking another: no line falls to advice, and
+    // none on the mark leaves it (T6 review round 2: a look the headline
+    // offers never takes the leg line, the shares or the one saturated
+    // note off the mark).
+    // A line on the mark that the look no longer reads at all (shoes merged
+    // into the lower piece) has left the mark too.
+    const worse =
+      after.some((l) => {
+        const was = lines.find((x) => x.rule === l.rule);
+        if (was === undefined) return false;
+        return (l.state === "advice" && was.state !== "advice") || (was.state === "golden" && l.state !== "golden");
+      }) || lines.some((was) => was.state === "golden" && !after.some((l) => l.rule === was.rule));
     const gain = scoreOf(after) - before;
     if (worse || gain <= 0) return;
     const changes = after

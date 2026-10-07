@@ -10,145 +10,26 @@
 // - Every move in a look carries its own reason.
 //
 // Checked on the three committed fixtures' bins (fixtures.lock.json, the
-// readings Mara, Noor and Sam saw) and on a seeded grid of bins.
+// readings Mara, Noor and Sam saw) and on the reviewers' reproducers; the
+// 4000-reading probe is tests/advice-probe.test.ts. The checks live in
+// tests/helpers/agrees.ts.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { BinnedSwatch } from "../web/src/engine/colour-rules";
-import { binShares } from "../web/src/engine/constants";
-import { type Look, accentOf, accentWords, pieces, suggestLooks } from "../web/src/engine/looks";
-import { colourName } from "../web/src/engine/names";
+import { accentOf, accentWords, pieceOf, pieces } from "../web/src/engine/looks";
 import { measuredCopy } from "../web/src/engine/measured";
-import { RULEBOOK } from "../web/src/engine/rulebook";
-import { type AdviceLine, type Bins, JUDGING_WORDS, bodyMeasureIn, readBins } from "../web/src/engine/rules";
-import { looksIntroOf, restoredLooksIntroOf, verdictOf } from "../web/src/engine/verdict";
+import { type Bins, readBins } from "../web/src/engine/rules";
+import { looksIntroOf, restoredLooksIntroOf } from "../web/src/engine/verdict";
 import { STATE_WORDS, stateLabel } from "../web/src/ui/rows";
+import { agrees, keepsShoes, show } from "./helpers/agrees";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const lock = JSON.parse(readFileSync(path.join(repoRoot, "fixtures.lock.json"), "utf8"));
 const fixtureBins = (id: "sample" | "p1" | "p2"): Bins => lock.fixtures[id].bins as Bins;
 
-interface Shown {
-  bins: Bins;
-  lines: AdviceLine[];
-  looks: Look[];
-  verdict: string;
-}
-
-const show = (bins: Bins): Shown => {
-  const lines = readBins(bins);
-  const looks = suggestLooks(bins, lines);
-  return { bins, lines, looks, verdict: verdictOf(lines, looks, bins) };
-};
-
-/** Every sentence a reading can put on screen: rows (title, state, number, Measured, Rule, advice), verdict, looks intro, each look's title and reasons, and each tried look's rows and verdict. */
-function everyText(s: Shown): string[] {
-  const rowTexts = (lines: AdviceLine[], bins: Bins) => lines.flatMap((l) => [l.title, stateLabel(l), l.measured, measuredCopy(l, bins), RULEBOOK[l.rule].rule, l.text]);
-  return [
-    ...rowTexts(s.lines, s.bins),
-    s.verdict,
-    looksIntroOf(s.lines, s.looks.length),
-    ...s.looks.flatMap((l) => [l.title, ...l.moves.map((m) => m.detail), ...l.keeps, ...rowTexts(l.lines, l.bins), verdictOf(l.lines, [], l.bins)]),
-  ];
-}
-
-/** The verdict's keep sentence, if any. */
-const keepOf = (verdict: string) => verdict.match(/Keep ([^.]+)\./)?.[1] ?? null;
-const keepsShoes = (verdict: string) => {
-  const k = keepOf(verdict);
-  return k !== null && /shoes/.test(k);
-};
-
-/** The rule each "Keep …" sentence keeps, written out here so the check does not trust the verdict's own table. */
-const KEEP_RULE: Record<string, AdviceLine["rule"]> = {
-  "the break where it is": "proportion",
-  "the balance of volumes": "volume",
-  "the hues as they are": "harmony",
-  "the order of light and dark": "value",
-  "the one saturated note": "chroma",
-  "the way the colours share the area": "shares",
-  "the shoes near the lower piece's value": "legline",
-};
-
-/**
- * Every keep sentence holds against the look the verdict offers and the
- * lines beside it (review round 1). An accent kept: no move recolours its
- * swatch and no line names its colour for a change. A rule kept: the look's
- * line for that rule measures exactly what the outfit does.
- */
-function keepHolds(s: Shown, label: string): void {
-  const kept = keepOf(s.verdict);
-  if (kept === null) return;
-  const look = s.looks[0];
-  const accent = accentWords(s.bins);
-  if (accent !== null && kept === accent) {
-    const i = accentOf(s.bins);
-    const p = pieces(s.bins);
-    const name = colourName(s.bins.palette[i].L, s.bins.palette[i].C, s.bins.palette[i].h);
-    for (const m of look?.moves ?? []) {
-      expect(m.kind === "recolour" && m.swatch === i, `${label}: "${s.verdict}" but the look recolours the accent (${m.title})`).toBe(false);
-      expect(m.kind === "accent" && i === p.shoes, `${label}: "${s.verdict}" but the look recolours the accent shoes (${m.title})`).toBe(false);
-    }
-    for (const l of s.lines) for (const r of l.recolours ?? []) expect(r.colour, `${label}: "${s.verdict}" but ${l.rule} recolours it: ${l.text}`).not.toBe(name);
-    return;
-  }
-  const rule = KEEP_RULE[kept];
-  expect(rule, `${label}: unknown keep "${kept}"`).toBeDefined();
-  const worn = s.lines.find((l) => l.rule === rule)!;
-  expect(worn.state, `${label}: keeps ${rule}, which is not on the mark`).toBe("golden");
-  if (look) {
-    const tried = look.lines.find((l) => l.rule === rule);
-    expect(tried?.measured, `${label}: "${s.verdict}" but the look moves ${rule} from ${worn.measured} to ${tried?.measured}`).toBe(worn.measured);
-  }
-  if (rule === "legline") for (const l of s.lines) for (const r of l.recolours ?? []) if (r.garment === "shoes") expect(r.matched, `${label}: keeps the shoes but ${l.rule} recolours them`).toBe(true);
-}
-
-/** The checks every reading must pass, on the fixtures and on the grid. */
-function agrees(s: Shown, label: string): void {
-  const all = everyText(s);
-  // 1. Garment, never body.
-  for (const t of all) {
-    expect(bodyMeasureIn(t), `${label}: body word in: ${t}`).toBeNull();
-    for (const w of JUDGING_WORDS) expect(t.toLowerCase(), `${label}: "${w}" in: ${t}`).not.toContain(w);
-  }
-  // 2. Not judged is never fine: a line whose number holds "not read" is unread.
-  for (const l of [s.lines, ...s.looks.map((x) => x.lines)].flat()) {
-    if (l.measured.includes("not read")) expect(l.state, `${label}: ${l.rule} ${l.measured}`).toBe("unread");
-    if (l.state === "unread") expect(stateLabel(l)).not.toMatch(/fine/);
-  }
-  // 3. The verdict never keeps what a line or its look changes: every keep sentence.
-  keepHolds(s, label);
-  if (keepsShoes(s.verdict)) {
-    for (const l of s.lines) expect(l.text, label).not.toMatch(/shoes nearer|darker shoes|\(shoes, a belt/);
-  }
-  //    The proportion line's shoe clause follows the leg line, and carries
-  //    its borderline mark (law 2: a clause that can flip is never settled).
-  const prop = s.lines.find((l) => l.rule === "proportion")!;
-  const leg = s.lines.find((l) => l.rule === "legline");
-  if (/close in value too/.test(prop.text)) expect(leg?.state, label).toBe("golden");
-  if (/shoes contrast with it/.test(prop.text)) expect(leg && leg.state !== "golden" && leg.state !== "unread", label).toBe(true);
-  if (/The shoes (sit close in value too|contrast with it)/.test(prop.text)) {
-    expect(prop.text, label).toMatch(/the leg line says more\.$/);
-    expect(prop.borderline, `${label}: proportion borderline follows the leg line`).toBe(leg!.borderline);
-  }
-  expect(prop.text).not.toMatch(/Keep the shoes close in value/);
-  //    No line keeps the shoes while another recolours them on their own
-  //    (darkening the pair together keeps the line, so it may be offered).
-  const legKeeps = leg !== undefined && (leg.state === "golden" || /keep it\.$/.test(leg.text));
-  if (legKeeps)
-    for (const l of s.lines)
-      if (l !== leg) for (const r of l.recolours ?? []) if (r.garment === "shoes") expect(r.matched, `${label}: ${l.rule} recolours shoes the leg line keeps: ${l.text}`).toBe(true);
-  // 4. Harmony's number never shows Matsuda's letter.
-  const harmony = s.lines.find((l) => l.rule === "harmony");
-  if (harmony) expect(harmony.measured, label).not.toMatch(/^[iIVLYXT] ·/);
-  // 5. Every move in a look says why, in its own words.
-  for (const look of s.looks) {
-    for (const m of look.moves) expect(m.detail, `${label}: ${look.title}`).toMatch(/^[^:]+: .+\.$/);
-    if (look.moves.length > 1) expect(new Set(look.moves.map((m) => m.detail)).size, `${label}: ${look.title}`).toBe(look.moves.length);
-  }
-}
 
 describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
   for (const id of ["sample", "p1", "p2"] as const) {
@@ -240,14 +121,14 @@ describe("review round 1 reproducers", () => {
     expect(s.looks[0].moves.some((m) => m.kind === "recolour" && m.piece === "lower")).toBe(true);
     expect(s.verdict).not.toContain("Keep the hues as they are.");
     expect(s.verdict).toContain(`Keep ${accentWords(s.bins)}.`);
-    keepHolds(s, "repro a");
+    agrees(s, "repro a");
   });
 
   it("1b. never 'Keep the hues as they are' when the look takes a coloured piece to a neutral", () => {
     const s = show(reproB());
     expect(s.looks[0].title).toMatch(/Lower piece in charcoal/);
     expect(s.verdict).not.toContain("Keep the hues as they are.");
-    keepHolds(s, "repro b");
+    agrees(s, "repro b");
   });
 
   it("2. a yellow column over stone shoes at the leg line's edge carries the borderline mark (law 2)", () => {
@@ -269,7 +150,7 @@ describe("review round 1 reproducers", () => {
     expect(lines.find((l) => l.rule === "legline")!.state).toBe("golden");
     const value = lines.find((l) => l.rule === "value")!;
     expect(value.state).toBe("advice");
-    expect(value.text).toMatch(/a darker lower piece, with the shoes darkened to match so the leg line holds, would do it/);
+    expect(value.text).toMatch(/a darker lower piece and shoes to match would do it/);
     expect(value.text).not.toMatch(/or darker shoes/);
     expect(value.recolours).toEqual([{ garment: "lower" }, { garment: "shoes", matched: true }]);
     agrees(show(b), "value pair");
@@ -301,66 +182,40 @@ describe("review round 1 reproducers", () => {
   });
 });
 
-describe("a seeded grid of readings: no two lines disagree", () => {
-  // mulberry32: the same 300 readings every run.
-  const rand = (() => {
-    let a = 0x7a6;
-    return () => {
-      a |= 0;
-      a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  })();
-  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)];
+describe("review round 2 reproducers", () => {
+  const swatch = (L: number, C: number, h: number, share: number, y: number): BinnedSwatch => ({ L, C, h, share, y });
+  const lch = (s: BinnedSwatch) => ({ L: s.L, C: s.C, h: s.h });
 
-  function randomBins(): Bins {
-    const n = 2 + Math.floor(rand() * 4);
-    const ys = [0.2, 0.3, 0.6, 0.7, 0.95];
-    const raw: Omit<BinnedSwatch, "share">[] = [];
-    for (let i = 0; i < n; i++) {
-      const neutral = rand() < 0.4;
-      raw.push({ L: pick([0.14, 0.2, 0.32, 0.45, 0.56, 0.66, 0.8, 0.94]), C: neutral ? 0 : pick([0.04, 0.07, 0.1, 0.12, 0.15]), h: neutral ? 0 : pick([5, 35, 80, 150, 215, 255, 300, 345]), y: i === n - 1 && rand() < 0.8 ? 0.95 : pick(ys.slice(0, 4)) });
-    }
-    const weights = raw.map((_, i) => (i === raw.length - 1 && raw[i].y > 0.9 ? 0.05 + rand() * 0.1 : 0.2 + rand()));
-    const total = weights.reduce((a, b) => a + b, 0);
-    const shares = binShares(weights.map((w) => w / total));
-    const palette = raw.map((s, i) => ({ ...s, share: shares[i] })).sort((p, q) => q.share - p.share);
-    const body = palette.filter((s) => s.y < 0.9);
-    const upper = body.find((s) => s.y < 0.4) ?? body[0] ?? palette[0];
-    const lower = body.find((s) => s.y >= 0.4) ?? upper;
-    const fitPart = (xs: number[]) => (rand() < 0.2 ? null : pick(xs));
-    const fit = rand() < 0.15 ? null : { top: fitPart([1.0, 1.2, 1.3, 1.5, 1.7]), legs: fitPart([0.3, 0.4, 0.5, 0.55, 0.7, 0.9]) };
-    const b: Bins = {
-      proportion: upper === lower || rand() < 0.15 ? null : pick([0.2, 0.36, 0.44, 0.5, 0.56, 0.62, 0.72, 0.8]),
-      waist: pick([0.36, 0.38, 0.4]),
-      top: { L: upper.L, C: upper.C, h: upper.h },
-      bottom: { L: lower.L, C: lower.C, h: lower.h },
-      palette,
-      fit: fit && fit.top === null && fit.legs === null ? null : fit,
-    };
-    if (rand() < 0.25) b.front = true;
-    if (b.fit && b.fit.top === null && rand() < 0.5) b.fitWhy = "arms";
-    if (!b.fit && rand() < 0.5) b.fitWhy = "arms";
-    if (b.fit?.top !== null && b.fit !== null && rand() < 0.2) b.fitOneSide = true;
-    if (!palette.some((s) => s.y > 0.9) && rand() < 0.5) b.shoesWhy = pick(["cut_off", "floor"] as const);
-    return b;
-  }
+  it("1. a pink skirt that is the accent is not kept while Value asks for a darker lower piece", () => {
+    const palette = [swatch(0.2, 0.05, 240, 0.35, 0.3), swatch(0.94, 0, 0, 0.25, 0.2), swatch(0.4, 0.05, 280, 0.2, 0.2), swatch(0.94, 0.15, 0, 0.15, 0.7), swatch(0.15, 0, 0, 0.05, 0.95)];
+    const b: Bins = { proportion: 0.44, waist: 0.38, top: lch(palette[0]), bottom: lch(palette[3]), palette, fit: { top: 1.5, legs: null } };
+    const s = show(b);
+    const value = s.lines.find((l) => l.rule === "value")!;
+    expect(value.recolours?.some((r) => r.garment === "lower")).toBe(true);
+    expect(pieceOf(accentOf(b), pieces(b))).toBe("lower");
+    expect(s.verdict).not.toContain(`Keep ${accentWords(b)}.`);
+    agrees(s, "pink skirt");
+  });
 
-  it("300 readings: garment words only, not judged is never fine, no keep against a change, shoe clauses agree, every move has its reason", () => {
-    let keptShoes = 0, columnClauses = 0, halfRead = 0;
-    for (let i = 0; i < 300; i++) {
-      const s = show(randomBins());
-      agrees(s, `grid #${i}`);
-      if (keepsShoes(s.verdict)) keptShoes++;
-      if (/The shoes (sit close in value too|contrast with it)/.test(s.lines[0].text)) columnClauses++;
-      if (s.lines.some((l) => l.rule === "volume" && l.state === "unread")) halfRead++;
-    }
-    // The grid reaches the cases the properties are about.
-    expect(keptShoes).toBeGreaterThan(5);
-    expect(columnClauses).toBeGreaterThan(5);
-    expect(halfRead).toBeGreaterThan(5);
-    // Each reading suggests looks (every candidate re-read by the rulebook): a few seconds in all.
-  }, 60_000);
+  it("2. a value look darkens the shoes with the lower piece when the value row says so, and never breaks the leg line", () => {
+    const palette = [swatch(0.2, 0, 0, 0.5, 0.3), swatch(0.4, 0, 0, 0.4, 0.65), swatch(0.5, 0, 0, 0.1, 0.95)];
+    const b: Bins = { proportion: 0.38, waist: 0.38, top: lch(palette[0]), bottom: lch(palette[1]), palette, fit: null };
+    const s = show(b);
+    const value = s.lines.find((l) => l.rule === "value")!;
+    expect(value.state).toBe("advice");
+    expect(value.recolours).toEqual([{ garment: "lower" }, { garment: "shoes", matched: true }]);
+    expect(value.text).toContain("a darker lower piece and shoes to match would do it");
+    const darker = s.looks.filter((look) => look.moves.some((m) => m.title.startsWith("A darker lower piece")));
+    expect(darker.length).toBeGreaterThan(0);
+    for (const look of darker) expect(look.moves.some((m) => m.kind === "recolour" && m.piece === "shoes")).toBe(true);
+    for (const look of s.looks) expect(look.lines.find((l) => l.rule === "legline")!.state).toBe("golden");
+    agrees(s, "value pair look");
+  });
+
+  it("3. the one saturated note is a colour: a look that swaps which colour is saturated never keeps it", () => {
+    const palette = [swatch(0.5, 0, 0, 0.6, 0.3), swatch(0.4, 0.15, 280, 0.3, 0.65), swatch(0.6, 0.04, 95, 0.1, 0.95)];
+    const b: Bins = { proportion: 0.38, waist: 0.38, top: lch(palette[0]), bottom: lch(palette[1]), palette, fit: null };
+    agrees(show(b), "saturated note");
+  });
 });
+

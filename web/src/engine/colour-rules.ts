@@ -72,15 +72,45 @@ export const TEMPLATES: Template[] = [
 
 /** Degrees outside the nearest sector, 0 when inside. */
 function outside(h: number, rot: number, t: Template): number {
-  return Math.min(...t.sectors.map(([off, w]) => Math.max(0, hueGap(h, (rot + off) % 360) - w / 2)));
+  let min = Infinity;
+  for (const [off, w] of t.sectors) {
+    const d = Math.max(0, hueGap(h, (rot + off) % 360) - w / 2);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+/**
+ * Degrees outside a template, by (rot − h) mod 360, for whole-degree hues.
+ * For an integer hue h and rotation rot, hueGap(h, (rot + off) % 360) is
+ * the circular distance between them, which depends only on that
+ * difference, so outside(h, rot, t) === outside(0, (rot − h) mod 360, t)
+ * exactly: the same integers, the same subtraction of w / 2. The looks
+ * re-read many candidates, and this table makes each fit a lookup instead
+ * of a recomputation without changing a single value.
+ */
+const OUTSIDE_TABLES = new Map<string, Float64Array>();
+function outsideTable(t: Template): Float64Array {
+  let table = OUTSIDE_TABLES.get(t.id);
+  if (!table) {
+    table = new Float64Array(360);
+    for (let d = 0; d < 360; d++) table[d] = outside(0, d, t);
+    OUTSIDE_TABLES.set(t.id, table);
+  }
+  return table;
 }
 
 /** Best rotation of a template for the chromatic swatches: least area-weighted distance outside. */
 export function fitTemplate(chromatic: BinnedSwatch[], t: Template): { rot: number; cost: number } {
+  // The same arithmetic, in the same order, as a reduce over the swatches:
+  // each share over the total, times the degrees outside, summed left to right.
   const total = chromatic.reduce((s, c) => s + c.share, 0) || 1;
+  const exact = chromatic.every((c) => Number.isInteger(c.h) && c.h >= 0 && c.h < 360);
+  const table = exact ? outsideTable(t) : null;
   let best = { rot: 0, cost: Infinity };
   for (let rot = 0; rot < 360; rot++) {
-    const cost = chromatic.reduce((s, c) => s + (c.share / total) * outside(c.h, rot, t), 0);
+    let cost = 0;
+    for (const c of chromatic) cost = cost + (c.share / total) * (table ? table[(rot - c.h + 360) % 360] : outside(c.h, rot, t));
     if (cost < best.cost - 1e-9) best = { rot, cost };
   }
   return best;
@@ -155,7 +185,7 @@ export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: numbe
     const advice = gap > VALUE_GAP_EDGES[1];
     const fix = {
       free: "a darker lower piece or darker shoes would do it",
-      matched: "a darker lower piece, with the shoes darkened to match so the leg line holds, would do it",
+      matched: "a darker lower piece and shoes to match would do it",
       none: "a darker lower piece would do it",
     }[ctx.shoes];
     const recolours: Recolour[] = ctx.shoes === "free" ? [{ garment: "lower" }, { garment: "shoes" }] : ctx.shoes === "matched" ? [{ garment: "lower" }, { garment: "shoes", matched: true }] : [{ garment: "lower" }];
