@@ -119,7 +119,7 @@ describe("the reviewer's probe: 4000 seeded readings, every line agrees", () => 
       const kept = keepOf(s.verdict);
       if (kept !== null && kept === accentWords(s.bins)) seen.accentKept++;
       else if (kept !== null) seen.ruleKept++;
-      if (s.lines[0].borderline && /the leg line says more/.test(s.lines[0].text)) seen.edgeClause++;
+      if (s.lines[0].borderline && /\(see Leg line below\)/.test(s.lines[0].text)) seen.edgeClause++;
       if (s.lines.some((l) => l.rule === "volume" && l.state === "unread")) seen.halfRead++;
       if (s.lines.some((l) => l.recolours?.some((r) => r.matched))) seen.matchedValue++;
       seen.looks += s.looks.length;

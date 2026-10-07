@@ -166,11 +166,13 @@ const recolourOf = (s: BinnedSwatch, waist: number): Recolour => ({ garment: gar
 export function harmonyLine(palette: BinnedSwatch[], waist: number, ctx: { shoesKept?: boolean } = {}): AdviceLine {
   const chromatic = palette.filter((s) => !isNeutral(s));
   const base = { rule: "harmony" as const, title: "Harmony", borderline: false };
+  // A row on the mark closes on a plain verdict (Sam, UX pass 4), and a
+  // pointer names the row it points to.
   if (chromatic.length === 0) {
-    return { ...base, measured: "neutrals", state: "golden", text: "Every piece is a neutral, so no hues can clash. The outfit is composed by value alone; the value line below is the one to read." };
+    return { ...base, measured: "neutrals", state: "golden", text: "Every piece is a neutral, so no hues can clash and the outfit is composed by value alone (see Value below). It works." };
   }
   if (chromatic.length === 1) {
-    return { ...base, measured: deg(chromatic[0].h), state: "golden", text: `One hue, ${deg(chromatic[0].h)}, with neutrals: the most forgiving scheme there is. Any neutral can join it.` };
+    return { ...base, measured: deg(chromatic[0].h), state: "golden", text: `One hue, ${deg(chromatic[0].h)}, with neutrals: the most forgiving scheme there is. Any neutral can join it, and it works.` };
   }
   // Borderline: the fit sits within 2° of the tolerance, either side.
   const nearFit = (cost: number) => Math.abs(cost - FIT_TOLERANCE) <= 2;
@@ -178,7 +180,7 @@ export function harmonyLine(palette: BinnedSwatch[], waist: number, ctx: { shoes
     const fit = fitTemplate(chromatic, t);
     if (fit.cost <= FIT_TOLERANCE) {
       // The row shows the plain name ("analogous"); Matsuda's letter stays in the Rulebook's maths (Mara, UX pass 3: clients don't know "V").
-      return { ...base, borderline: nearFit(fit.cost), measured: `${t.name} · ${hueList(chromatic)}`, state: "golden", text: `The hues fit the ${t.name} template (${t.gloss}), a classic harmony. Keep any new piece inside it, or neutral.` };
+      return { ...base, borderline: nearFit(fit.cost), measured: `${t.name} · ${hueList(chromatic)}`, state: "golden", text: `The hues fit the ${t.name} template (${t.gloss}), a classic harmony. Keep any new piece inside it, or neutral, and it holds.` };
     }
   }
   // Nothing fits: find the colour whose removal lets the rest fit best, and name it.
@@ -218,8 +220,13 @@ export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: numbe
   const borderline = nearEdge(range, CONTRAST_EDGES, 0.04) || nearEdge(Math.abs(gap), VALUE_GAP_EDGES, 0.04);
   const base = { rule: "value" as const, title: "Value", measured: `range ${pct(range)}`, borderline };
   const key = { low: "a close-valued, quiet outfit that reads as one shape", medium: "a moderate value range, clear without cutting", high: "a strong value range: the edges between light and dark are what the eye sees first" }[band];
+  // Each piece's lightness is labelled where it is quoted ("upper 0.40",
+  // "lower piece (lightness 0.26)"), and it is the piece's swatch, the number
+  // the leg line and the Measured list show (rules.ts pieceLightness, T9).
+  // A row that is fine closes on a plain verdict (Sam, UX pass 4: "the eye
+  // looks for edges elsewhere" read as a fault under FINE).
   if (Math.abs(gap) <= VALUE_GAP_EDGES[0]) {
-    return { ...base, state: "neutral", text: `The upper and lower pieces sit at nearly the same lightness (${pct(upperL)} and ${pct(lowerL)}), so the figure reads as one tonal shape and the eye looks for edges elsewhere. Overall, ${key}.` };
+    return { ...base, state: "neutral", text: `The upper and lower pieces sit at nearly the same lightness (upper ${pct(upperL)}, lower ${pct(lowerL)}), so the figure reads as one tonal shape. Overall, ${key}. ${band === "low" ? "A quiet choice that works." : "As worn, it works."}` };
   }
   if (upperL < lowerL) {
     const advice = gap > VALUE_GAP_EDGES[1];
@@ -229,9 +236,11 @@ export function valueLine(palette: BinnedSwatch[], upperL: number, lowerL: numbe
       none: "a darker lower piece would do it",
     }[ctx.shoes];
     const recolours: Recolour[] = ctx.shoes === "free" ? [{ garment: "lower" }, { garment: "shoes" }] : ctx.shoes === "matched" ? [{ garment: "lower" }, { garment: "shoes", matched: true }] : [{ garment: "lower" }];
-    return { ...base, state: advice ? "advice" : "neutral", recolours, text: `Dark over light: the upper piece (lightness ${pct(upperL)}) is darker than the lower (${pct(lowerL)}), so the visual weight sits high. Painters ground a figure with the darker value below; ${fix}. Overall, ${key}.` };
+    const said = `Dark over light: the upper piece (lightness ${pct(upperL)}) is darker than the lower piece (lightness ${pct(lowerL)}), so the visual weight sits high. Painters ground a figure with the darker value below; ${fix}. Overall, ${key}.`;
+    // Within the advice edge the step is small: the option is said, and the row closes on its verdict.
+    return { ...base, state: advice ? "advice" : "neutral", recolours, text: advice ? said : `${said} The step is small, so as worn it holds.` };
   }
-  return { ...base, state: "neutral", text: `Light over dark (${pct(upperL)} above ${pct(lowerL)}): the weight sits low and the figure reads grounded. Overall, ${key}.` };
+  return { ...base, state: "neutral", text: `Light over dark (upper ${pct(upperL)}, lower ${pct(lowerL)}): the weight sits low and the figure reads grounded. Overall, ${key}. It works.` };
 }
 
 // ---- 3. Shares: 60-30-10 ----------------------------------------------------
@@ -249,12 +258,12 @@ export function sharesLine(palette: BinnedSwatch[], ctx: { accent: boolean; shoe
   const borderline = nearEdge(a, [SHARE_EDGES.column], 0.05) || nearEdge(Math.abs(a - b), [SHARE_EDGES.compete], 0.05) || nearEdge(off, [SHARE_EDGES.near6030], 0.05);
   const base = { rule: "shares" as const, title: "Colour shares", measured, borderline };
   if (a >= SHARE_EDGES.column) {
-    if (ctx.accent) return { ...base, state: "neutral", text: `One colour covers ${pct(a)} of the outfit. That is a column, calm and long, and the outfit's accent gives the eye a place to rest.` };
+    if (ctx.accent) return { ...base, state: "neutral", text: `One colour covers ${pct(a)} of the outfit. That is a column, calm and long, and the outfit's accent gives the eye a place to rest: it works.` };
     const where = ctx.shoesKept ? "a belt, a bag, a scarf" : "shoes, a belt, a bag";
-    return { ...base, state: "neutral", ...(ctx.shoesKept ? {} : { recolours: [{ garment: "shoes" as const }] }), text: `One colour covers ${pct(a)} of the outfit. That is a column, calm and long. If you want a focal point, an accent near 0.10 (${where}) gives the eye a place to rest.` };
+    return { ...base, state: "neutral", ...(ctx.shoesKept ? {} : { recolours: [{ garment: "shoes" as const }] }), text: `One colour covers ${pct(a)} of the outfit. That is a column, calm and long. If you want a focal point, an accent near 0.10 (${where}) gives the eye a place to rest; as worn, it works.` };
   }
   if (Math.abs(a - 0.62) <= 0.04 && c < 0.05) {
-    return { ...base, state: "golden", text: `Two colours split the outfit ${pct(a)} : ${pct(b)}, near the golden section. One leads and one answers.` };
+    return { ...base, state: "golden", text: `Two colours split the outfit ${pct(a)} : ${pct(b)}, near the golden section. One leads and one answers: keep it.` };
   }
   if (b >= 0.2 && a - b <= 0.05) {
     return { ...base, state: "advice", text: `The two largest colours tie (${pct(a)} and ${pct(b)}), so none leads. Let one take the lead, near 0.60, with the other near 0.30 and a small accent near 0.10.` };
@@ -263,12 +272,12 @@ export function sharesLine(palette: BinnedSwatch[], ctx: { accent: boolean; shoe
     return { ...base, state: "advice", text: `The two main colours share the outfit almost equally (${pct(a)} and ${pct(b)}), so they compete for the lead. Let one dominate, near 0.60, with the other near 0.30 and a small accent near 0.10.` };
   }
   if (off <= SHARE_EDGES.near6030) {
-    return { ...base, state: "golden", text: `Close to 60-30-10: a dominant colour, a secondary and an accent, the interior designer's rule of thumb for giving a palette one voice.` };
+    return { ...base, state: "golden", text: `Close to 60-30-10: a dominant colour, a secondary and an accent, the interior designer's rule of thumb for giving a palette one voice. Keep it.` };
   }
   if (a < 0.4) {
-    return { ...base, state: "neutral", text: `No colour leads: the largest holds ${pct(a)} of the outfit, the rest share it in small parts. A calm, mixed palette; one colour near 0.60 would give it a lead.` };
+    return { ...base, state: "neutral", text: `No colour leads: the largest holds ${pct(a)} of the outfit, the rest share it in small parts. One colour near 0.60 would give it a lead, but as worn it is a calm, mixed palette that works.` };
   }
-  return { ...base, state: "neutral", text: `A dominant colour at ${pct(a)} with the rest supporting it. The 60-30-10 proportion (0.60 · 0.30 · 0.10) is the reference: a smaller third colour would sharpen it into an accent.` };
+  return { ...base, state: "neutral", text: `A dominant colour at ${pct(a)} with the rest supporting it. The 60-30-10 proportion (0.60 · 0.30 · 0.10) is the reference: a smaller third colour would sharpen it into an accent. As worn, it works.` };
 }
 
 // ---- 4. Chroma, vibration and temperature ----------------------------------
@@ -282,7 +291,8 @@ export function chromaLine(palette: BinnedSwatch[], waist: number, ctx: { shoesK
   const loud = chromatic.filter((s) => s.C >= SATURATED_CHROMA);
   const warm = chromatic.filter((s) => isWarm(s.h)).reduce((t, s) => t + s.share, 0);
   const cool = chromatic.filter((s) => !isWarm(s.h)).reduce((t, s) => t + s.share, 0);
-  const temp = chromatic.length === 0 ? "no temperature (neutrals only)" : warm > cool * 2 ? "warm-led" : cool > warm * 2 ? "cool-led" : "warm and cool in balance";
+  // The temperature as a sentence; neutrals have none, said plainly (Noor, UX pass 4: "The palette is no temperature").
+  const temp = chromatic.length === 0 ? "Neutrals only, so the palette has no temperature." : `The palette is ${warm > cool * 2 ? "warm-led" : cool > warm * 2 ? "cool-led" : "warm and cool in balance"}.`;
   // Chroma is binned to 0.01: a colour exactly at the saturation edge could read either way.
   const borderline = chromatic.some((s) => nearEdge(s.C, [SATURATED_CHROMA], 0.01));
   const base = { rule: "chroma" as const, title: "Chroma", measured: `${loud.length} saturated`, borderline };
@@ -291,23 +301,28 @@ export function chromaLine(palette: BinnedSwatch[], waist: number, ctx: { shoesK
     for (let j = i + 1; j < chromatic.length; j++) {
       const p = chromatic[i], q = chromatic[j];
       if (p.C >= VIBRATION.minChroma && q.C >= VIBRATION.minChroma && hueGap(p.h, q.h) >= VIBRATION.minHueGap && Math.abs(p.L - q.L) < VIBRATION.maxLightnessGap) {
-        const said = `The ${place(p, waist)} and the ${place(q, waist)} are near-complements at almost the same lightness (the value row shows each). Josef Albers showed such pairs vibrate where they meet.`;
+        const said = `The ${place(p, waist)} and the ${place(q, waist)} are near-complements at almost the same lightness (see Value above). Josef Albers showed such pairs vibrate where they meet.`;
         // Shoes another line keeps (the accent, or shoes carrying the leg line on) are not asked to change: the other piece is (T6).
         const shoeSide = garmentAt(p, waist) === "shoes" ? p : garmentAt(q, waist) === "shoes" ? q : null;
         const other = shoeSide === p ? q : p;
         if (ctx.shoesKept && shoeSide && garmentAt(other, waist) !== "shoes") {
-          return { ...base, state: "advice", recolours: [recolourOf(other, waist)], text: `${said} Keep the shoes and separate the ${place(other, waist)} from them by value, clearly lighter or darker, or set a neutral between them. The palette is ${temp}.` };
+          return { ...base, state: "advice", recolours: [recolourOf(other, waist)], text: `${said} Keep the shoes and separate the ${place(other, waist)} from them by value, clearly lighter or darker, or set a neutral between them. ${temp}` };
         }
-        return { ...base, state: "advice", recolours: [recolourOf(p, waist), recolourOf(q, waist)], text: `${said} Separate them by value, one clearly lighter, or set a neutral between them. The palette is ${temp}.` };
+        return { ...base, state: "advice", recolours: [recolourOf(p, waist), recolourOf(q, waist)], text: `${said} Separate them by value, one clearly lighter, or set a neutral between them. ${temp}` };
       }
     }
   if (loud.length >= 2 && Math.max(...loud.map((p) => Math.max(...loud.map((q) => hueGap(p.h, q.h))))) > 60) {
-    return { ...base, state: "advice", text: `${loud.length} saturated colours in different hues compete as equals. Keep one at full strength and let the others step down to a muted version of themselves. The palette is ${temp}.` };
+    return { ...base, state: "advice", text: `${loud.length} saturated colours in different hues compete as equals. Keep one at full strength and let the others step down to a muted version of themselves. ${temp}` };
   }
   if (loud.length === 1) {
-    return { ...base, state: "golden", text: `One saturated colour among quieter ones: a single voice, the way a painter places the brightest note. The palette is ${temp}.` };
+    return { ...base, state: "golden", text: `One saturated colour among quieter ones: a single voice, the way a painter places the brightest note. ${temp} Keep it.` };
   }
-  return { ...base, state: "neutral", text: `No colour is at full saturation, so the palette is quiet and value carries the outfit. The palette is ${temp}.` };
+  // A row that is fine closes on a plain verdict (Sam, UX pass 4).
+  // Two or more saturated colours within 60° of each other do not compete;
+  // the row says so, never "no colour is at full saturation" beside "2 saturated".
+  if (loud.length >= 2) return { ...base, state: "neutral", text: `${loud.length} saturated colours in neighbouring hues speak as one voice rather than competing. ${temp} It works.` };
+  if (chromatic.length === 0) return { ...base, state: "neutral", text: `${temp} No colour is saturated, so value carries the outfit: a quiet choice that works.` };
+  return { ...base, state: "neutral", text: `No colour is at full saturation, so the palette is quiet and value carries the outfit. ${temp} A quiet choice that works.` };
 }
 
 export type ColourRule = "harmony" | "value" | "shares" | "chroma";

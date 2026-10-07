@@ -108,8 +108,10 @@ function keepProblems(s: Shown, label: string, out: string[]): void {
 /** Every disagreement in a reading, as sentences; empty when every line agrees. */
 export function problemsOf(s: Shown, label: string): string[] {
   const out: string[] = [];
+  // Each sentence once: a reading repeats the Rule lines and many rows in every look.
+  const texts = [...new Set(everyText(s))];
   // 1. Garment, never body; never a judging word.
-  for (const t of everyText(s)) {
+  for (const t of texts) {
     const body = bodyMeasureIn(t);
     if (body) out.push(`${label}: body word "${body}" in: ${t}`);
     const lower = t.toLowerCase();
@@ -127,7 +129,7 @@ export function problemsOf(s: Shown, label: string): string[] {
   for (const look of s.looks)
     for (const l of s.lines)
       if (l.state === "golden" && look.lines.find((x) => x.rule === l.rule)?.state !== "golden") out.push(`${label}: the look "${look.title}" takes ${l.rule} off the mark`);
-  if (keepsShoes(s.verdict)) for (const l of s.lines) if (/shoes nearer|darker shoes|\(shoes, a belt/.test(l.text)) out.push(`${label}: keeps the shoes beside: ${l.text}`);
+  if (keepsShoes(s.verdict)) for (const l of s.lines) if (/shoes nearer|darker shoes|\(shoes, a belt/i.test(l.text)) out.push(`${label}: keeps the shoes beside: ${l.text}`);
   //    The proportion line's shoe clause follows the leg line and carries its
   //    borderline mark (law 2: a clause that can flip is never settled).
   const prop = s.lines.find((l) => l.rule === "proportion")!;
@@ -135,7 +137,7 @@ export function problemsOf(s: Shown, label: string): string[] {
   if (/close in value too/.test(prop.text) && leg?.state !== "golden") out.push(`${label}: proportion says the shoes continue, the leg line does not`);
   if (/shoes contrast with it/.test(prop.text) && !(leg && leg.state !== "golden" && leg.state !== "unread")) out.push(`${label}: proportion says the shoes contrast, the leg line does not`);
   if (/The shoes (sit close in value too|contrast with it)/.test(prop.text)) {
-    if (!/the leg line says more\.$/.test(prop.text)) out.push(`${label}: the shoe clause does not point to the leg line`);
+    if (!/\(see Leg line below\)/.test(prop.text)) out.push(`${label}: the shoe clause does not point to the leg line`);
     if (prop.borderline !== leg?.borderline) out.push(`${label}: proportion borderline ${prop.borderline}, leg line ${leg?.borderline}`);
   }
   if (/Keep the shoes close in value/.test(prop.text)) out.push(`${label}: the old shoe clause`);
@@ -156,7 +158,102 @@ export function problemsOf(s: Shown, label: string): string[] {
     if (look.moves.length > 1 && new Set(look.moves.map((m) => m.detail)).size !== look.moves.length) out.push(`${label}: ${look.title}: a reason repeated`);
     reasonProblems(s, look, label, out);
   }
+  // T9 (UX pass 4): a tailor's words, and numbers that agree.
+  tailorProblems(s, texts, label, out);
   return out;
+}
+
+/** A row's short numeral for Volume ("1.70× · 0.25×"): the number beside the row's name, whose reference its Measured line names. */
+const VOLUME_NUMERAL = /^(?:\d\.\d\d×|not read) · (?:\d\.\d\d×|not read)$/;
+
+/**
+ * The plain verdicts a row that is fine or on the mark closes on (Sam, UX
+ * pass 4: a Value row marked FINE read as a fault). Its last sentence ends
+ * in one of these, so no such row ends on a problem.
+ */
+export const CLOSING_VERDICT = /(?:keep it|it works|that works|it holds|that holds)\.$/i;
+
+/**
+ * The words that name each rule's cause in a look's reason, written out here
+ * so the check does not trust the engine's own table (Mara, UX pass 4: navy
+ * and oxblood moved the leg line, but no reason said so).
+ */
+const CAUSE_WORDS: Record<AdviceLine["rule"], RegExp> = {
+  proportion: /\bbreak\b/,
+  volume: /\bvolumes?\b/,
+  legline: /\bleg line\b/,
+  harmony: /\bharmony\b|\bscheme\b/,
+  value: /\bvalue\b/,
+  shares: /\bshares?\b|60-30-10/,
+  chroma: /\bsaturat|full strength/,
+};
+
+/** A move's identity: the same move offered in two looks is one move, said once each. */
+const moveKey = (m: Look["moves"][number]) => (m.kind === "break" ? `b${m.to}` : `${m.kind}${"swatch" in m ? m.swatch : ""}:${m.L},${m.C},${m.h}`);
+
+/** The lightness a line quotes for the upper and the lower piece, if it quotes one. */
+function quotedL(line: AdviceLine, bins: Bins): { where: string; upper?: number; lower?: number }[] {
+  const n = (x: string | undefined) => (x === undefined ? undefined : Number(x));
+  const out: { where: string; upper?: number; lower?: number }[] = [];
+  const copy = measuredCopy(line, bins);
+  if (line.rule === "legline") {
+    out.push({ where: "Leg line", lower: n(line.text.match(/the lower piece \((\d\.\d\d) and \d\.\d\d\)/)?.[1]) });
+    out.push({ where: "Leg line Measured", lower: n(copy.match(/lower piece (\d\.\d\d), the shoes/)?.[1]) });
+  }
+  if (line.rule === "value") {
+    out.push({ where: "Value", upper: n(line.text.match(/upper (?:piece )?(?:\(lightness )?(\d\.\d\d)/)?.[1]), lower: n(line.text.match(/lower (?:piece )?(?:\(lightness )?(\d\.\d\d)/)?.[1]) });
+    out.push({ where: "Value Measured", upper: n(copy.match(/^Upper piece (\d\.\d\d)/)?.[1]), lower: n(copy.match(/lower piece (\d\.\d\d);/)?.[1]) });
+  }
+  return out;
+}
+
+function tailorProblems(s: Shown, texts: readonly string[], label: string, out: string[]): void {
+  for (const t of texts) {
+    // "Shoulder line" is the seam from the neck to the shoulder point, not a width (Mara).
+    if (/shoulder line/i.test(t)) out.push(`${label}: "shoulder line" in: ${t}`);
+    // The golden section is never shortened to "the section", nor counted "from below" (Mara).
+    if (/(?<!golden )\bsection\b/i.test(t)) out.push(`${label}: "section" without "golden" in: ${t}`);
+    if (/\bfrom below\b/i.test(t)) out.push(`${label}: "from below" in: ${t}`);
+    // "Block" is not a garment (Mara: "keep the lower block narrow").
+    if (/\bblock\b/i.test(t)) out.push(`${label}: "block" in: ${t}`);
+    // A pointer says where (Sam: "the leg line says more").
+    if (/says more/.test(t)) out.push(`${label}: a pointer that does not say where: ${t}`);
+    // Neutrals have no temperature, said as such (Noor).
+    if (/is no temperature/.test(t)) out.push(`${label}: "is no temperature" in: ${t}`);
+  }
+  // Every ratio names its reference (Noor: "lower piece 0.25× at the knee line").
+  for (const t of texts) if (!VOLUME_NUMERAL.test(t)) for (const m of t.matchAll(/\d\.\d\d×(?! across the shoulders)/g)) out.push(`${label}: "${m[0]}" names no reference in: ${t}`);
+  const readings: { name: string; lines: AdviceLine[]; bins: Bins }[] = [{ name: "worn", lines: s.lines, bins: s.bins }, ...s.looks.map((l) => ({ name: `look "${l.title}"`, lines: l.lines, bins: l.bins }))];
+  for (const r of readings) {
+    // A piece's lightness is one number wherever it is quoted (Mara: Leg line 0.32, Value 0.26).
+    const quotes = r.lines.flatMap((l) => quotedL(l, r.bins));
+    for (const piece of ["upper", "lower"] as const) {
+      const said = quotes.filter((q) => q[piece] !== undefined);
+      if (new Set(said.map((q) => q[piece])).size > 1) out.push(`${label}, ${r.name}: the ${piece} piece's lightness differs: ${said.map((q) => `${q.where} ${q[piece]}`).join(", ")}`);
+    }
+    for (const l of r.lines) {
+      // A row that is fine or on the mark closes on a plain verdict (Sam).
+      if ((l.state === "golden" || l.state === "neutral") && !CLOSING_VERDICT.test(l.text)) out.push(`${label}, ${r.name}: ${l.rule} is ${stateLabel(l)} but ends without a verdict: ${l.text}`);
+    }
+    // A half-read Volume measures nothing against the upper piece it did not read (Sam).
+    const v = r.lines.find((l) => l.rule === "volume");
+    if (v && r.bins.fit?.top === null) for (const t of [v.text, measuredCopy(v, r.bins)]) if (/× (?:its|the upper piece's)/.test(t)) out.push(`${label}, ${r.name}: volume measures against the unread upper piece: ${t}`);
+  }
+  // The proportion line's shoe clause points to the row by its name.
+  const prop = s.lines.find((l) => l.rule === "proportion")!;
+  if (/The shoes (sit close in value too|contrast with it)/.test(prop.text) && !/\(see Leg line below\)/.test(prop.text)) out.push(`${label}: the shoe clause does not say "see Leg line below": ${prop.text}`);
+  // A look's reason names the rule it moves (Mara), and no two looks share a reason (Noor).
+  for (const look of s.looks)
+    for (const c of look.changes) if (!look.moves.some((m) => CAUSE_WORDS[c.rule].test(m.detail))) out.push(`${label}: "${look.title}" moves ${c.rule} (${c.from} to ${c.to}) but no reason names it: ${look.moves.map((m) => m.detail).join(" ")}`);
+  const reasons = new Map<string, string>();
+  for (const look of s.looks)
+    for (const m of look.moves) {
+      const reason = m.detail.slice(m.detail.indexOf(": ") + 2);
+      const key = moveKey(m);
+      const other = reasons.get(reason);
+      if (other !== undefined && other !== key) out.push(`${label}: two looks share the reason "${reason}"`);
+      reasons.set(reason, key);
+    }
 }
 
 /**

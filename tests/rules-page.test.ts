@@ -110,13 +110,13 @@ describe("the proportion instrument reads bands as the engine does", () => {
     expect(proportionAt(0.05).r).toBe(0.1);
     expect(proportionAt(0.97).r).toBe(0.9);
     expect(proportionAt(0.4499)).toMatchObject({ r: 0.44, band: "halves", onEdge: true });
-    expect(proportionAt(0.383)).toMatchObject({ r: 0.38, band: "golden", label: "section", onEdge: false });
-    expect(proportionAt(0.64)).toMatchObject({ band: "golden-long", label: "section, below" });
+    expect(proportionAt(0.383)).toMatchObject({ r: 0.38, band: "golden", label: "golden section", onEdge: false });
+    expect(proportionAt(0.64)).toMatchObject({ band: "golden-long", label: "golden, below" });
   });
 
   it("says the live value in plain words", () => {
     expect(proportionNote(0.46)).toBe("Drag the line: 0.46, halves.");
-    expect(proportionNote(0.56)).toBe("Drag the line: 0.56, section, below, on the edge.");
+    expect(proportionNote(0.56)).toBe("Drag the line: 0.56, golden, below, on the edge.");
   });
 });
 

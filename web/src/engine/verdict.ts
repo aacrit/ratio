@@ -13,11 +13,11 @@
 // function of the lines, the bins and the looks.
 
 import { type Look, type Move, accentOf, accentWords, pieces } from "./looks";
-import { SATURATED_CHROMA, isNeutral } from "./constants";
+import { SATURATED_CHROMA, VALUE_GAP_EDGES, isNeutral } from "./constants";
 import { byName, colourName } from "./names";
 import { pieceOf } from "./pieces";
 import type { AdviceLine, Bins } from "./rules";
-import { PROPORTION_BANDS, tuckable } from "./rules";
+import { PROPORTION_BANDS, pieceLightness, tuckable } from "./rules";
 import { topFit, legFit } from "./shape-rules";
 
 const PIECE_WORDS = { upper: "the top", lower: "the lower piece", shoes: "shoes", other: "an accent" } as const;
@@ -57,8 +57,9 @@ export function leadSentence(line: AdviceLine, bins: Bins | undefined): string |
       if (band === "halves") return `The upper piece ends near the middle of the figure, ${degree(line, Math.abs(r - 0.5) <= 0.02 ? "squarely in halves" : "in halves")}${bins?.front ? ", and it opens down the front" : ""}.`;
       if (band === "long-top") return "The upper piece covers most of the figure, leaving the break little to divide.";
       if (band === "golden") return `The break sits near ${Math.abs(r - 1 / 3) < Math.abs(r - 0.382) ? "a third" : "the golden section"} of the height, ${degree(line, "the classic division")}.`;
-      if (band === "golden-long") return `A long upper piece over a short lower one breaks near the section from below, ${degree(line, "the second classical division")}.`;
-      return "The break sits high, so the lower block carries the length.";
+      // The division named in full and counted from the floor (Mara, UX pass 4: "the section from below" dropped "golden").
+      if (band === "golden-long") return `A long upper piece over a short lower one breaks near ${Math.abs(1 - r - 1 / 3) < Math.abs(1 - r - 0.382) ? "a third" : "the golden section"}, counted from the floor, ${degree(line, "the second classical division")}.`;
+      return "The break sits high, so the lower piece carries the length.";
     }
     case "volume": {
       if (line.state === "unread" || !bins?.fit || bins.fit.top === null || bins.fit.legs === null) return null;
@@ -74,12 +75,17 @@ export function leadSentence(line: AdviceLine, bins: Bins | undefined): string |
       return `The hues share one classic scheme, ${degree(line, "comfortably inside it")}.`;
     case "value":
       if (line.state === "advice") return "Dark over light puts the visual weight high.";
-      if (bins && Math.abs(bins.bottom.L - bins.top.L) <= 0.08) return "The upper and lower pieces sit at one tone, so the figure reads as one shape.";
-      return bins && bins.top.L > bins.bottom.L ? "Light over dark grounds the figure." : "The values sit close enough to read calmly.";
+      {
+        // The pieces' lightness from the one source the value line reads (pieceLightness, T9).
+        const pl = bins ? pieceLightness(bins) : null;
+        if (pl && Math.abs(pl.lower - pl.upper) <= VALUE_GAP_EDGES[0]) return "The upper and lower pieces sit at one tone, so the figure reads as one shape.";
+        return pl && pl.upper > pl.lower ? "Light over dark grounds the figure." : "The values sit close enough to read calmly.";
+      }
     case "chroma":
       if (line.state === "advice") return line.text.includes("vibrate") ? "Two near-complements at one lightness vibrate where they meet." : "Several saturated colours compete as equals.";
       if (line.state === "golden") return "One saturated colour leads, a single voice.";
-      return "No colour is at full strength, so value carries the outfit.";
+      // Saturated neighbours are fine too; the sentence never says none is saturated beside "2 saturated".
+      return line.measured.startsWith("0 ") ? "No colour is at full strength, so value carries the outfit." : "The saturated colours sit in neighbouring hues, one voice.";
     case "shares":
       if (line.state === "advice") return "Two colours share the outfit almost equally, so none leads.";
       if (line.state === "golden") return "The colours share the area like a composed palette, one leading.";
