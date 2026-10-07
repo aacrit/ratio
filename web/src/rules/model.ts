@@ -24,9 +24,12 @@ export const countWord = (n: number): string => NUMBER_WORDS[n] ?? String(n);
 /** What each proportion band is called beside the tape, in the live note and to a screen reader (short; the drill names them in full from RULEBOOK). */
 export const PROPORTION_LABELS: Record<ProportionBand, string> = {
   "short-top": "short top",
-  golden: "section",
+  // True for the whole band: each composed band holds a third and the golden
+  // section, so neither is named alone, and the lower one is counted from
+  // the floor (Mara, UX pass 4; T9 review round 1).
+  golden: "a third or golden",
   halves: "halves",
-  "golden-long": "section, below",
+  "golden-long": "a third or golden, from the floor",
   "long-top": "long top",
 };
 
@@ -103,8 +106,8 @@ function scale(d: Omit<ScaleDef, "start">): ScaleDef {
 }
 
 export const SCALES: readonly ScaleDef[] = [
-  scale({ id: "volume-top", rule: "volume", title: "upper piece, × shoulder line", min: 0.9, max: 1.8, step: 0.05, edges: FIT_TOP, bands: ["fitted", "straight", "loose"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The upper piece's width over its shoulder line" }),
-  scale({ id: "volume-legs", rule: "volume", title: "lower piece at knee line, × shoulder line", min: 0.2, max: 0.9, step: 0.05, edges: FIT_LEGS, bands: ["narrow", "straight", "wide"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The lower piece's width at the knee line over the upper piece's shoulder line" }),
+  scale({ id: "volume-top", rule: "volume", title: "upper piece, × across the shoulders", min: 0.9, max: 1.8, step: 0.05, edges: FIT_TOP, bands: ["fitted", "straight", "loose"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The upper piece's width over the span between the shoulder points" }),
+  scale({ id: "volume-legs", rule: "volume", title: "lower piece at knee line, × across the shoulders", min: 0.2, max: 0.9, step: 0.05, edges: FIT_LEGS, bands: ["narrow", "straight", "wide"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The lower piece's width at the knee line over the span between the shoulder points" }),
   scale({ id: "legline", rule: "legline", title: "lightness gap, lower piece to shoes", min: 0, max: 0.5, step: 0.02, edges: [LEG_LINE_EDGE], bands: ["the line runs on", "the line stops at the shoes"], borderlineBin: 0.04, format: (v) => `ΔL ${two(v)}`, label: "The lightness gap between the lower piece and the shoes" }),
   scale({ id: "value", rule: "value", title: "lightness range of the palette", min: 0, max: 1, step: 0.02, edges: CONTRAST_EDGES, bands: ["low", "medium", "high"], borderlineBin: 0.04, format: (v) => `range ${two(v)}`, label: "The lightness range, lightest colour minus darkest" }),
   // Chroma: the one edge RULEBOOK states. Whether a colour is a neutral depends on its lightness too
@@ -226,7 +229,8 @@ export function yoursValues(b: Bins): YoursValues {
     proportion: b.proportion,
     volumeTop: b.fit?.top ?? null,
     volumeLegs: b.fit?.legs ?? null,
-    legline: p.lower >= 0 && p.shoes >= 0 ? { lower: b.palette[p.lower].L, shoes: b.palette[p.shoes].L, gap: fix(Math.abs(b.palette[p.lower].L - b.palette[p.shoes].L)) } : null,
+    // The same lightness the leg line quotes (rules.ts pieceLightness, T9).
+    legline: p.lower >= 0 && p.shoes >= 0 ? { lower: b.bottom.L, shoes: b.palette[p.shoes].L, gap: fix(Math.abs(b.bottom.L - b.palette[p.shoes].L)) } : null,
     value: ls.length ? { ls, range: fix(Math.max(...ls) - Math.min(...ls)) } : null,
     shares: named.map(({ share, L, C, h }) => ({ share, L, C, h })),
     chroma: named.map(({ L, C, h }) => ({ L, C, h, neutral: isNeutral({ L, C }) })),

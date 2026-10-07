@@ -17,7 +17,7 @@ import type { BinnedSwatch } from "../web/src/engine/colour-rules";
 import { binShares, isNeutral } from "../web/src/engine/constants";
 import { accentOf, accentWords, pieceOf, pieces } from "../web/src/engine/looks";
 import type { Bins } from "../web/src/engine/rules";
-import { keepOf, problemsOf, show } from "./helpers/agrees";
+import { keepOf, nudgeProblems, problemsOf, show } from "./helpers/agrees";
 
 export const PROBE_SIZE = 4000;
 
@@ -111,15 +111,24 @@ describe("the reviewer's probe: 4000 seeded readings, every line agrees", () => 
   it("no keep against a change, no body word, borderline follows the leg line, no look off the mark, never fine when not read", () => {
     const next = probe(0x7a6);
     const problems: string[] = [];
+    const nudge = { readings: 0, nudges: 0, flips: 0 };
     const seen = { accentKept: 0, ruleKept: 0, edgeClause: 0, halfRead: 0, looks: 0, matchedValue: 0, accentOn: { upper: 0, lower: 0, shoes: 0, other: 0 } };
     const started = performance.now();
     for (let i = 0; i < PROBE_SIZE; i++) {
       const s = show(next());
       problems.push(...problemsOf(s, `probe #${i}`));
+      // Law 2 (T9 review round 1): one reading in four, each piece's lightness and the shoes' nudged one bin either way.
+      if (i % 4 === 0) {
+        const n = nudgeProblems(s.bins, `probe #${i}`);
+        problems.push(...n.problems);
+        nudge.readings++;
+        nudge.nudges += n.nudges;
+        nudge.flips += n.flips;
+      }
       const kept = keepOf(s.verdict);
       if (kept !== null && kept === accentWords(s.bins)) seen.accentKept++;
       else if (kept !== null) seen.ruleKept++;
-      if (s.lines[0].borderline && /the leg line says more/.test(s.lines[0].text)) seen.edgeClause++;
+      if (s.lines[0].borderline && /\(see Leg line below\)/.test(s.lines[0].text)) seen.edgeClause++;
       if (s.lines.some((l) => l.rule === "volume" && l.state === "unread")) seen.halfRead++;
       if (s.lines.some((l) => l.recolours?.some((r) => r.matched))) seen.matchedValue++;
       seen.looks += s.looks.length;
@@ -128,7 +137,7 @@ describe("the reviewer's probe: 4000 seeded readings, every line agrees", () => 
     }
     const ms = Math.round(performance.now() - started);
     // The stats, on request: RATIO_PROBE_LOG=1 npx vitest run tests/advice-probe.test.ts
-    if (process.env.RATIO_PROBE_LOG) console.log(`probe: ${PROBE_SIZE} readings in ${ms} ms`, JSON.stringify(seen));
+    if (process.env.RATIO_PROBE_LOG) console.log(`probe: ${PROBE_SIZE} readings in ${ms} ms`, JSON.stringify(seen), "nudge:", JSON.stringify(nudge));
     expect(problems.slice(0, 20), `${problems.length} problems`).toEqual([]);
     // The probe reaches every case it is for.
     expect(seen.accentKept).toBeGreaterThan(50);
@@ -136,6 +145,8 @@ describe("the reviewer's probe: 4000 seeded readings, every line agrees", () => 
     expect(seen.edgeClause).toBeGreaterThan(10);
     expect(seen.halfRead).toBeGreaterThan(100);
     expect(seen.matchedValue).toBeGreaterThan(10);
+    // The nudges reach lines that do flip, each one marked borderline.
+    expect(nudge.flips).toBeGreaterThan(40);
     expect(seen.looks).toBeGreaterThan(2000);
     for (const n of Object.values(seen.accentOn)) expect(n).toBeGreaterThan(50);
   }, 120_000);

@@ -116,3 +116,25 @@ export function byName<T extends Placed>(palette: readonly T[]): (Placed & { nam
     .sort((p, q) => q.e.share - p.e.share || p.i - q.i)
     .map((x) => x.e);
 }
+
+/**
+ * The palette with each colour whose name a one-bin change in its
+ * lightness would change, nudged that way: one palette per such nudge.
+ * The rules that read the palette by name (harmony, shares, chroma) are
+ * re-run on each, and a line whose state differs on any is marked
+ * borderline (law 2, T9 review rounds 1 and 2: shoes at 0.38 read as
+ * oxblood, at 0.40 as red). A palette with no such colour gives none, so
+ * no line is marked for a renaming that changes nothing it reads.
+ */
+export function renamingNudges<T extends Placed>(palette: readonly T[], step = 0.02): T[][] {
+  const out: T[][] = [];
+  palette.forEach((s, i) => {
+    if (s.share <= 0) return;
+    const name = colourName(s.L, s.C, s.h);
+    for (const d of [-step, step]) {
+      const L = Number((s.L + d).toFixed(2));
+      if (colourName(L, s.C, s.h) !== name) out.push(palette.map((x, j) => (j === i ? { ...x, L } : x)));
+    }
+  });
+  return out;
+}

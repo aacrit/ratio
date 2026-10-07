@@ -120,7 +120,7 @@ const VISIBLE = 0.5;
  * real photo) is two pieces; two blacks are one column.
  */
 export const ONE_COLUMN_DELTA = 0.04;
-/** Where the natural waist sits between the shoulder line and the hip joints. */
+/** Where the natural waist sits between the shoulder points and the hip joints. */
 export const WAIST_FRACTION = 0.6;
 /** A break needs at least this share of the shoulders-to-hips distance of upper piece above it (the collar's rows are not a garment). */
 export const BREAK_MIN_ROWS = 0.15;

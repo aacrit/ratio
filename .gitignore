@@ -39,3 +39,6 @@ web/public/samples/
 # CI screenshots (scripts/screens.mjs)
 screens/
 preview.log
+
+# agent worktrees (Claude Code)
+.claude/worktrees/

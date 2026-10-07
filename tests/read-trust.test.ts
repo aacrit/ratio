@@ -374,11 +374,14 @@ describe("4. advice quotes only numbers the reading shows", () => {
     expect(checked).toBeGreaterThan(1000);
   });
 
-  it("labels the upper and lower pieces' lightness in the value line (Noor: 0.28 and 0.22)", () => {
-    const bins: Bins = { proportion: 0.38, waist: 0.38, top: { L: 0.28, C: 0, h: 0 }, bottom: { L: 0.22, C: 0, h: 0 }, palette: [sw(0.5, 0, 0, 0.6, 0.3), sw(0.9, 0, 0, 0.4, 0.7)], fit: null };
-    const value = readBins(bins).find((l) => l.rule === "value")!;
-    expect(value.text).toContain("0.28 and 0.22");
-    expect(measuredCopy(value, bins)).toBe("Upper piece 0.28, lower piece 0.22; lightness of each colour: grey 0.50, white 0.90.");
+  it("labels the upper and lower pieces' lightness in the value line (Noor: 0.28 and 0.22), from each piece's measured core, the one source the leg line reads too (T9)", () => {
+    // The cores (0.28, 0.20) are the pieces' lightness in every line; the list after them is each palette colour's own, labelled by colour.
+    const bins: Bins = { proportion: 0.38, waist: 0.38, top: { L: 0.28, C: 0, h: 0 }, bottom: { L: 0.2, C: 0, h: 0 }, palette: [sw(0.3, 0, 0, 0.6, 0.3), sw(0.22, 0, 0, 0.3, 0.7), sw(0.9, 0, 0, 0.1, 0.95)], fit: null };
+    const lines = readBins(bins);
+    const value = lines.find((l) => l.rule === "value")!;
+    expect(value.text).toContain("(upper 0.28, lower 0.20)");
+    expect(measuredCopy(value, bins)).toBe("Pieces at their measured core: upper 0.28, lower 0.20. Colours: charcoal 0.30, black 0.22, white 0.90.");
+    expect(lines.find((l) => l.rule === "legline")!.text).toContain("the lower piece (0.20 and 0.90)");
   });
 });
 
@@ -389,7 +392,7 @@ describe("2b. value reads each colour's own lightness", () => {
     expect(byName(bins.palette)).toHaveLength(1);
     const value = readBins(bins).find((l) => l.rule === "value")!;
     expect(value.measured).toBe("range 0.22");
-    expect(measuredCopy(value, bins)).toBe("Upper piece 0.46, lower piece 0.68; lightness of each colour: grey 0.46 and 0.68.");
+    expect(measuredCopy(value, bins)).toBe("Pieces at their measured core: upper 0.46, lower 0.68. Colours: grey 0.46 and 0.68.");
     const wide: Bins = { ...bins, top: { L: 0.24, C: 0, h: 0 }, palette: [sw(0.24, 0, 0, 0.5, 0.3), grey(0.68, 0.5, 0.7)] };
     expect(readBins(wide).find((l) => l.rule === "value")!.measured).toBe("range 0.44");
   });
@@ -508,7 +511,7 @@ describe("6. looks that differ", () => {
 });
 
 describe("7. engine version", () => {
-  it("is 0.10.0: every line agrees with the others and names the garment, never the body (T6)", () => {
-    expect(ENGINE_VERSION).toBe("ratio-engine/0.10.0");
+  it("is 0.11.0: a tailor's words, and a piece's numbers agree in every line (T9)", () => {
+    expect(ENGINE_VERSION).toBe("ratio-engine/0.11.0");
   });
 });

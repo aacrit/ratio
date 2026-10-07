@@ -46,7 +46,7 @@ describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
     }
     const p2 = show(fixtureBins("p2"));
     const v = p2.lines.find((l) => l.rule === "volume")!;
-    expect(measuredCopy(v, p2.bins)).toBe("Upper piece 0.90× its shoulder line, read on one side, on the rows no arm crosses, fitted; lower piece 0.45× at the knee line, straight.");
+    expect(measuredCopy(v, p2.bins)).toBe("Upper piece 0.90× across the shoulders, read on one side, on the rows no arm crosses, fitted; lower piece at the knee line, 0.45× across the shoulders, straight.");
   });
 
   it("p1 (Noor, UX pass 3 read 0429 at 0.9.0, ed0f at 0.10.0): keeps the coral shoes, and the leg line keeps them too", () => {
@@ -54,7 +54,7 @@ describe("the UX pass 3 fixtures (fixtures.lock.json bins)", () => {
     expect(s.verdict).toContain("Keep the coral shoes.");
     const leg = s.lines.find((l) => l.rule === "legline")!;
     expect(leg.text).not.toMatch(/nearer/);
-    expect(leg.text).toMatch(/accent, so the contrast is the point: keep it\.$/);
+    expect(leg.text).toMatch(/accent, so the contrast is the point: keep the contrast\.$/);
     expect(leg.recolours).toBeUndefined();
   });
 
@@ -139,7 +139,7 @@ describe("review round 1 reproducers", () => {
     const leg = lines.find((l) => l.rule === "legline")!;
     expect(leg.measured).toBe("ΔL 0.10");
     expect(leg.borderline).toBe(true);
-    expect(prop.text).toMatch(/close in value too.*the leg line says more\.$/);
+    expect(prop.text).toMatch(/close in value too, so the column runs on to the floor \(see Leg line below\)\./);
     expect(prop.borderline).toBe(true);
   });
 
@@ -192,7 +192,7 @@ describe("review round 3 reproducers", () => {
     expect(black).toBeDefined();
     const detail = black.moves[0].detail;
     expect(detail).not.toMatch(/takes the hue out/);
-    expect(detail).toBe("Swap the lower piece for black: a deeper neutral, so the lower piece and the shoes read as one line.");
+    expect(detail).toBe("Swap the lower piece for black: a deeper neutral close in value to the shoes, so the leg line runs on to the floor.");
     expect(black.changes).toEqual([{ rule: "legline", title: "Leg line", from: "neutral", to: "golden" }]);
     agrees(s, "sample");
   });

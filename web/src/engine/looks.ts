@@ -18,10 +18,10 @@
 //   at least one rule that changes, or it is not offered.
 
 import { type BinnedSwatch, clearFits } from "./colour-rules";
-import { colourName, familyOf } from "./names";
-import { binShares, isNeutral } from "./constants";
+import { byName, colourName, familyOf } from "./names";
+import { VALUE_GAP_EDGES, binShares, isNeutral } from "./constants";
 import { ACCENT_SHARE, CLEAR_HUE, type Piece, accentOf as accentIn, isShoes, pieceOf, pieces as placedPieces } from "./pieces";
-import { type AdviceLine, type Bins, type LineState, readBins, tuckable } from "./rules";
+import { type AdviceLine, type Bins, type LineState, pieceLightness, readBins, tuckable } from "./rules";
 import { shoesContinue } from "./shape-rules";
 
 export type Move =
@@ -72,21 +72,30 @@ const labGap = (p: BinnedSwatch, q: BinnedSwatch) => {
 };
 
 /** Merges swatches that a recolour made near-identical, as the palette extractor would. */
-export function normalise(b: Bins): Bins {
-  const merged: BinnedSwatch[] = [];
-  for (const s of [...b.palette].sort((p, q) => q.share - p.share)) {
+export function normalise(b: Bins, worn?: readonly BinnedSwatch[]): Bins {
+  // A swatch the moves left exactly as worn (same place in the palette, same
+  // values). Two such swatches are never merged here: the measured palette
+  // kept them apart, and a look that changed neither must not move a rule
+  // through them (T9: a belt alone "moved" the colour shares).
+  const asWorn = (s: BinnedSwatch, i: number) => {
+    const w = worn?.[i];
+    return !!w && w.L === s.L && w.C === s.C && w.h === s.h && w.share === s.share && w.y === s.y;
+  };
+  const merged: (BinnedSwatch & { worn: boolean })[] = [];
+  for (const s of b.palette.map((x, i) => ({ ...x, worn: asWorn(x, i) })).sort((p, q) => q.share - p.share)) {
     // The shoes stay their own swatch, as the palette reads them (palette.ts:
     // read from the boxes round the feet, never merged into a garment), so
     // shoes darkened to match the lower piece still read as shoes.
-    const into = merged.find((m) => labGap(m, s) < 0.06 && isShoes(m) === isShoes(s));
+    const into = merged.find((m) => labGap(m, s) < 0.06 && isShoes(m) === isShoes(s) && !(m.worn && s.worn));
     if (into) {
       into.y = fix((into.y * into.share + s.y * s.share) / (into.share + s.share));
       into.share = fix(into.share + s.share);
+      into.worn = false;
     } else merged.push({ ...s });
   }
   // Shares by largest remainder, so a look's palette sums to exactly 1.00 too.
   const shares = binShares(merged.map((s) => s.share));
-  return { ...b, palette: merged.map((s, i) => ({ ...s, share: shares[i] })).sort((p, q) => q.share - p.share) };
+  return { ...b, palette: merged.map(({ worn: _, ...s }, i) => ({ ...s, share: shares[i] })).sort((p, q) => q.share - p.share) };
 }
 
 /**
@@ -170,6 +179,14 @@ function pieceName(b: Bins, i: number, p: ReturnType<typeof pieces>): string {
   return twin ? `${name} ${s.y < b.waist ? "above" : "below"} the waist` : name;
 }
 
+/** A swatch's lightness as the lines quote it: the measured core for the upper and lower piece (rules.ts pieceLightness), its own otherwise. */
+export const pieceL = (b: Bins, i: number, p: ReturnType<typeof pieces>): number => (i === p.lower ? b.bottom.L : i === p.upper ? b.top.L : b.palette[i].L);
+
+/** Warm hues sit near orange on the OKLCH wheel; a neighbour is warmer when it sits nearer it. */
+const warmth = (h: number) => Math.cos(((h - 50) * Math.PI) / 180);
+/** Where on the wheel a hue sits, in a word, for two neighbours equally warm. */
+const ringWord = (h: number) => (h < 45 || h >= 345 ? "red" : h < 75 ? "orange" : h < 115 ? "yellow" : h < 200 ? "green" : h < 255 ? "blue" : "violet");
+
 /** A piece's name inside a sentence: "the lower piece", "the grey detail". */
 const inSentence = (name: string) => (name === "Shoes" ? "the shoes" : `the ${name.charAt(0).toLowerCase()}${name.slice(1)}`);
 
@@ -180,14 +197,16 @@ const inSentence = (name: string) => (name === "Shoes" ? "the shoes" : `the ${na
  * (tests/helpers/agrees.ts).
  */
 function deeperNeutralWhy(b: Bins, i: number, p: ReturnType<typeof pieces>, L: number): string {
-  const s = b.palette[i];
+  // A piece's lightness as every line quotes it: the measured core for the pieces, the swatch otherwise (pieceL).
+  const s = { L: pieceL(b, i, p) };
   const other = i === p.lower ? p.shoes : i === p.shoes ? p.lower : -1;
   if (other >= 0 && other !== i) {
-    const oL = b.palette[other].L;
-    if (!shoesContinue(s.L, oL) && shoesContinue(L, oL)) return `a ${L < s.L ? "deeper" : "lighter"} neutral, so the lower piece and the shoes read as one line`;
+    const oL = pieceL(b, other, p);
+    // Names the rule it moves, the leg line (T9, Mara).
+    if (!shoesContinue(s.L, oL) && shoesContinue(L, oL)) return `a ${L < s.L ? "deeper" : "lighter"} neutral close in value to ${i === p.lower ? "the shoes" : "the lower piece"}, so the leg line runs on to the floor`;
   }
-  if (L < s.L) return i === p.lower ? "a deeper neutral, darker below" : "a deeper neutral, a darker value";
-  return "a lighter neutral, a step up in value";
+  if (L < s.L) return i === p.lower ? "a deeper neutral puts the darker value below" : `a deeper neutral gives ${inSentence(pieceName(b, i, p))} a darker value`;
+  return `a lighter neutral takes ${inSentence(pieceName(b, i, p))} a step up in value`;
 }
 
 /** Every candidate move for these bins, in a fixed order, and the moves that only come as a pair (the value pair). */
@@ -226,17 +245,26 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
     // it is there (Mara, UX pass 3: a navy lower piece was explained only by
     // the oxblood accent's reason).
     const options: { L: number; C: number; h: number; why: string }[] = [];
+    // Each reason names the piece it changes, and the colour it brings where
+    // two options could otherwise read alike, so no two looks in a reading
+    // say the same reason (Noor, UX pass 4).
+    const piece = inSentence(pieceName(b, i, p));
     if (anchor && anchor !== s) {
       const C = Math.max(0.06, Math.min(0.12, s.C || 0.08));
       const of = `the ${plain(anchor)} in the outfit`;
+      // The two neighbours (and the two near-opposites) differ in substance, not only in name (T9 review round 1): warmer or cooler.
+      const side = (turn: number) => {
+        const a = warmth(wrap(anchor.h + turn)), z = warmth(wrap(anchor.h - turn));
+        return Math.abs(a - z) < 1e-9 ? `towards ${ringWord(wrap(anchor.h + turn))}` : a > z ? "on its warmer side" : "on its cooler side";
+      };
       const why = (turn: number) =>
         turn === 0
-          ? `it takes the hue of ${of}, so the two read as one scheme`
+          ? `it takes the hue of ${of}, so ${piece} and the ${plain(anchor)} read as one scheme`
           : Math.abs(turn) === 30
-            ? `it sits beside ${of} on the colour wheel, so the two read as one analogous scheme`
+            ? `it sits beside ${of} on the colour wheel, ${side(turn)}, so ${piece} and the ${plain(anchor)} read as one analogous scheme`
             : turn === 180
-              ? `it sits opposite ${of} on the colour wheel, a complementary pair`
-              : `it sits nearly opposite ${of} on the colour wheel, a split-complementary pair`;
+              ? `it sits opposite ${of} on the colour wheel, so ${piece} and the ${plain(anchor)} make a complementary pair`
+              : `it sits nearly opposite ${of} on the colour wheel, ${side(turn)}, so ${piece} and the ${plain(anchor)} make a split-complementary pair`;
       for (const turn of [0, 30, -30, 180, 150, -150]) options.push({ L: s.L, C, h: wrap(anchor.h + turn), why: why(turn) });
     }
     // Neutrals at the piece's own lightness, and a deep neutral. Each reason
@@ -246,10 +274,10 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
     const deep = 0.2;
     // A neutral at the piece's own lightness, only for a colour: on a piece
     // that is already a neutral it is the same neutral (sameColour), never offered.
-    if (!isNeutral(s)) options.push({ L: s.L, C: 0, h: 0, why: "a neutral at the piece's own lightness takes the hue out and keeps its value" });
-    options.push({ L: deep, C: 0, h: 0, why: isNeutral(s) ? deeperNeutralWhy(b, i, p, deep) : "a deep neutral takes the hue out, and a neutral sits with any hue" });
+    if (!isNeutral(s)) options.push({ L: s.L, C: 0, h: 0, why: `a neutral at the lightness of ${piece} takes the hue out and keeps its value` });
+    options.push({ L: deep, C: 0, h: 0, why: isNeutral(s) ? deeperNeutralWhy(b, i, p, deep) : `a deep neutral takes the hue out of ${piece}, and a neutral sits with any hue` });
     // Navy and denim: the two blues most wardrobes already have.
-    const blue = "a low-chroma blue most wardrobes hold, behaves almost as a neutral";
+    const blue = `a low-chroma blue most wardrobes hold, behaves almost as a neutral on ${piece}`;
     options.push({ L: 0.3, C: 0.07, h: 255, why: `navy, ${blue}` }, { L: 0.45, C: 0.06, h: 250, why: `denim, ${blue}` });
     const name = pieceName(b, i, p);
     for (const { why, ...o } of options) {
@@ -267,7 +295,8 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
   const pairShoes = !!valueLine?.recolours?.some((r) => r.garment === "shoes" && r.matched) && p.shoes >= 0 && p.shoes !== p.lower && p.shoes !== accent;
   if (state("value") === "advice" && p.lower >= 0 && p.upper >= 0 && p.lower !== accent) {
     const s = b.palette[p.lower];
-    const L = fix(Math.max(0.14, b.top.L - 0.2));
+    // Against the upper piece's measured core, the lightness the value line reads (pieceLightness, T9).
+    const L = fix(Math.max(0.14, pieceLightness(b).upper - 0.2));
     const o = { L, C: s.C, h: s.h };
     if (!sameColour(s, o)) {
       const lower: Move = { kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: `Swap the lower piece for ${plain(o)}: a darker value below grounds the outfit.` };
@@ -305,7 +334,9 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
     const accents = lead && lead.C >= CLEAR_HUE ? [{ L: 0.5, C: 0.12, h: wrap(lead.h + 180) }] : CLASSIC_ACCENTS;
     for (const a of accents) {
       if (sameColour(b.palette[p.shoes], a)) continue;
-      moves.push({ kind: "accent", ...a, title: `Shoes in ${plain(a)}`, detail: `Shoes in ${plain(a)}: an accent of about a tenth gives the eye a place to rest.` });
+      // The reason is written per look from the look's own re-read (accentReason in withCauses): its depth,
+      // its warmth, its share and how it meets the lower piece, so two accent looks never share one (Noor, UX pass 4).
+      moves.push({ kind: "accent", ...a, title: `Shoes in ${plain(a)}`, detail: `Shoes in ${plain(a)}: a small accent gives the eye a place to rest.` });
     }
   }
   return { moves, pairs };
@@ -349,11 +380,14 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
     }
 
   const looks: Look[] = [];
+  const alone = new Map<Move, AdviceLine[]>();
   const kept = accentWords(b);
   const keeps = kept ? [`Keeps ${kept}.`] : [];
   combos.forEach((moves) => {
-    const bins = normalise(moves.reduce(applyMove, b));
+    const bins = normalise(moves.reduce(applyMove, b), b.palette);
     const after = readBins(bins);
+    // Each move's re-read on its own, kept so a look's reasons can say which move moved a rule (withCauses).
+    if (moves.length === 1) alone.set(moves[0], after);
     // Never fix one rule by breaking another: no line falls to advice, and
     // none on the mark leaves it (T6 review round 2: a look the headline
     // offers never takes the leg line, the shares or the one saturated
@@ -402,6 +436,131 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
   }
   // Best first, as ranked.
   chosen.sort((x, y) => ranked.indexOf(x) - ranked.indexOf(y));
-  return chosen;
+  return chosen.map((look) => withCauses(look, alone));
 }
 
+/**
+ * The wording that names each rule's cause in a reason: the clauses below
+ * and the base reasons that already say it. A move whose reason matches
+ * needs no clause; tests/helpers/agrees.ts keeps its own copy of this
+ * table, so the check does not trust this one.
+ */
+const CAUSE_WORDS: Record<AdviceLine["rule"], RegExp> = {
+  proportion: /moves the break|draws the break/,
+  volume: /balance of volumes/,
+  legline: /leg line runs on to the floor/,
+  harmony: /read as one (?:analogous )?scheme|complementary pair|so the harmony holds|no hues can clash|forgiving harmony|a neutral sits with any hue/,
+  value: /value then steps down|nearly one value|step in value|darker value below|grounds the outfit/,
+  shares: /60-30-10|split the shares|compete for the lead/,
+  chroma: /saturated colour then leads|compete at full strength|steps back/,
+};
+
+const touchesShoes = (m: Move) => m.kind === "accent" || (m.kind === "recolour" && m.piece === "shoes");
+
+/**
+ * The move a rule's change is said on. The leg line reads the shoes against
+ * the lower piece, so its change is said on the shoes (Mara: oxblood's value
+ * sitting close to the navy's), then the lower piece. Any other rule is said
+ * on the colour move that, read on its own, takes the rule to the same state
+ * (the oxblood accent, not the navy, gives the one saturated note); failing
+ * that, on the move that touches what the rule reads.
+ */
+function causeMove(change: Look["changes"][number], moves: Move[], alone: ReadonlyMap<Move, AdviceLine[]>): Move {
+  const colour = moves.filter((m) => m.kind !== "break");
+  const on = (piece: Piece) => moves.find((m) => m.kind === "recolour" && m.piece === piece);
+  const pick: Record<AdviceLine["rule"], Move | undefined> = {
+    proportion: moves.find((m) => m.kind === "break"),
+    volume: undefined,
+    legline: moves.find(touchesShoes) ?? on("lower") ?? colour.at(-1),
+    value: on("lower") ?? on("upper") ?? colour.at(-1),
+    harmony: colour[0],
+    shares: moves.find((m) => m.kind === "accent") ?? colour.at(-1),
+    chroma: moves.find((m) => m.kind === "recolour" && m.muted) ?? colour[0],
+  };
+  const fallback = pick[change.rule] ?? moves[0];
+  if (change.rule === "legline") return fallback;
+  // A tuck or a belt moves only the break; a colour rule is never said on it.
+  const movers = (change.rule === "proportion" ? moves : colour).filter((m) => alone.get(m)?.find((l) => l.rule === change.rule)?.state === change.to);
+  return movers.length === 0 || movers.includes(fallback) ? fallback : movers[0];
+}
+
+/**
+ * Why a look moves a rule, said from the look's own re-read, so it is true
+ * by construction (Mara, UX pass 4: navy and oxblood took the leg line to
+ * the mark, but the oxblood's reason spoke only of an accent; the cause was
+ * its value sitting close to the navy's).
+ */
+function causeClause(rule: AdviceLine["rule"], look: Look, m: Move): string {
+  const line = look.lines.find((l) => l.rule === rule);
+  const golden = line?.state === "golden";
+  switch (rule) {
+    case "proportion":
+      return "it moves the break";
+    case "volume":
+      return "it changes the balance of volumes";
+    case "legline":
+      // A look that moves the leg line takes it to the mark: the shoes continue the lower piece.
+      if (touchesShoes(m)) return "its value sits close to the lower piece's, so the leg line runs on to the floor";
+      if (m.kind === "recolour" && m.piece === "lower") return "its value sits close to the shoes', so the leg line runs on to the floor";
+      return "the lower piece and the shoes then sit close in value, so the leg line runs on to the floor";
+    case "value": {
+      const pl = pieceLightness(look.bins);
+      if (Math.abs(pl.lower - pl.upper) <= VALUE_GAP_EDGES[0]) return "the upper and lower pieces then sit at nearly one value";
+      if (pl.upper > pl.lower) return "the value then steps down from the upper piece to the lower, so the weight sits low";
+      return "the step in value from the darker upper piece to the lower is then small enough to hold";
+    }
+    case "harmony":
+      if (!line || !golden) return "it changes the harmony";
+      if (line.measured === "neutrals") return "every piece is then a neutral, so no hues can clash";
+      if (!line.measured.includes("·")) return "the outfit then keeps one hue with neutrals, the most forgiving harmony";
+      return `the hues then fit the ${line.measured.split(" · ")[0]} template, so the harmony holds`;
+    case "shares":
+      if (line && golden) return /60-30-10/.test(line.text) ? "the colour shares then come close to 60-30-10" : "two colours then split the shares near the golden section, one leading";
+      return "no two colours then compete for the lead in the colour shares";
+    case "chroma":
+      return golden ? "one saturated colour then leads, a single voice" : "no two colours then compete at full strength";
+  }
+}
+
+/** Warm: reds, oranges, yellows on the OKLCH wheel (as colour-rules.ts reads temperature). */
+const isWarmHue = (h: number) => h < 110 || h >= 345;
+
+/**
+ * An accent's own reason, from the look's re-read: how deep and how warm it
+ * is, its share as Colour shares shows it, and how it meets the lower piece
+ * (T9 review round 1: "about a tenth" over a measured 0.05, and two accents
+ * that differed only by their colour's name).
+ */
+function accentReason(look: Look, m: Extract<Move, { kind: "accent" }>): string {
+  const name = plain(m);
+  const share = byName(look.bins.palette).find((e) => e.name === name)?.share ?? 0;
+  const depth = m.L < 0.4 ? "deep" : m.L < 0.65 ? "mid-value" : "light";
+  const warm = isNeutral(m) ? "neutral" : isWarmHue(m.h) ? "warm" : "cool";
+  const lower = pieceLightness(look.bins).lower;
+  const meets = shoesContinue(lower, m.L)
+    ? "close in value to the lower piece, so the leg line runs on to the floor"
+    : m.L < lower
+      ? "darker than the lower piece, so the shoes close the figure on a dark note"
+      : "lighter than the lower piece, so the shoes close the figure on a light note";
+  return `${m.title}: a small ${depth} ${warm} accent at ${share.toFixed(2)} of the outfit, ${meets}.`;
+}
+
+/** "a", "a and b", "a, b and c". */
+const listed = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
+
+/**
+ * A chosen look with each rule it moves named in the reason of the move that
+ * moves it: at most one clause is added to a reason, several causes joined
+ * in it (T9 review round 1: at most two clauses).
+ */
+function withCauses(look: Look, alone: ReadonlyMap<Move, AdviceLine[]>): Look {
+  const details = new Map<Move, string>(look.moves.map((m) => [m, m.kind === "accent" ? accentReason(look, m) : m.detail]));
+  const added = new Map<Move, string[]>();
+  for (const c of look.changes) {
+    const m = causeMove(c, look.moves, alone);
+    if (CAUSE_WORDS[c.rule].test(details.get(m)!)) continue;
+    added.set(m, [...(added.get(m) ?? []), causeClause(c.rule, look, m)]);
+  }
+  for (const [m, clauses] of added) details.set(m, details.get(m)!.replace(/\.$/, `; ${listed(clauses)}.`));
+  return { ...look, moves: look.moves.map((m) => (details.get(m) === m.detail ? m : { ...m, detail: details.get(m)! })) };
+}

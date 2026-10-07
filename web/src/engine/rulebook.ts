@@ -41,12 +41,12 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   proportion: {
     title: "Proportion",
     rule: "A break near a third (0.333) or the golden section (0.382) of the height reads as composed; near-equal halves read as boxy.",
-    maths: "The break is the hem of the outer upper piece: the row where its colour, read on the two flanks of the figure (never the middle, where a zip, an open front or a t-shirt shows), gives way to the lower piece's. It is one change point searched from halfway between the shoulder line and the hip line down to the knee line, so a colour change inside the upper piece is not a break. As a fraction of the figure from the crown (0) to the soles (1), rounded to 0.02.",
+    maths: "The break is the hem of the outer upper piece: the row where its colour, read on the two flanks of the figure (never the middle, where a zip, an open front or a t-shirt shows), gives way to the lower piece's. It is one change point searched from halfway between the shoulder points and the hip line down to the knee line, so a colour change inside the upper piece is not a break. As a fraction of the figure from the crown (0) to the soles (1), rounded to 0.02.",
     edges: [
       { name: "short top", value: "below 0.30" },
       { name: "composed: a third (0.333) or the golden section (0.382)", value: "0.30 to 0.44" },
       { name: "halves", value: "0.44 to 0.56" },
-      { name: "composed from below (0.618, 0.667)", value: "0.56 to 0.70" },
+      { name: "composed, counted from the floor: the golden section or a third (0.618 or 0.667 from the crown)", value: "0.56 to 0.70" },
       { name: "long top", value: "0.70 and above" },
       { name: "the composed divisions: a third and the golden section", value: "0.333 and 0.382" },
     ],
@@ -56,7 +56,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   volume: {
     title: "Volume",
     rule: "One fitted volume against one fuller one keeps a line; two full volumes read as unanchored, two fitted ones as streamlined.",
-    maths: "Both widths are held against one reference, which the reading calls the upper piece's shoulder line: plainly, the straight span between the two shoulder points the pose model marks, the points the upper piece hangs from. It is a distance in the photo, not a measurement of the garment's seams. The upper piece's width is the run of fabric through the figure's centre line, on the middle half of the rows between the shoulder line and the hip line that no arm or hand crosses (the pose's elbows and wrists); when every row is crossed, its width is not read. The lower piece's width is the run of fabric at the knee line, taken on each side on its own (a skirt that spans both sides counts half to each). Both rounded to 0.05. One function turns these numbers into the words. When only one of the two is read, that one is said and the balance is not judged.",
+    maths: "Both widths are held against one reference, which the reading writes after each ratio, as in \"1.00× across the shoulders\" (the garment spec sheet's term): plainly, the straight span between the two shoulder points the pose model marks, the points the upper piece hangs from. It is a distance in the photo, not a measurement of the garment's seams. It comes from the pose, not the cloth, so it is read even when the upper piece's own width is not. The upper piece's width is the run of fabric through the figure's centre line, on the middle half of the rows between the shoulder points and the hip line that no arm or hand crosses (the pose's elbows and wrists); when every row is crossed, its width is not read. The lower piece's width is the run of fabric at the knee line, taken on each side on its own (a skirt that spans both sides counts half to each). Both rounded to 0.05. One function turns these numbers into the words. When only one of the two is read, that one is said and the balance is not judged.",
     edges: [
       { name: "upper piece: fitted / straight / loose", value: `below ${FIT_TOP[0]} / to ${FIT_TOP[1]} / above` },
       { name: "lower piece at the knee line: narrow / straight / wide", value: `below ${FIT_LEGS[0]} / to ${FIT_LEGS[1]} / above` },
@@ -86,7 +86,7 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   value: {
     title: "Value",
     rule: "Lightness carries form before hue does. A darker value below a lighter one grounds a figure; the widest lightness edge draws the eye first.",
-    maths: "OKLab lightness of each measured colour holding at least 5% of the garment area, each on its own even when two share a plain name (a light grey and a dark grey keep their range); the range is the widest minus the narrowest. The upper and lower pieces are compared directly.",
+    maths: "OKLab lightness of each measured colour holding at least 5% of the garment area, each on its own even when two share a plain name (a light grey and a dark grey keep their range); the range is the widest minus the narrowest. The upper and lower pieces are compared directly, each at its measured core (the median lightness of its well-lit cloth), the lightness the leg line also quotes; the list of colours gives each palette colour's own lightness, and the range reads that.",
     edges: [
       { name: "range: low / medium / high", value: `below ${CONTRAST_EDGES[0]} / to ${CONTRAST_EDGES[1]} / above` },
       { name: "upper and lower read as one tone within", value: VALUE_GAP_EDGES[0] },
