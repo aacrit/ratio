@@ -136,7 +136,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
   const reader = new Reader();
   const sheet = new Sheet(sheetEl, sheetBody, grip);
 
-  if (compactToggle) setupCompact(compactToggle);
+  if (compactToggle) setupCompact(compactToggle, sheet);
 
   // The stage fits the photo to the room above the sheet: a scale on the
   // well (compositor only) that follows the sheet's edge frame by frame.

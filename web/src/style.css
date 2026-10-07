@@ -931,6 +931,17 @@ body[data-compare="on"] .figure {
   gap: 24px;
 }
 
+/* A grid item's default min-width is its content's min-content size, which
+   for a nowrap descendant (Compact's one-line headline, below) is the
+   whole unwrapped sentence: without this, that single descendant grows
+   .reading's one implicit column (and so .sheet-body) to fit it, pushing
+   the panel wider than its own room instead of letting the nowrap text
+   ellipsize inside it (review round 1: "the reading is 572px in a 488px
+   body"). */
+.reading > * {
+  min-width: 0;
+}
+
 /* Compact (T8): the same sections, closer together, so the rule rows (the
    point of turning it on) start sooner. */
 [data-compact] .reading {
@@ -946,11 +957,18 @@ body[data-compare="on"] .figure {
   gap: 12px;
 }
 
+/* Same reason as .reading > *, above: .sheet-head is also an implicit
+   single-column grid, and .peek-cluster is one of its items. */
+.sheet-head > * {
+  min-width: 0;
+}
+
 /* Everything the peek resting place shows: this session's strip (once there
    is more than one read), then the verdict, then the ratio numeral. */
 .peek-cluster {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 /* The plain verdict leads (founder, 2026-10-04): "Works." or "Two changes
@@ -983,24 +1001,30 @@ body[data-compare="on"] .figure {
 [data-compact] .peek-cluster {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 6px 10px;
+  min-width: 0;
 }
 
 [data-compact] .peek-cluster > .session-strip {
   flex: 0 0 100%;
 }
 
+/* flex-basis 0 (not auto): the item's own content (a nowrap line) must
+   never set its starting size, or it claims the whole row's width before
+   .ratio-row gets a share of it and the ellipsis never has room to apply
+   (review round 1: ".verdict-wrap is flex:1 1 auto with a nowrap basis, so
+   the ratio wraps beneath it"). */
 [data-compact] .verdict-wrap {
   display: block;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
 }
 
 [data-compact] .verdict-compact-toggle {
   display: block;
   width: 100%;
-  min-height: 28px;
+  min-height: 36px;
   background: none;
   border: none;
   margin: 0;

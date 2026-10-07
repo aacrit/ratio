@@ -19,20 +19,24 @@ export interface CompactHeadline {
   verdict: string;
   /** The one change to make, in the engine's own words, or null when there is none to name. */
   change: string | null;
+  /** True when `change` is an offer ("For one more note, try ...") rather than something the rules are asking for: review round 1, these must not read the same ("Works · X" for both). */
+  optional: boolean;
+  /** True while the verdict judges a tried look, not the outfit as worn (ui/looks.ts's tryingPrefix). */
+  trying: boolean;
 }
 
 /** The plain-verdict openings (engine/verdict.ts's `opening`), tested longest-match first so "Works, with one change..." still matches "Works". */
 const OPENINGS = ["A few changes would help", "Two changes would help", "Works"] as const;
 
-/** Strips a "Trying <phrase>: " prefix (ui/looks.ts's tryingPrefix), so a tried look's headline still starts from its own verdict. */
-function stripTrying(full: string): string {
+/** Strips a "Trying <phrase>: " prefix (ui/looks.ts's tryingPrefix) and says whether it was there, so a tried look's headline still starts from its own verdict but the fact that it is a trial is never lost. */
+function stripTrying(full: string): { body: string; trying: boolean } {
   const m = /^Trying .+?:\s*/.exec(full);
-  return m ? full.slice(m[0].length) : full;
+  return m ? { body: full.slice(m[0].length), trying: true } : { body: full, trying: false };
 }
 
 export function compactHeadline(full: string): CompactHeadline {
   const trimmed = full.trim();
-  const body = stripTrying(trimmed);
+  const { body, trying } = stripTrying(trimmed);
   const opening = OPENINGS.find((o) => body.startsWith(o));
   const verdict = opening ?? (body.split(/\.\s|\.$/)[0] || body).trim();
 
@@ -41,16 +45,25 @@ export function compactHeadline(full: string): CompactHeadline {
     .map((s) => s.replace(/\.$/, "").trim())
     .filter(Boolean);
   const last = sentences.at(-1) ?? "";
-  const tryMatch = /^(?:Try|For one more note, try) (.+)$/i.exec(last);
+  const optionalMatch = /^For one more note, try (.+)$/i.exec(last);
+  const tryMatch = /^Try (.+)$/i.exec(last);
   const changeMatch = /^The change: (.+)$/i.exec(last);
-  const change = tryMatch?.[1] ?? changeMatch?.[1] ?? null;
+  const change = optionalMatch?.[1] ?? tryMatch?.[1] ?? changeMatch?.[1] ?? null;
 
-  return { verdict, change };
+  return { verdict, change, optional: !!optionalMatch, trying };
 }
 
-/** The headline as one line: "Works · a shorter upper piece", or the verdict word alone when there is nothing to try. Empty input (no read yet) stays empty. */
+/**
+ * The headline as one line: "Works · a shorter upper piece" for a needed
+ * change, "Works · or try navy for the lower piece" for an offered one (an
+ * optional note must never fold to the same text as a needed change -
+ * review round 1), or the verdict word alone when there is nothing to try.
+ * While a look is tried, a short "Trying · " prefix keeps that true too.
+ * Empty input (no read yet) stays empty.
+ */
 export function compactHeadlineText(full: string): string {
   if (!full.trim()) return "";
-  const { verdict, change } = compactHeadline(full);
-  return change ? `${verdict} · ${change}` : verdict;
+  const { verdict, change, optional, trying } = compactHeadline(full);
+  const line = change ? `${verdict} · ${optional ? "or try " : ""}${change}` : verdict;
+  return trying ? `Trying · ${line}` : line;
 }

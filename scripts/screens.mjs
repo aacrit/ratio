@@ -577,6 +577,29 @@ async function run(name, viewport) {
   note(`${name}: Compact headline: "${compactHeadlineText}" (toggle hidden: ${compactToggleHidden})`);
   if (compactToggleHidden) errors.push("Compact did not reveal the one-line headline toggle");
   if (!compactHeadlineText) errors.push("Compact's one-line headline is empty with a read on screen");
+
+  // Review round 1: a nowrap headline in a grid/flex ancestor with the
+  // browser's default min-width:auto grows its column to the whole
+  // sentence instead of ellipsizing, pushing the sheet wider than its own
+  // room (at 1280 the reading measured 572px in a 488px panel). Checked at
+  // this viewport, whichever it is.
+  const sheetOverflow = await page.evaluate(() => {
+    const el = document.getElementById("sheet-body");
+    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+  });
+  note(`${name}: Compact on: #sheet-body scrollWidth ${sheetOverflow.scrollWidth} vs clientWidth ${sheetOverflow.clientWidth}`);
+  if (sheetOverflow.scrollWidth > sheetOverflow.clientWidth) errors.push(`Compact on ${name} overflows the sheet body horizontally (scrollWidth ${sheetOverflow.scrollWidth} > clientWidth ${sheetOverflow.clientWidth})`);
+
+  // Review round 1: the ratio must actually sit beside the compact
+  // headline (one row), not wrap beneath it (two).
+  const headlineRatioAlign = await page.evaluate(() => {
+    const hero = document.getElementById("hero-n").getBoundingClientRect();
+    const toggle = document.getElementById("verdict-compact-toggle").getBoundingClientRect();
+    return { heroTop: hero.top, toggleTop: toggle.top };
+  });
+  note(`${name}: Compact: hero-n top ${headlineRatioAlign.heroTop}, compact toggle top ${headlineRatioAlign.toggleTop}`);
+  if (Math.abs(headlineRatioAlign.heroTop - headlineRatioAlign.toggleTop) > 20) errors.push(`Compact did not keep the ratio beside the headline (hero-n top ${headlineRatioAlign.heroTop} vs toggle top ${headlineRatioAlign.toggleTop})`);
+
   if (!phone) {
     const firstRowYCompact = await page.evaluate(() => document.querySelector(".row")?.getBoundingClientRect().top ?? null);
     note(`${name}: Compact on desktop (1280): first rule row at y=${firstRowYCompact}`);
@@ -591,12 +614,18 @@ async function run(name, viewport) {
     note(`${name}: Compact on phone, sheet at half: ratio visible without scrolling: ${heroVisibleAtHalf}`);
     if (!heroVisibleAtHalf) errors.push("Compact on phone at half did not keep the ratio visible");
     await shot("13b-compact-half");
-    // The disclosure: tapping the compact line reveals the full sentence underneath it.
+    // The disclosure: tapping the compact line reveals the full sentence
+    // underneath it, and its own label follows which state it is in.
+    const toggleLabelClosed = await page.getAttribute("#verdict-compact-toggle", "aria-label");
     await page.click("#verdict-compact-toggle");
     await page.waitForTimeout(200);
     const disclosureOpen = await page.evaluate(() => getComputedStyle(document.getElementById("verdict")).display !== "none");
-    note(`${name}: tapping the compact headline discloses the full sentence: ${disclosureOpen}`);
+    const toggleExpandedOpen = await page.getAttribute("#verdict-compact-toggle", "aria-expanded");
+    const toggleLabelOpen = await page.getAttribute("#verdict-compact-toggle", "aria-label");
+    note(`${name}: tapping the compact headline discloses the full sentence: ${disclosureOpen} (aria-expanded ${toggleExpandedOpen}); label closed "${toggleLabelClosed}" -> open "${toggleLabelOpen}"`);
     if (!disclosureOpen) errors.push("tapping the compact headline did not disclose the full sentence");
+    if (toggleExpandedOpen !== "true") errors.push(`the compact toggle's aria-expanded was "${toggleExpandedOpen}" once open, not "true"`);
+    if (toggleLabelOpen === toggleLabelClosed) errors.push("the compact toggle's label did not change between closed and open");
     await page.click("#verdict-compact-toggle"); // close it again
     await page.waitForTimeout(200);
   }
@@ -605,19 +634,23 @@ async function run(name, viewport) {
   // hidden until full (design/BRAND.md: "only then does it scroll
   // inside"), so a wheel/trackpad scroll there used to be a dead end,
   // leaving Shortcuts, Download and feedback out of reach without finding
-  // the small handle. A wheel now reaches full the same way a swipe up
-  // already does; the grip's label and aria-expanded change with it.
+  // the small handle. A wheel (a real one, via page.mouse.wheel, not a
+  // synthetic dispatch) and a real touch drag (via CDP) must both now
+  // reach full the same the grip itself does; the grip's aria-expanded
+  // changes with it.
   if (phone) {
     await snap("half");
     await page.waitForTimeout(400);
-    const gripBefore = { expanded: await page.getAttribute("#grip", "aria-expanded"), label: await page.getAttribute("#grip", "aria-label") };
-    await page.evaluate(() => document.getElementById("sheet-body").dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 120 })));
+    const bodyBox = await page.locator("#sheet-body").boundingBox();
+    const gripBeforeWheel = await page.getAttribute("#grip", "aria-expanded");
+    await page.mouse.move(bodyBox.x + bodyBox.width / 2, bodyBox.y + 40);
+    await page.mouse.wheel(0, 120);
     await page.waitForTimeout(500);
     const snapAfterWheel = await page.evaluate(() => document.getElementById("sheet").dataset.snap);
-    const gripAfter = { expanded: await page.getAttribute("#grip", "aria-expanded"), label: await page.getAttribute("#grip", "aria-label") };
-    note(`${name}: a wheel scroll at half: grip before ${JSON.stringify(gripBefore)}, sheet after "${snapAfterWheel}", grip after ${JSON.stringify(gripAfter)}`);
+    const gripAfterWheel = await page.getAttribute("#grip", "aria-expanded");
+    note(`${name}: a real mouse wheel at half: grip aria-expanded before ${gripBeforeWheel}, sheet after "${snapAfterWheel}", grip aria-expanded after ${gripAfterWheel}`);
     if (snapAfterWheel !== "full") errors.push(`a wheel scroll at half left the sheet at "${snapAfterWheel}", not full`);
-    if (gripAfter.label === gripBefore.label) errors.push("the grip's label did not change between half and full");
+    if (gripAfterWheel !== "true") errors.push(`the grip's aria-expanded after reaching full was "${gripAfterWheel}", not "true"`);
     await page.evaluate(() => {
       const body = document.getElementById("sheet-body");
       body.scrollTo(0, body.scrollHeight);
@@ -626,6 +659,25 @@ async function run(name, viewport) {
     const shortcutsReachable = await page.isVisible("#shortcuts-help");
     note(`${name}: Shortcuts reachable by scrolling the body once the wheel raised the sheet to full: ${shortcutsReachable}`);
     if (!shortcutsReachable) errors.push("scrolling the sheet body at full did not reach Shortcuts");
+
+    // A real touch drag (CDP Input.dispatchTouchEvent, not a synthetic
+    // pointer-event dispatch): a swipe up from half must raise the sheet
+    // the same way the wheel just did.
+    await snap("half");
+    await page.waitForTimeout(400);
+    const cdp = await page.context().newCDPSession(page);
+    const sx = bodyBox.x + bodyBox.width / 2;
+    const touch = async (type, y) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x: sx, y }] });
+    await touch("touchStart", bodyBox.y + 60);
+    for (let i = 1; i <= 8; i++) await touch("touchMove", bodyBox.y + 60 - i * 30);
+    await touch("touchEnd", bodyBox.y - 180);
+    await page.waitForTimeout(600);
+    const snapAfterTouch = await page.evaluate(() => document.getElementById("sheet").dataset.snap);
+    const gripAfterTouch = await page.getAttribute("#grip", "aria-expanded");
+    note(`${name}: a real touch drag (CDP) up from half: sheet now "${snapAfterTouch}", grip aria-expanded ${gripAfterTouch}`);
+    if (snapAfterTouch === "half") errors.push("a real touch drag up from half did not move the sheet");
+    if (gripAfterTouch !== "true") errors.push(`the grip's aria-expanded after a touch drag off peek was "${gripAfterTouch}", not "true"`);
+
     await snap("half"); // leave the sheet where the rest of this run expects it
     await page.waitForTimeout(400);
   }

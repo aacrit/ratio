@@ -7,6 +7,7 @@
 
 import { compactHeadlineText } from "./headline";
 import { syncRowsExpanded } from "./rows";
+import type { Sheet } from "./sheet";
 
 const KEY = "ratio:compact";
 
@@ -35,18 +36,27 @@ export function saveCompact(on: boolean): void {
  * sentence by headline.ts - never a second source of truth), with the ratio
  * beside it and the full sentence kept one tap away as a disclosure, since
  * the headline alone used to fill the fold at every width Compact was
- * meant to speed up (T8, R-09).
+ * meant to speed up (T8, R-09). `sheet`, when given, is re-measured
+ * (`keep` the current resting place) after the headline's height changes
+ * either way - folding on, folding off, or opening the disclosure - since
+ * the phone sheet's peek height is sized from this same content (review
+ * round 1).
  */
-export function setupCompact(button: HTMLButtonElement): void {
+export function setupCompact(button: HTMLButtonElement, sheet?: Sheet): void {
   const verdict = document.getElementById("verdict");
   const wrap = document.getElementById("verdict-wrap");
   const toggle = document.getElementById("verdict-compact-toggle") as HTMLButtonElement | null;
   const compactText = document.getElementById("verdict-compact-text");
 
+  const headlineLabel = (open: boolean) => {
+    const text = compactText?.textContent ?? "";
+    const verb = open ? "Hide" : "Show";
+    return text ? `${text}. ${verb} the full sentence.` : `${verb} the full sentence.`;
+  };
+
   const syncHeadline = () => {
-    const text = compactHeadlineText(verdict?.textContent ?? "");
-    if (compactText) compactText.textContent = text;
-    if (toggle) toggle.setAttribute("aria-label", text ? `${text}. Show the full sentence.` : "Show the full sentence.");
+    if (compactText) compactText.textContent = compactHeadlineText(verdict?.textContent ?? "");
+    if (toggle) toggle.setAttribute("aria-label", headlineLabel(wrap?.dataset.open !== undefined));
   };
   if (verdict) {
     syncHeadline();
@@ -62,6 +72,8 @@ export function setupCompact(button: HTMLButtonElement): void {
     if (open) wrap.dataset.open = "";
     else delete wrap.dataset.open;
     toggle.setAttribute("aria-expanded", String(open));
+    toggle.setAttribute("aria-label", headlineLabel(open));
+    sheet?.measure(true);
   };
   toggle?.addEventListener("click", () => setOpen(wrap?.dataset.open === undefined));
 
@@ -75,6 +87,7 @@ export function setupCompact(button: HTMLButtonElement): void {
     // Leaving Compact always shows the full sentence again: turning it back
     // on starts collapsed rather than remembering a stale open disclosure.
     if (!on) setOpen(false);
+    sheet?.measure(true);
   };
   apply(loadCompact());
   button.addEventListener("click", () => {

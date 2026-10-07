@@ -17,16 +17,27 @@ const WIDE = "(min-width: 1024px)";
 /**
  * The grip's accessible state and label for each resting place (T8, R-09:
  * the handle said "Expand the reading" with aria-expanded="true" while only
- * half open - the same text at two different states, and a value that
- * claimed it was already open while still offering to open it). Each of
- * the three states now gets its own label, naming what the next press does;
- * aria-expanded is false only at the fully collapsed peek.
+ * half open; review round 1: pairing a label that still says "Expand" with
+ * aria-expanded="true" is self-contradictory at any two states, not only
+ * that one). One stable name, independent of state; aria-expanded alone
+ * carries whether it is collapsed (peek) or not (half or full).
  */
 export function gripLabel(snap: Snap): { expanded: boolean; label: string } {
-  if (snap === "peek") return { expanded: false, label: "Expand the reading" };
-  if (snap === "half") return { expanded: true, label: "Expand the reading fully" };
-  return { expanded: true, label: "Collapse the reading" };
+  return { expanded: snap !== "peek", label: "Expand or collapse the reading" };
 }
+
+/** The handful of a WheelEvent that wheelTarget needs, kept as a plain shape so it can be tested without a DOM. */
+export interface WheelInput {
+  deltaX: number;
+  deltaY: number;
+  /** 0 = pixels, 1 = lines, 2 = pages (WheelEvent.DOM_DELTA_*): a line or page delta is never a stray trackpad jitter, however small its number. */
+  deltaMode: number;
+  /** A pinch-to-zoom gesture reports as a wheel event with ctrlKey set in every evergreen browser; it is never a request to open the sheet. */
+  ctrlKey: boolean;
+}
+
+/** Below this many pixels (deltaMode 0 only) a wheel delta reads as trackpad jitter, not an intentional scroll (review round 1). */
+const MIN_PIXEL_DELTA = 4;
 
 /**
  * What a wheel or trackpad scroll over the sheet body should do. Below
@@ -35,11 +46,15 @@ export function gripLabel(snap: Snap): { expanded: boolean; label: string } {
  * cue a swipe up already is through the pointer handlers below: raise the
  * sheet to full, where the rest of the reading (Shortcuts, Download,
  * feedback) is reachable by scrolling in place. Once full, this returns
- * null and the native scroll takes over. Scrolling back up (deltaY <= 0)
- * is left alone: there is nothing to collapse on a wheel.
+ * null and the native scroll takes over. A pinch-zoom, a mostly-horizontal
+ * scroll, a tiny jitter, or scrolling back up are all left alone: none of
+ * them is a request to open the sheet further.
  */
-export function wheelTarget(snap: Snap, deltaY: number): Snap | null {
-  if (snap === "full" || deltaY <= 0) return null;
+export function wheelTarget(snap: Snap, e: WheelInput): Snap | null {
+  if (snap === "full" || e.ctrlKey) return null;
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return null;
+  if (e.deltaY <= 0) return null;
+  if (e.deltaMode === 0 && e.deltaY < MIN_PIXEL_DELTA) return null;
   return "full";
 }
 
@@ -52,6 +67,8 @@ export class Sheet {
   private velocity = new Velocity();
   private listeners = new Set<(top: number, snap: Snap) => void>();
   private _snap: Snap = "peek";
+  /** True from the moment a wheel escalates the sheet until that spring settles, so a momentum-scroll trackpad's dozens of further events (all still arriving while the sheet is mid-flight) do not each restart it. */
+  private wheelSettling = false;
 
   constructor(
     readonly element: HTMLElement,
@@ -147,11 +164,19 @@ export class Sheet {
   }
 
   private wheel(e: WheelEvent): void {
-    if (this.wide.matches) return;
-    const target = wheelTarget(this._snap, e.deltaY);
+    if (this.wide.matches || this.wheelSettling) return;
+    const target = wheelTarget(this._snap, e);
     if (!target) return;
     e.preventDefault();
+    if (reducedMotion()) {
+      this.snap(target);
+      return;
+    }
+    this.wheelSettling = true;
     this.snap(target);
+    void this.anim?.done.then(() => {
+      this.wheelSettling = false;
+    });
   }
 
   /** Moves to a resting place, carrying `velocity` (px per second, downward positive) into the spring. */
