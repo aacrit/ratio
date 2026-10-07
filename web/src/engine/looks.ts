@@ -22,10 +22,11 @@ import { colourName, familyOf } from "./names";
 import { binShares, isNeutral } from "./constants";
 import { ACCENT_SHARE, CLEAR_HUE, type Piece, accentOf as accentIn, isShoes, pieceOf, pieces as placedPieces } from "./pieces";
 import { type AdviceLine, type Bins, type LineState, readBins, tuckable } from "./rules";
+import { shoesContinue } from "./shape-rules";
 
 export type Move =
   | { kind: "break"; to: number; title: string; detail: string }
-  | { kind: "recolour"; swatch: number; piece: Piece; L: number; C: number; h: number; title: string; detail: string; muted?: true }
+  | { kind: "recolour"; swatch: number; piece: Piece; L: number; C: number; h: number; title: string; detail: string; muted?: true; /** For a smaller piece, its name in a sentence ("the grey detail"). */ of?: string }
   | { kind: "accent"; L: number; C: number; h: number; title: string; detail: string };
 
 export interface Look {
@@ -150,8 +151,43 @@ export function accentWords(b: Bins): string | null {
 /** A colour's plain name, for titles and advice; the degrees live in the Measured lines. */
 const plain = (c: { L: number; C: number; h: number }) => colourName(c.L, c.C, c.h);
 
-const PIECE_NAME: Record<Piece, string> = { upper: "Upper piece", lower: "Lower piece", shoes: "Shoes", other: "Accent" };
-const pieceName = (i: number, p: ReturnType<typeof pieces>) => PIECE_NAME[pieceOf(i, p)];
+const PIECE_NAME: Record<Exclude<Piece, "other">, string> = { upper: "Upper piece", lower: "Lower piece", shoes: "Shoes" };
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * A piece's name in a look's title. A smaller piece (a scarf, a bag, a
+ * belt) is named by its colour as worn ("Grey detail"), and by where it sits
+ * when another such piece shares that colour name (review round 3: two
+ * pieces both called "Accent" in one look).
+ */
+function pieceName(b: Bins, i: number, p: ReturnType<typeof pieces>): string {
+  const piece = pieceOf(i, p);
+  if (piece !== "other") return PIECE_NAME[piece];
+  const s = b.palette[i];
+  const name = `${cap(plain(s))} detail`;
+  const twin = b.palette.some((x, j) => j !== i && x.share > 0 && pieceOf(j, p) === "other" && plain(x) === plain(s));
+  return twin ? `${name} ${s.y < b.waist ? "above" : "below"} the waist` : name;
+}
+
+/** A piece's name inside a sentence: "the lower piece", "the grey detail". */
+const inSentence = (name: string) => (name === "Shoes" ? "the shoes" : `the ${name.charAt(0).toLowerCase()}${name.slice(1)}`);
+
+/**
+ * Why a neutral piece goes to a deeper neutral, said as what it does: the
+ * lower piece and the shoes come to read as one line (the leg line), or the
+ * value below (or of the piece) steps darker. Checkable against the look
+ * (tests/helpers/agrees.ts).
+ */
+function deeperNeutralWhy(b: Bins, i: number, p: ReturnType<typeof pieces>, L: number): string {
+  const s = b.palette[i];
+  const other = i === p.lower ? p.shoes : i === p.shoes ? p.lower : -1;
+  if (other >= 0 && other !== i) {
+    const oL = b.palette[other].L;
+    if (!shoesContinue(s.L, oL) && shoesContinue(L, oL)) return `a ${L < s.L ? "deeper" : "lighter"} neutral, so the lower piece and the shoes read as one line`;
+  }
+  if (L < s.L) return i === p.lower ? "a deeper neutral, darker below" : "a deeper neutral, a darker value";
+  return "a lighter neutral, a step up in value";
+}
 
 /** Every candidate move for these bins, in a fixed order, and the moves that only come as a pair (the value pair). */
 export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs: Move[][] } {
@@ -202,15 +238,21 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
               : `it sits nearly opposite ${of} on the colour wheel, a split-complementary pair`;
       for (const turn of [0, 30, -30, 180, 150, -150]) options.push({ L: s.L, C, h: wrap(anchor.h + turn), why: why(turn) });
     }
-    // Neutrals at the piece's own lightness, and a deep neutral.
-    options.push({ L: s.L, C: 0, h: 0, why: "a neutral at the piece's own lightness takes the hue out and keeps its value" }, { L: 0.2, C: 0, h: 0, why: "a deep neutral takes the hue out, and a neutral sits with any hue" });
+    // Neutrals at the piece's own lightness, and a deep neutral. Each reason
+    // says only what is true of this piece (review round 3: "takes the hue
+    // out" over a grey that had no hue): a colour loses its hue; a neutral
+    // only changes value, and the reason names what that value does.
+    const deep = 0.2;
+    options.push({ L: s.L, C: 0, h: 0, why: isNeutral(s) ? "the same value in a plainer neutral" : "a neutral at the piece's own lightness takes the hue out and keeps its value" });
+    options.push({ L: deep, C: 0, h: 0, why: isNeutral(s) ? deeperNeutralWhy(b, i, p, deep) : "a deep neutral takes the hue out, and a neutral sits with any hue" });
     // Navy and denim: the two blues most wardrobes already have.
     const blue = "a low-chroma blue most wardrobes hold, behaves almost as a neutral";
     options.push({ L: 0.3, C: 0.07, h: 255, why: `navy, ${blue}` }, { L: 0.45, C: 0.06, h: 250, why: `denim, ${blue}` });
+    const name = pieceName(b, i, p);
     for (const { why, ...o } of options) {
       if (sameColour(s, o)) continue;
       const label = plain(o);
-      moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} in ${label}`, detail: `Swap the ${pieceName(i, p).toLowerCase()} for ${label}: ${why}.` });
+      moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${name} in ${label}`, detail: `Swap ${inSentence(name)} for ${label}: ${why}.`, ...(pieceOf(i, p) === "other" ? { of: inSentence(name) } : {}) });
     }
   }
 
@@ -246,7 +288,7 @@ export function candidates(b: Bins, lines: AdviceLine[]): { moves: Move[]; pairs
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
     // A muted red is still called red: only a real step down in chroma counts here.
-    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: `Step the ${pieceName(i, p).toLowerCase()} down to a muted ${plain(o)}: one colour stays at full strength, the other steps back.` });
+    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: `${pieceName(b, i, p)} muted to ${plain(o)}`, detail: `Step ${inSentence(pieceName(b, i, p))} down to a muted ${plain(o)}: one colour stays at full strength, the other steps back.`, ...(pieceOf(i, p) === "other" ? { of: inSentence(pieceName(b, i, p)) } : {}) });
   }
 
   // Accent: a tenth of the area. The complement of the lead hue when the lead
@@ -295,6 +337,8 @@ export function suggestLooks(b: Bins, lines: AdviceLine[], limit = 3): Look[] {
       const a = singles[i], c = singles[j];
       if (a.kind === "break" && c.kind === "break") continue;
       if (a.kind === "recolour" && c.kind === "recolour" && a.swatch === c.swatch) continue;
+      // Two smaller pieces taken to one colour are one idea said twice (review round 3: "Accent in black + Accent in black").
+      if (a.kind === "recolour" && c.kind === "recolour" && a.piece === "other" && c.piece === "other" && plain(a) === plain(c)) continue;
       if (a.kind === "accent" && c.kind === "accent") continue;
       combos.push([a, c]);
     }

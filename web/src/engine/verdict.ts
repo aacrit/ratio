@@ -28,8 +28,9 @@ export function plainMove(m: Move): string {
   const name = colourName(m.L, m.C, m.h);
   if (m.kind === "accent") return `${name} shoes`;
   // A muted red is still called red: the verdict says it is the muted one.
-  if (m.muted) return m.piece === "shoes" ? `muted ${name} shoes` : `a muted ${name} for ${PIECE_WORDS[m.piece]}`;
-  return m.piece === "shoes" ? `${name} shoes` : `${name} for ${PIECE_WORDS[m.piece]}`;
+  const of = m.of ?? PIECE_WORDS[m.piece];
+  if (m.muted) return m.piece === "shoes" ? `muted ${name} shoes` : `a muted ${name} for ${of}`;
+  return m.piece === "shoes" ? `${name} shoes` : `${name} for ${of}`;
 }
 
 export const listed = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
@@ -161,7 +162,7 @@ function keepSentence(lines: AdviceLine[], lead: AdviceLine | undefined, bins: B
  */
 export function looksIntroOf(lines: AdviceLine[], count: number): string {
   if (count > 0) return `${count === 1 ? "One look" : `${count} looks`} the rules prefer, judged by the same rulebook. Try one on the photo.`;
-  if (lines.some((l) => l.state === "advice")) return "No look here improves the reading without breaking another rule. The advice in the reading below says what would.";
+  if (lines.some((l) => l.state === "advice")) return "No look here improves the reading without taking another rule off the mark. The advice in the reading below says what would.";
   // A rule not judged is never counted as fine (T6). A row may still offer
   // an option (other shoes, an accent): said as a choice, never as a fix.
   const judged = lines.some((l) => l.state === "unread") ? "Every rule Ratio could judge" : "Every reading";

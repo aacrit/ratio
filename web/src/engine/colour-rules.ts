@@ -100,17 +100,53 @@ function outsideTable(t: Template): Float64Array {
   return table;
 }
 
+/**
+ * Fits already made, by template and the swatches' hues and shares in
+ * order. The looks re-read hundreds of candidates that share most of a
+ * palette, so the same fit is asked for again and again. A pure function's
+ * result, so remembering it never changes a reading; the memo is emptied
+ * when it grows large.
+ */
+const FITS = new Map<string, { rot: number; cost: number }>();
+const FITS_MAX = 50_000;
+
 /** Best rotation of a template for the chromatic swatches: least area-weighted distance outside. */
 export function fitTemplate(chromatic: BinnedSwatch[], t: Template): { rot: number; cost: number } {
+  let key = t.id;
+  for (const c of chromatic) key += `|${c.h}:${c.share}`;
+  const known = FITS.get(key);
+  if (known) return { rot: known.rot, cost: known.cost };
+  const fit = computeFit(chromatic, t);
+  if (FITS.size >= FITS_MAX) FITS.clear();
+  FITS.set(key, fit);
+  return { rot: fit.rot, cost: fit.cost };
+}
+
+function computeFit(chromatic: BinnedSwatch[], t: Template): { rot: number; cost: number } {
   // The same arithmetic, in the same order, as a reduce over the swatches:
   // each share over the total, times the degrees outside, summed left to right.
   const total = chromatic.reduce((s, c) => s + c.share, 0) || 1;
+  const n = chromatic.length;
+  // Each weight is the very division the reduce made, made once.
+  const weights = chromatic.map((c) => c.share / total);
   const exact = chromatic.every((c) => Number.isInteger(c.h) && c.h >= 0 && c.h < 360);
-  const table = exact ? outsideTable(t) : null;
   let best = { rot: 0, cost: Infinity };
+  if (exact) {
+    const table = outsideTable(t);
+    const hues = chromatic.map((c) => c.h);
+    for (let rot = 0; rot < 360; rot++) {
+      let cost = 0;
+      for (let k = 0; k < n; k++) {
+        const d = rot - hues[k];
+        cost = cost + weights[k] * table[d < 0 ? d + 360 : d];
+      }
+      if (cost < best.cost - 1e-9) best = { rot, cost };
+    }
+    return best;
+  }
   for (let rot = 0; rot < 360; rot++) {
     let cost = 0;
-    for (const c of chromatic) cost = cost + (c.share / total) * (table ? table[(rot - c.h + 360) % 360] : outside(c.h, rot, t));
+    for (let k = 0; k < n; k++) cost = cost + weights[k] * outside(chromatic[k].h, rot, t);
     if (cost < best.cost - 1e-9) best = { rot, cost };
   }
   return best;

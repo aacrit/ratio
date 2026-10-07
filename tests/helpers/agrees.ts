@@ -150,12 +150,37 @@ export function problemsOf(s: Shown, label: string): string[] {
   // 4. Harmony's number never shows Matsuda's letter.
   const harmony = s.lines.find((l) => l.rule === "harmony");
   if (harmony && /^[iIVLYXT] ·/.test(harmony.measured)) out.push(`${label}: harmony shows a letter: ${harmony.measured}`);
-  // 5. Every move in a look says why, in its own words.
+  // 5. Every move in a look says why, in its own words, and the why is true.
   for (const look of s.looks) {
     for (const m of look.moves) if (!/^[^:]+: .+\.$/.test(m.detail)) out.push(`${label}: ${look.title}: no reason in "${m.detail}"`);
     if (look.moves.length > 1 && new Set(look.moves.map((m) => m.detail)).size !== look.moves.length) out.push(`${label}: ${look.title}: a reason repeated`);
+    reasonProblems(s, look, label, out);
   }
   return out;
+}
+
+/**
+ * Each claim a look's reason makes, checked against the swatch it changes
+ * and the look's own re-read (review round 3: "a deep neutral takes the hue
+ * out" over a grey with no hue).
+ */
+function reasonProblems(s: Shown, look: Look, label: string, out: string[]): void {
+  const names = new Set(byName(s.bins.palette).map((x) => x.name));
+  const leg = look.lines.find((l) => l.rule === "legline");
+  if (/\bAccent\b/.test(look.title)) out.push(`${label}: "${look.title}" names a piece only "Accent"`);
+  for (const m of look.moves) {
+    const say = (why: string) => out.push(`${label}: "${m.detail}" ${why}`);
+    if (m.kind !== "recolour") continue;
+    const was = s.bins.palette[m.swatch];
+    if (/takes the hue out/.test(m.detail) && isNeutral(was)) say("but the piece was already a neutral");
+    const anchor = m.detail.match(/(?:takes the hue of|sits beside|sits opposite|sits nearly opposite) the (.+?) in the outfit/)?.[1];
+    if (anchor !== undefined && !names.has(anchor)) say(`but the outfit has no ${anchor}`);
+    if (/keeps its value|the same value/.test(m.detail) && m.L !== was.L) say(`but the lightness moves from ${was.L} to ${m.L}`);
+    if (/darker below|a darker value|a deeper neutral/.test(m.detail) && !(m.L < was.L)) say(`but it is not darker (${was.L} to ${m.L})`);
+    if (/darker below|grounds the outfit/.test(m.detail) && m.piece !== "lower") say("but it is not the lower piece");
+    if (/read as one line|the leg line runs on/.test(m.detail) && leg?.state !== "golden") say("but the look's leg line is not on the mark");
+    if (/steps back|muted/.test(m.detail) && !(m.C < was.C)) say(`but the chroma does not drop (${was.C} to ${m.C})`);
+  }
 }
 
 /** Asserts a reading agrees, listing every disagreement found. */

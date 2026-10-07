@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { BinnedSwatch } from "../web/src/engine/colour-rules";
-import { binShares } from "../web/src/engine/constants";
+import { binShares, isNeutral } from "../web/src/engine/constants";
 import { accentOf, accentWords, pieceOf, pieces } from "../web/src/engine/looks";
 import type { Bins } from "../web/src/engine/rules";
 import { keepOf, problemsOf, show } from "./helpers/agrees";
@@ -42,22 +42,14 @@ export function probe(seed: number): () => Bins {
   const clampL = (L: number) => Math.min(0.96, Math.max(0.1, Number(L.toFixed(2))));
   type Raw = { L: number; C: number; h: number; y: number; w: number };
 
-  return () => {
-    const accentOn = pick(["none", "upper", "lower", "shoes", "other"] as const);
-    const upper = accentOn === "upper" ? loud() : colour(0.45);
-    const column = accentOn !== "upper" && accentOn !== "lower" && rand() < 0.15;
-    const lower = column ? { ...upper } : accentOn === "lower" ? loud() : colour(0.45);
-    const raw: Raw[] = [{ ...upper, y: pick([0.2, 0.3]), w: accentOn === "upper" ? 0.05 + rand() * 0.1 : 0.3 + rand() * 0.5 }];
-    if (!column) raw.push({ ...lower, y: pick([0.6, 0.7]), w: accentOn === "lower" ? 0.05 + rand() * 0.1 : 0.3 + rand() * 0.5 });
-    // Extra body colours, and the small accent where a bag or a belt sits.
-    for (let i = Math.floor(rand() * 3); i > 0; i--) raw.push({ ...colour(0.6), y: pick([0.2, 0.3, 0.6, 0.7]), w: 0.05 + rand() * 0.3 });
-    if (accentOn === "other") raw.push({ ...loud(), y: pick([0.4, 0.7]), w: 0.05 + rand() * 0.08 });
+  /** The shared tail of both shapes: shoes, fit, break, front. */
+  const finish = (raw: Raw[], upper: { L: number; C: number; h: number }, lower: { L: number; C: number; h: number }, column: boolean, accentShoes: boolean): Bins => {
     const shoesMode = pick(["continue", "edge", "contrast", "contrast", "none"] as const);
     if (shoesMode !== "none") {
       const delta = shoesMode === "continue" ? pick([0, 0.02, 0.04, 0.06]) : shoesMode === "edge" ? pick([0.08, 0.1, 0.12, 0.14, 0.16]) : pick([0.2, 0.3, 0.5]);
       const L = clampL(lower.L + (rand() < 0.5 ? delta : -delta));
-      const c = accentOn === "shoes" ? { ...loud(), L } : rand() < 0.6 ? { L, C: 0, h: 0 } : { L, C: pick([0.04, 0.08, 0.12]), h: pick(HUES) };
-      raw.push({ ...c, y: 0.95, w: accentOn === "shoes" ? 0.05 + rand() * 0.1 : 0.04 + rand() * 0.08 });
+      const c = accentShoes ? { ...loud(), L } : rand() < 0.6 ? { L, C: 0, h: 0 } : { L, C: pick([0.04, 0.08, 0.12]), h: pick(HUES) };
+      raw.push({ ...c, y: 0.95, w: accentShoes ? 0.05 + rand() * 0.1 : 0.04 + rand() * 0.08 });
     }
     const total = raw.reduce((t, s) => t + s.w, 0);
     const shares = binShares(raw.map((s) => s.w / total));
@@ -79,6 +71,39 @@ export function probe(seed: number): () => Bins {
     if (fitMode === "read" && rand() < 0.2) b.fitOneSide = true;
     if (shoesMode === "none" && rand() < 0.7) b.shoesWhy = pick(["cut_off", "floor"] as const);
     return b;
+  };
+
+  /**
+   * The wide shape (review round 3): two to six garment colours and the
+   * shoes, so up to seven in all, large smaller
+   * pieces, shares from 0.03 to 1, places from 0.1 to 0.85, chroma from
+   * 0.01 to 0.20, each colour binned the way binColour bins it.
+   */
+  const wide = (): Bins => {
+    const raw: Raw[] = [];
+    for (let n = 2 + Math.floor(rand() * 5); n > 0; n--) {
+      const L = clampL(Math.round((0.1 + rand() * 0.85) / 0.02) * 0.02);
+      const C = Number((0.01 + Math.floor(rand() * 20) * 0.01).toFixed(2));
+      const h = isNeutral({ L, C }) ? 0 : (Math.round((rand() * 360) / 5) * 5) % 360;
+      raw.push({ L, C, h, y: Number((0.1 + Math.floor(rand() * 16) * 0.05).toFixed(2)), w: 0.03 + rand() * 0.97 });
+    }
+    const upper = raw.find((s) => s.y < 0.38) ?? raw[0];
+    const lower = raw.find((s) => s.y >= 0.4) ?? raw[raw.length - 1];
+    return finish(raw, upper, lower, upper === lower, false);
+  };
+
+  return () => {
+    if (rand() < 0.35) return wide();
+    const accentOn = pick(["none", "upper", "lower", "shoes", "other"] as const);
+    const upper = accentOn === "upper" ? loud() : colour(0.45);
+    const column = accentOn !== "upper" && accentOn !== "lower" && rand() < 0.15;
+    const lower = column ? { ...upper } : accentOn === "lower" ? loud() : colour(0.45);
+    const raw: Raw[] = [{ ...upper, y: pick([0.2, 0.3]), w: accentOn === "upper" ? 0.05 + rand() * 0.1 : 0.3 + rand() * 0.5 }];
+    if (!column) raw.push({ ...lower, y: pick([0.6, 0.7]), w: accentOn === "lower" ? 0.05 + rand() * 0.1 : 0.3 + rand() * 0.5 });
+    // Extra body colours, and the small accent where a bag or a belt sits.
+    for (let i = Math.floor(rand() * 3); i > 0; i--) raw.push({ ...colour(0.6), y: pick([0.2, 0.3, 0.6, 0.7]), w: 0.05 + rand() * 0.3 });
+    if (accentOn === "other") raw.push({ ...loud(), y: pick([0.4, 0.7]), w: 0.05 + rand() * 0.08 });
+    return finish(raw, upper, lower, column, accentOn === "shoes");
   };
 }
 
@@ -102,7 +127,8 @@ describe("the reviewer's probe: 4000 seeded readings, every line agrees", () => 
       if (a >= 0) seen.accentOn[pieceOf(a, pieces(s.bins))]++;
     }
     const ms = Math.round(performance.now() - started);
-    console.log(`probe: ${PROBE_SIZE} readings in ${ms} ms`, JSON.stringify(seen));
+    // The stats, on request: RATIO_PROBE_LOG=1 npx vitest run tests/advice-probe.test.ts
+    if (process.env.RATIO_PROBE_LOG) console.log(`probe: ${PROBE_SIZE} readings in ${ms} ms`, JSON.stringify(seen));
     expect(problems.slice(0, 20), `${problems.length} problems`).toEqual([]);
     // The probe reaches every case it is for.
     expect(seen.accentKept).toBeGreaterThan(50);

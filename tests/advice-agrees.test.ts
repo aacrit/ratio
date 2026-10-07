@@ -182,6 +182,39 @@ describe("review round 1 reproducers", () => {
   });
 });
 
+describe("review round 3 reproducers", () => {
+  const swatch = (L: number, C: number, h: number, share: number, y: number): BinnedSwatch => ({ L, C, h, share, y });
+  const lch = (s: BinnedSwatch) => ({ L: s.L, C: s.C, h: s.h });
+
+  it("1. the sample's black lower piece says what it does: a grey has no hue to take out, and the leg line is the change", () => {
+    const s = show(fixtureBins("sample"));
+    const black = s.looks.find((l) => l.title === "Lower piece in black")!;
+    expect(black).toBeDefined();
+    const detail = black.moves[0].detail;
+    expect(detail).not.toMatch(/takes the hue out/);
+    expect(detail).toBe("Swap the lower piece for black: a deeper neutral, so the lower piece and the shoes read as one line.");
+    expect(black.changes).toEqual([{ rule: "legline", title: "Leg line", from: "neutral", to: "golden" }]);
+    agrees(s, "sample");
+  });
+
+  it("2. two smaller pieces are named by their colour and never both taken to one colour in a look", () => {
+    const palette = [swatch(0.5, 0.12, 30, 0.4, 0.3), swatch(0.5, 0.12, 150, 0.3, 0.65), swatch(0.4, 0.12, 270, 0.12, 0.45), swatch(0.7, 0.12, 300, 0.12, 0.75), swatch(0.2, 0, 0, 0.06, 0.95)];
+    const b: Bins = { proportion: 0.38, waist: 0.38, top: lch(palette[0]), bottom: lch(palette[1]), palette, fit: null };
+    const s = show(b);
+    for (const look of s.looks) {
+      expect(look.title).not.toMatch(/\bAccent\b/);
+      const others = look.moves.filter((m) => m.kind === "recolour" && m.piece === "other");
+      if (others.length === 2) expect(others[0].title.split(" in ").at(-1)).not.toBe(others[1].title.split(" in ").at(-1));
+    }
+    agrees(s, "two details");
+  });
+
+  it("3. the intro over no look says a look would take another rule off the mark, not that it breaks one", () => {
+    const p1 = readBins(fixtureBins("p1"));
+    expect(looksIntroOf(p1, 0)).toBe("No look here improves the reading without taking another rule off the mark. The advice in the reading below says what would.");
+  });
+});
+
 describe("review round 2 reproducers", () => {
   const swatch = (L: number, C: number, h: number, share: number, y: number): BinnedSwatch => ({ L, C, h, share, y });
   const lch = (s: BinnedSwatch) => ({ L: s.L, C: s.C, h: s.h });
