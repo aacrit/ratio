@@ -1,11 +1,11 @@
 {
-  "engine": "ratio-engine/0.10.0",
+  "engine": "ratio-engine/0.11.0",
   "fixtures": {
     "sample": {
       "url": "https://upload.wikimedia.org/wikipedia/commons/e/ed/Jacques-Louis_David_-_Napoleon_in_his_Study_-_WGA6093.jpg",
       "sha256": "2443631a3bd6ba673be324419f7b5ccee52f62cdb4d85679c6454a3f92c44c18",
-      "engine": "ratio-engine/0.10.0",
-      "hash": "0ef24ca0ce0e",
+      "engine": "ratio-engine/0.11.0",
+      "hash": "3e68566e42b6",
       "bins": {
         "proportion": 0.64,
         "waist": 0.36,
@@ -117,8 +117,8 @@
     "p1": {
       "url": "https://upload.wikimedia.org/wikipedia/commons/7/74/140111-Stacie-Anaka.jpg",
       "sha256": "1572c1bdfe4dce1ca0b0a248dfa775c8ce23bd78d29d80c2668dbfb90a61bc58",
-      "engine": "ratio-engine/0.10.0",
-      "hash": "ed0f3eec2462",
+      "engine": "ratio-engine/0.11.0",
+      "hash": "2f9323530ead",
       "bins": {
         "proportion": 0.5,
         "waist": 0.38,
@@ -198,7 +198,7 @@
           "rule": "value",
           "measured": "range 0.48",
           "state": "neutral",
-          "borderline": false
+          "borderline": true
         },
         {
           "rule": "shares",
@@ -218,8 +218,8 @@
     "p2": {
       "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/20140118115458IMG_4996_-_Yukicon_2014_-_matiast1.jpg/960px-20140118115458IMG_4996_-_Yukicon_2014_-_matiast1.jpg",
       "sha256": "25ad81fea0000ff70bd86f3908cb32969368f1c587d9963ae02786e3dfb732ae",
-      "engine": "ratio-engine/0.10.0",
-      "hash": "ef5b19d941ab",
+      "engine": "ratio-engine/0.11.0",
+      "hash": "467f983f5672",
       "bins": {
         "proportion": null,
         "waist": 0.38,
