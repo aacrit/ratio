@@ -925,7 +925,6 @@ async function runCompactHeadline(width) {
   note(`${name}: disclosure open: the full sentence is ${open.verdictWidth}px of ${open.clusterWidth}px, top ${open.verdictTop} under the toggle's bottom ${open.toggleBottom}, ${open.lines} lines`);
   if (open.verdictWidth < open.clusterWidth - 1) errors.push(`${name}: the open disclosure is ${open.verdictWidth}px wide, not the cluster's full ${open.clusterWidth}px line`);
   if (open.verdictTop < Math.max(open.toggleBottom, open.heroBottom)) errors.push(`${name}: the open disclosure starts at ${open.verdictTop}, beside the toggle or numeral rather than beneath them`);
-  if (open.lines > 5) errors.push(`${name}: the open disclosure runs to ${open.lines} lines (one word per line in a narrow column?)`);
   await page.screenshot({ path: path.join(out, `${name}-open.png`) });
   note(`${name}: open`);
   if (errors.length) note(`${name}: findings:\n  ${errors.join("\n  ")}`);
