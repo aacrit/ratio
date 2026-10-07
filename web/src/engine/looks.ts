@@ -20,7 +20,7 @@
 import type { BinnedSwatch } from "./colour-rules";
 import { colourName, familyOf } from "./names";
 import { binShares, isNeutral } from "./constants";
-import { type Piece, pieces as placedPieces } from "./pieces";
+import { ACCENT_SHARE, CLEAR_HUE, type Piece, accentOf as accentIn, pieceOf, pieces as placedPieces } from "./pieces";
 import { type AdviceLine, type Bins, type LineState, readBins, tuckable } from "./rules";
 
 export type Move =
@@ -43,8 +43,7 @@ export interface Look {
 }
 
 const SATURATED = 0.11;
-/** From this chroma a lead colour's hue is clear enough for its complement to mean something. */
-const CLEAR_HUE = 0.05;
+export { ACCENT_SHARE, pieceOf };
 /** Accents a tailor reaches for when the outfit has no clear lead hue: oxblood, cognac, navy. */
 const CLASSIC_ACCENTS = [
   { L: 0.36, C: 0.11, h: 25 },
@@ -55,8 +54,6 @@ const fix = (v: number, d = 2) => Number(v.toFixed(d));
 
 /** Neutrals closer than this in lightness are the same neutral to the eye (black and a charcoal in shade). */
 export const SAME_NEUTRAL_L = 0.12;
-/** An accent: a colour (not a neutral) of at most this share of the outfit. */
-export const ACCENT_SHARE = 0.15;
 const wrap = (h: number) => ((Math.round(h / 5) * 5) % 360 + 360) % 360;
 
 const SCORE: Record<LineState, number> = { golden: 2, neutral: 1, advice: 0, unread: 1 };
@@ -65,11 +62,6 @@ export const scoreOf = (lines: AdviceLine[]) => lines.reduce((s, l) => s + SCORE
 /** The pieces of the outfit: the swatches nearest the measured upper and lower garment colours, and the shoes. */
 export function pieces(b: Bins): { upper: number; lower: number; shoes: number } {
   return placedPieces(b.palette, b.waist, { top: b.top, bottom: b.bottom });
-}
-
-/** What a swatch is to the outfit, preferring the lower piece when one swatch is both. */
-export function pieceOf(i: number, p: ReturnType<typeof pieces>): Piece {
-  return i === p.lower ? "lower" : i === p.upper ? "upper" : i === p.shoes ? "shoes" : "other";
 }
 
 const lchToLab = ({ L, C, h }: { L: number; C: number; h: number }) => ({ L, a: C * Math.cos((h * Math.PI) / 180), b: C * Math.sin((h * Math.PI) / 180) });
@@ -142,14 +134,7 @@ export function sameColour(p: { L: number; C: number; h: number }, q: { L: numbe
 }
 
 /** The outfit's accent: the most chromatic colour (clear of the neutral line) holding at most ACCENT_SHARE of it, or -1. */
-export function accentOf(b: Bins): number {
-  let best = -1;
-  b.palette.forEach((s, i) => {
-    if (s.share <= 0 || s.share > ACCENT_SHARE || isNeutral(s) || s.C < CLEAR_HUE) return;
-    if (best < 0 || s.C > b.palette[best].C) best = i;
-  });
-  return best;
-}
+export const accentOf = (b: Bins): number => accentIn(b.palette);
 
 /** The accent as people say it: "the coral shoes", "the plum accent"; null when the outfit has none. */
 export function accentWords(b: Bins): string | null {
@@ -181,7 +166,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
       kind: "break",
       to: b.waist,
       title: tuck ? "A front tuck, if it tucks" : "Belt at the waist",
-      detail: tuck ? "If the upper piece tucks, a front tuck moves the break up to the waist." : "A belt draws a break at the waist.",
+      detail: tuck ? "A front tuck, if the upper piece tucks: it moves the break up to the waist." : "A belt at the waist: it draws the break there.",
     });
   }
   // The accent is kept as worn: no move recolours it, and no new accent competes with it.
@@ -196,19 +181,32 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
   for (const i of recolourTargets) {
     const s = b.palette[i];
     const anchor = b.palette.find((x, j) => j !== i && !isNeutral(x)) ?? lead;
-    const options: { L: number; C: number; h: number }[] = [];
+    // Each option carries its own reason, so every swap in a look says why
+    // it is there (Mara, UX pass 3: a navy lower piece was explained only by
+    // the oxblood accent's reason).
+    const options: { L: number; C: number; h: number; why: string }[] = [];
     if (anchor && anchor !== s) {
       const C = Math.max(0.06, Math.min(0.12, s.C || 0.08));
-      for (const turn of [0, 30, -30, 180, 150, -150]) options.push({ L: s.L, C, h: wrap(anchor.h + turn) });
+      const of = `the ${plain(anchor)} in the outfit`;
+      const why = (turn: number) =>
+        turn === 0
+          ? `it takes the hue of ${of}, so the two read as one scheme`
+          : Math.abs(turn) === 30
+            ? `it sits beside ${of} on the colour wheel, so the two read as one analogous scheme`
+            : turn === 180
+              ? `it sits opposite ${of} on the colour wheel, a complementary pair`
+              : `it sits nearly opposite ${of} on the colour wheel, a split-complementary pair`;
+      for (const turn of [0, 30, -30, 180, 150, -150]) options.push({ L: s.L, C, h: wrap(anchor.h + turn), why: why(turn) });
     }
     // Neutrals at the piece's own lightness, and a deep neutral.
-    options.push({ L: s.L, C: 0, h: 0 }, { L: 0.2, C: 0, h: 0 });
+    options.push({ L: s.L, C: 0, h: 0, why: "a neutral at the piece's own lightness takes the hue out and keeps its value" }, { L: 0.2, C: 0, h: 0, why: "a deep neutral takes the hue out, and a neutral sits with any hue" });
     // Navy and denim: the two blues most wardrobes already have.
-    options.push({ L: 0.3, C: 0.07, h: 255 }, { L: 0.45, C: 0.06, h: 250 });
-    for (const o of options) {
+    const blue = "a low-chroma blue most wardrobes hold, behaves almost as a neutral";
+    options.push({ L: 0.3, C: 0.07, h: 255, why: `navy, ${blue}` }, { L: 0.45, C: 0.06, h: 250, why: `denim, ${blue}` });
+    for (const { why, ...o } of options) {
       if (sameColour(s, o)) continue;
       const label = plain(o);
-      moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} in ${label}`, detail: `Swap the ${pieceName(i, p).toLowerCase()} for ${label}.` });
+      moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, title: `${pieceName(i, p)} in ${label}`, detail: `Swap the ${pieceName(i, p).toLowerCase()} for ${label}: ${why}.` });
     }
   }
 
@@ -217,7 +215,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const s = b.palette[p.lower];
     const L = fix(Math.max(0.14, b.top.L - 0.2));
     const o = { L, C: s.C, h: s.h };
-    if (!sameColour(s, o)) moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: "A darker value below grounds the figure." });
+    if (!sameColour(s, o)) moves.push({ kind: "recolour", swatch: p.lower, piece: "lower", ...o, title: `A darker lower piece: ${plain(o)}`, detail: `Swap the lower piece for ${plain(o)}: a darker value below grounds the outfit.` });
   }
 
   // Chroma: step one loud colour down to a muted version of itself: the
@@ -231,7 +229,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const i = b.palette.indexOf(s);
     const o = { L: s.L, C: 0.05, h: s.h };
     // A muted red is still called red: only a real step down in chroma counts here.
-    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: "One colour at full strength, the other stepped down." });
+    if (i !== accent && labGap(s, { ...o, share: 0, y: 0 }) >= 0.06) moves.push({ kind: "recolour", swatch: i, piece: pieceOf(i, p), ...o, muted: true, title: `${pieceName(i, p)} muted to ${plain(o)}`, detail: `Step the ${pieceName(i, p).toLowerCase()} down to a muted ${plain(o)}: one colour stays at full strength, the other steps back.` });
   }
 
   // Accent: a tenth of the area. The complement of the lead hue when the lead
@@ -245,7 +243,7 @@ export function candidateMoves(b: Bins, lines: AdviceLine[]): Move[] {
     const accents = lead && lead.C >= CLEAR_HUE ? [{ L: 0.5, C: 0.12, h: wrap(lead.h + 180) }] : CLASSIC_ACCENTS;
     for (const a of accents) {
       if (sameColour(b.palette[p.shoes], a)) continue;
-      moves.push({ kind: "accent", ...a, title: `Shoes in ${plain(a)}`, detail: "An accent of about a tenth gives the eye a place to rest." });
+      moves.push({ kind: "accent", ...a, title: `Shoes in ${plain(a)}`, detail: `Shoes in ${plain(a)}: an accent of about a tenth gives the eye a place to rest.` });
     }
   }
   return moves;

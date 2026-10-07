@@ -227,8 +227,9 @@ describe("2. volume: the words follow the numbers, arms never count as the cut",
     expect(m.fit?.legs).toBeCloseTo(20 / 50, 5);
     expect(m.fitWhy).toBe("arms");
     const line = reading.lines.find((l) => l.rule === "volume")!;
-    expect(line).toMatchObject({ state: "neutral", measured: "not read · 0.40×" });
-    expect(line.text).toMatch(/^Each leg reads narrow/);
+    // One part read: the balance is not judged, so the line is never "fine" (T6).
+    expect(line).toMatchObject({ state: "unread", measured: "not read · 0.40×" });
+    expect(line.text).toMatch(/^The lower piece reads narrow at the knee line/);
     expect(line.text).toMatch(/an arm or a hand lies over the upper piece's edges/i);
     // No advice is made from a measurement that was not taken.
     expect(suggestLooks(reading.bins, reading.lines).every((l) => l.changes.every((c) => c.rule !== "volume"))).toBe(true);

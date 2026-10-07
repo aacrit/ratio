@@ -69,3 +69,31 @@ export function pieces(palette: readonly Placed[], waist: number, measured?: { t
     shoes: pick(isShoes),
   };
 }
+
+/** A garment a line of advice can ask to change (AdviceLine.asks). */
+export type Garment = Exclude<Piece, "other">;
+
+/** What a swatch is to the outfit, preferring the lower piece when one swatch is both. */
+export function pieceOf(i: number, p: Pieces): Piece {
+  return i === p.lower ? "lower" : i === p.upper ? "upper" : i === p.shoes ? "shoes" : "other";
+}
+
+/** An accent: a colour (not a neutral) of at most this share of the outfit. */
+export const ACCENT_SHARE = 0.15;
+/** From this chroma a colour's hue is clear enough to count as an accent, or for its complement to mean something. */
+export const CLEAR_HUE = 0.05;
+
+/**
+ * The outfit's accent: the most chromatic colour (clear of the neutral line)
+ * holding at most ACCENT_SHARE of it, or -1. The rules read it (the leg line
+ * and the value advice never ask to change accent shoes, T6) and the looks
+ * keep it as worn.
+ */
+export function accentOf(palette: readonly Placed[]): number {
+  let best = -1;
+  palette.forEach((s, i) => {
+    if (s.share <= 0 || s.share > ACCENT_SHARE || isNeutral(s) || s.C < CLEAR_HUE) return;
+    if (best < 0 || s.C > palette[best].C) best = i;
+  });
+  return best;
+}

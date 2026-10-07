@@ -10,7 +10,11 @@ import { CATEGORY, type Landmark, type Mask, measureOutfit } from "../web/src/en
 import { downsample, targetSize } from "../web/src/engine/resample";
 import { type BinnedSwatch, TEMPLATES, chromaLine, fitTemplate, harmonyLine, sharesLine, valueLine } from "../web/src/engine/colour-rules";
 import { extractPalette } from "../web/src/engine/palette";
-import { JUDGING_WORDS, readOutfit } from "../web/src/engine/rules";
+import { BODY_MEASURE_WORDS, type Bins, JUDGING_WORDS, readBins, readOutfit } from "../web/src/engine/rules";
+import { suggestLooks } from "../web/src/engine/looks";
+import { measuredCopy } from "../web/src/engine/measured";
+import { RULEBOOK } from "../web/src/engine/rulebook";
+import { verdictOf } from "../web/src/engine/verdict";
 
 const W = 200;
 const H = 400;
@@ -207,6 +211,50 @@ describe("copy law (V4, design lint)", () => {
 
   it("never uses a judging word or an em dash", () => {
     for (const text of allLines()) {
+      for (const word of JUDGING_WORDS) expect(text.toLowerCase(), text).not.toContain(word);
+      expect(text).not.toContain("—");
+    }
+  });
+
+  // T6 (Mara, UX pass 3): "Each leg reads narrow (0.40× the shoulder width at
+  // the knee)" is heard as a remark on the client's legs and shoulders. Every
+  // line names the garment: advice, Measured copy, verdict and look reasons,
+  // including each volume case (both read, one read, none read) and each
+  // leg-line case (continuing, contrasting, accent shoes, not read).
+  function everyGarmentLine(): string[] {
+    const out = allLines();
+    const base = (over: Partial<Bins>): Bins => ({
+      proportion: 0.5,
+      waist: 0.38,
+      top: { L: 0.3, C: 0, h: 0 },
+      bottom: { L: 0.5, C: 0.1, h: 150 },
+      palette: [sw(0.3, 0, 0, 0.55, 0.3), sw(0.5, 0.1, 150, 0.35, 0.65), sw(0.7, 0.14, 35, 0.1, 0.95)],
+      fit: { top: 1.5, legs: 0.7 },
+      ...over,
+    });
+    const variants: Bins[] = [];
+    for (const fit of [null, { top: 1.0, legs: 0.3 }, { top: 1.5, legs: null }, { top: null, legs: 0.4 }, { top: 1.7, legs: 0.9 }, { top: 1.2, legs: 0.5 }])
+      for (const fitWhy of [undefined, "arms" as const])
+        for (const shoesL of [0.5, 0.9])
+          for (const front of [undefined, true as const])
+            variants.push(base({ fit, ...(fitWhy ? { fitWhy } : {}), ...(front ? { front } : {}), palette: [sw(0.3, 0, 0, 0.55, 0.3), sw(0.5, 0.1, 150, 0.35, 0.65), sw(shoesL, shoesL > 0.6 ? 0.14 : 0, 35, 0.1, 0.95)] }));
+    variants.push(base({ palette: [sw(0.3, 0, 0, 0.6, 0.3), sw(0.5, 0.1, 150, 0.4, 0.65)], shoesWhy: "cut_off" }), base({ proportion: null, bottom: { L: 0.3, C: 0, h: 0 }, palette: [sw(0.3, 0, 0, 0.9, 0.5), sw(0.32, 0, 0, 0.1, 0.95)] }));
+    for (const b of variants) {
+      const lines = readBins(b);
+      const looks = suggestLooks(b, lines);
+      out.push(verdictOf(lines, looks, b), ...lines.flatMap((l) => [l.text, measuredCopy(l, b), RULEBOOK[l.rule].rule]), ...looks.flatMap((k) => [k.title, ...k.moves.map((m) => m.detail)]));
+    }
+    return out;
+  }
+
+  it("never makes a body part the thing measured: garment lines only (T6)", () => {
+    // The lint catches the old copy.
+    const old = "Each leg reads narrow (0.40× the shoulder width at the knee).";
+    expect(BODY_MEASURE_WORDS.some((w) => old.toLowerCase().includes(w))).toBe(true);
+    const texts = everyGarmentLine();
+    expect(texts.length).toBeGreaterThan(400);
+    for (const text of texts) {
+      for (const word of BODY_MEASURE_WORDS) expect(text.toLowerCase(), text).not.toContain(word);
       for (const word of JUDGING_WORDS) expect(text.toLowerCase(), text).not.toContain(word);
       expect(text).not.toContain("—");
     }

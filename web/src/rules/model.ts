@@ -103,9 +103,9 @@ function scale(d: Omit<ScaleDef, "start">): ScaleDef {
 }
 
 export const SCALES: readonly ScaleDef[] = [
-  scale({ id: "volume-top", rule: "volume", title: "upper piece, × shoulders", min: 0.9, max: 1.8, step: 0.05, edges: FIT_TOP, bands: ["fitted", "straight", "loose"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The upper piece's width over the shoulders" }),
-  scale({ id: "volume-legs", rule: "volume", title: "each leg at its knee, × shoulders", min: 0.2, max: 0.9, step: 0.05, edges: FIT_LEGS, bands: ["narrow", "straight", "wide"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "Each leg's width at its knee over the shoulders" }),
-  scale({ id: "legline", rule: "legline", title: "lightness gap, lower piece to shoes", min: 0, max: 0.5, step: 0.02, edges: [LEG_LINE_EDGE], bands: ["the line runs on", "the line ends at the ankle"], borderlineBin: 0.04, format: (v) => `ΔL ${two(v)}`, label: "The lightness gap between the lower piece and the shoes" }),
+  scale({ id: "volume-top", rule: "volume", title: "upper piece, × shoulder line", min: 0.9, max: 1.8, step: 0.05, edges: FIT_TOP, bands: ["fitted", "straight", "loose"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The upper piece's width over its shoulder line" }),
+  scale({ id: "volume-legs", rule: "volume", title: "lower piece at knee, × shoulder line", min: 0.2, max: 0.9, step: 0.05, edges: FIT_LEGS, bands: ["narrow", "straight", "wide"], borderlineBin: 0.05, format: (v) => `${two(v)}×`, label: "The lower piece's width at the knee line over the upper piece's shoulder line" }),
+  scale({ id: "legline", rule: "legline", title: "lightness gap, lower piece to shoes", min: 0, max: 0.5, step: 0.02, edges: [LEG_LINE_EDGE], bands: ["the line runs on", "the line stops at the shoes"], borderlineBin: 0.04, format: (v) => `ΔL ${two(v)}`, label: "The lightness gap between the lower piece and the shoes" }),
   scale({ id: "value", rule: "value", title: "lightness range of the palette", min: 0, max: 1, step: 0.02, edges: CONTRAST_EDGES, bands: ["low", "medium", "high"], borderlineBin: 0.04, format: (v) => `range ${two(v)}`, label: "The lightness range, lightest colour minus darkest" }),
   // Chroma: the one edge RULEBOOK states. Whether a colour is a neutral depends on its lightness too
   // (neutralChromaAt), so the scale draws no fixed neutral band; each of your colours says it itself.

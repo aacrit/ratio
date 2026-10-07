@@ -56,17 +56,17 @@ export const RULEBOOK: Record<RuleId, RuleEntry> = {
   volume: {
     title: "Volume",
     rule: "One fitted volume against one fuller one keeps a line; two full volumes read as unanchored, two fitted ones as streamlined.",
-    maths: "The upper piece's width is the run of fabric through the figure's centre line on the rows between the shoulders and the hips that no arm or hand crosses (the pose's shoulders, elbows and wrists); when every row is crossed, volume is not read. Each leg's width is the run of fabric through its own knee (a skirt that holds both knees counts half to each). Both against the distance between the shoulders, rounded to 0.05. One function turns these numbers into the words.",
+    maths: "Both widths are held against the upper piece's shoulder line: the span between the two shoulder points the pose marks on it. The upper piece's width is the run of fabric through the figure's centre line, on the middle half of the rows between the shoulder line and the hip line that no arm or hand crosses (the pose's elbows and wrists); when every row is crossed, its width is not read. The lower piece's width is the run of fabric at the knee line, taken on each side on its own (a skirt that spans both sides counts half to each). Both rounded to 0.05. One function turns these numbers into the words. When only one of the two is read, that one is said and the balance is not judged.",
     edges: [
       { name: "upper piece: fitted / straight / loose", value: `below ${FIT_TOP[0]} / to ${FIT_TOP[1]} / above` },
-      { name: "each leg: narrow / straight / wide", value: `below ${FIT_LEGS[0]} / to ${FIT_LEGS[1]} / above` },
+      { name: "lower piece at the knee line: narrow / straight / wide", value: `below ${FIT_LEGS[0]} / to ${FIT_LEGS[1]} / above` },
     ],
     sources: [{ label: "Tailoring convention: balance a full piece with a fitted one" }],
     calibrated: false,
   },
   legline: {
     title: "Leg line",
-    rule: "Shoes close in value to the lower piece continue the leg line; shoes in strong contrast end it at the ankle.",
+    rule: "Shoes close in value to the lower piece continue the leg line; shoes in strong contrast stop it where they begin, a point of their own.",
     maths: "The OKLab lightness difference between the lower piece and the shoes. The shoes are read from a box round each foot (the pose's ankle, heel and toe), the same shoes the palette and \"try it\" use; when the frame cuts them off or they merge with the floor, the line says so instead of guessing.",
     edges: [{ name: "continuous below", value: LEG_LINE_EDGE }],
     sources: [DOW, OKLAB],

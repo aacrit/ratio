@@ -38,7 +38,16 @@ export interface VolumeContext {
   front?: boolean;
 }
 
-const ONE_SIDE = " The upper piece's width was read on one side only, as an arm lay on the other, so take it as a nudge.";
+/**
+ * The reference both widths are held against, named as a garment line, never
+ * a body measure (Mara, UX pass 3: "0.40× the shoulder width at the knee"
+ * reads as a remark on the client's legs and shoulders). The number is the
+ * same: the span the pose's shoulder points mark across the upper piece.
+ */
+export const UPPER_REF = "its shoulder line";
+export const LOWER_REF = "the upper piece's shoulder line";
+
+const ONE_SIDE =" The upper piece's width was read on one side only, as an arm lay on the other, so take it as a nudge.";
 
 export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
   const { top: t, legs: l } = volumeWords(fit);
@@ -47,20 +56,22 @@ export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
   const borderline = (fit.top !== null && nearEdge(fit.top, FIT_TOP, 0.05)) || (fit.legs !== null && nearEdge(fit.legs, FIT_LEGS, 0.05)) || (!!ctx.oneSide && fit.top !== null);
   const base = { rule: "volume" as const, title: "Volume", measured: `${n(fit.top)} · ${n(fit.legs)}`, borderline };
   const side = ctx.oneSide && fit.top !== null ? ONE_SIDE : "";
-  // One part alone is said, and the balance of the two is not judged.
+  // One part alone is said, and the balance of the two is not judged: the
+  // line is "unread" (shown "not judged"), never "fine" (Sam and Noor, UX
+  // pass 3: "FINE · not read · 0.40×").
   if (t === null || l === null) {
-    const said = t !== null ? `The upper piece reads ${t} (${two(fit.top!)}× the shoulder width).` : `Each leg reads ${l} (${two(fit.legs!)}× the shoulder width at the knee).`;
-    const missing = t !== null ? "The legs were not read" : ctx.why === "arms" ? "An arm or a hand lies over the upper piece's edges, so its width was not read" : "The upper piece's width could not be read on these rows";
-    return { ...base, state: "neutral", text: `${said} ${missing}, and the balance of the two is not judged.${side}` };
+    const said = t !== null ? `The upper piece reads ${t} (${two(fit.top!)}× ${UPPER_REF}).` : `The lower piece reads ${l} at the knee line (${two(fit.legs!)}× ${LOWER_REF}).`;
+    const missing = t !== null ? "The lower piece's width was not read" : ctx.why === "arms" ? "An arm or a hand lies over the upper piece's edges, so its width was not read" : "The upper piece's width could not be read on these rows";
+    return { ...base, state: "unread", text: `${said} ${missing}, and the balance of the two is not judged.${side}` };
   }
   const pair = `${t} over ${l}`;
   const cap = pair.charAt(0).toUpperCase() + pair.slice(1);
   if (t === "loose" && l !== "narrow") {
-    const anchor = ctx.front ? "Keep one fitted: pair it with a narrower leg." : "Keep one fitted: if the upper piece tucks, a tuck does it; otherwise pair it with a narrower leg.";
-    return { ...base, state: "advice", text: `${cap}: two full volumes, so the outfit has nothing to anchor it. ${anchor}${side}` };
+    const anchor = ctx.front ? "Keep one fitted: pair it with a narrower lower piece." : "Keep one fitted: if the upper piece tucks, a tuck does it; otherwise pair it with a narrower lower piece.";
+    return { ...base, state: "advice", asks: ["lower"], text: `${cap}: two full volumes, so the outfit has nothing to anchor it. ${anchor}${side}` };
   }
   if (t === "fitted" && l === "narrow") {
-    return { ...base, state: "neutral", text: `${cap}: a streamlined column of fitted pieces. A single fuller piece, a wide leg or a looser layer, would add contrast if you want it.${side}` };
+    return { ...base, state: "neutral", text: `${cap}: a streamlined column of fitted pieces. A single fuller piece, a wide-leg lower piece or a looser layer, would add contrast if you want it.${side}` };
   }
   if ((t === "loose" && l === "narrow") || (t === "fitted" && l === "wide")) {
     return { ...base, state: "golden", text: `${cap}: one full volume balanced by one fitted, the classic pairing. Keep it.${side}` };
@@ -68,14 +79,25 @@ export function volumeLine(fit: Fit, ctx: VolumeContext = {}): AdviceLine {
   return { ...base, state: "neutral", text: `${cap}: moderate volumes that sit together quietly.${side}` };
 }
 
-export function legLine(lowerL: number, shoesL: number): AdviceLine {
+/** Whether the shoes continue the lower piece's line: the one predicate the leg line and the proportion line's shoe clause share. */
+export const shoesContinue = (lowerL: number, shoesL: number): boolean => Math.abs(lowerL - shoesL) < LEG_LINE_EDGE;
+
+/**
+ * The leg line. Contrasting shoes that are the outfit's accent are a choice
+ * to keep, never one to change: the verdict keeps them, so this line must
+ * not ask for other shoes (Noor, UX pass 3: "Keep the coral shoes" over a
+ * row suggesting shoes nearer the lower piece's value).
+ */
+export function legLine(lowerL: number, shoesL: number, shoesAccent = false): AdviceLine {
   const gap = Math.abs(lowerL - shoesL);
   // Lightness bins are 0.02; a difference of two bins can move by one.
   const base = { rule: "legline" as const, title: "Leg line", measured: `ΔL ${two(gap)}`, borderline: nearEdge(gap, [LEG_LINE_EDGE], 0.04) };
-  if (gap < LEG_LINE_EDGE) {
+  if (shoesContinue(lowerL, shoesL)) {
     return { ...base, state: "golden", text: `The shoes sit close in value to the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line runs unbroken to the floor.` };
   }
-  return { ...base, state: "neutral", text: `The shoes contrast with the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line ends at the ankle and the shoes become a point of their own. Shoes nearer the lower piece's value would carry the line down.` };
+  const said = `The shoes contrast with the lower piece (${two(lowerL)} and ${two(shoesL)}), so the leg line stops where the shoes begin and they become a point of their own.`;
+  if (shoesAccent) return { ...base, state: "neutral", text: `${said} They carry the outfit's accent, so the contrast is the point: keep it.` };
+  return { ...base, state: "neutral", asks: ["shoes"], text: `${said} That is a choice that holds; shoes nearer the lower piece's value would run the line to the floor instead.` };
 }
 
 /** The volume line when nothing could be read and an arm or a hand lay on the upper piece's edges on every row: said, never guessed. */

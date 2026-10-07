@@ -242,7 +242,7 @@ describe("4. volume reads where it can, says what it can't", () => {
     expect(m.fitWhy).toBe("arms");
     const line = reading.lines.find((l) => l.rule === "volume")!;
     expect(line.measured).toBe("not read · 0.40×");
-    expect(line.text).toMatch(/^Each leg reads narrow/);
+    expect(line.text).toMatch(/^The lower piece reads narrow at the knee line/);
     // Balance advice needs both values.
     expect(line.state).not.toBe("advice");
   });

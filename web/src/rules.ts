@@ -227,6 +227,12 @@ export function setupRulebook(root: HTMLElement): { refreshYours: () => void } {
 
   /** Why a rule was not read as worn, from the reading's own reasons when it has one. */
   function notRead(rule: RuleId, worn: Reading): string {
+    // One width read and the other not: the read one is marked on its scale, and the balance is not judged, never "fine" (T6).
+    if (rule === "volume" && worn.bins.fit) {
+      const f = worn.bins.fit;
+      const why = f.top === null && worn.bins.fitWhy === "arms" ? " (an arm or a hand lies over the upper piece on every row)" : "";
+      return `not judged as worn: only the ${f.top !== null ? "upper" : "lower"} piece's width was read${why}.`;
+    }
     if (rule === "volume" && worn.bins.fitWhy === "arms") return "not read as worn: an arm or a hand lies over the upper piece on every row.";
     if (rule === "legline" && worn.bins.shoesWhy === "cut_off") return "not read as worn: the frame cuts the shoes off.";
     if (rule === "legline" && worn.bins.shoesWhy === "floor") return "not read as worn: the shoes merge with the floor.";
