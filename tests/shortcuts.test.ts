@@ -8,7 +8,7 @@ import { type FocusLike, type ShortcutHandlers, isTypingIn, setupShortcuts } fro
 
 /** A document-like object just big enough for setupShortcuts: records the one keydown listener it attaches, and lets a test fire a fake event straight into it. */
 function fakeRoot(activeElement: FocusLike | null = null) {
-  let handler: ((e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; defaultPrevented?: boolean }) => void) | null = null;
+  let handler: ((e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; defaultPrevented?: boolean; repeat?: boolean }) => void) | null = null;
   return {
     activeElement,
     addEventListener: (_type: string, fn: typeof handler) => {
@@ -17,7 +17,7 @@ function fakeRoot(activeElement: FocusLike | null = null) {
     removeEventListener: () => {
       handler = null;
     },
-    fire: (e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; defaultPrevented?: boolean }) => handler?.(e),
+    fire: (e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; defaultPrevented?: boolean; repeat?: boolean }) => handler?.(e),
   };
 }
 
@@ -78,6 +78,15 @@ describe("setupShortcuts", () => {
     expect(handlers.original).not.toHaveBeenCalled();
     root.fire({ key: "Escape" });
     expect(handlers.original).toHaveBeenCalledOnce();
+  });
+
+  it("a held S (auto-repeat) downloads once", () => {
+    const root = fakeRoot();
+    const handlers = noopHandlers();
+    setupShortcuts(handlers, root);
+    root.fire({ key: "s" });
+    for (let i = 0; i < 5; i++) root.fire({ key: "s", repeat: true });
+    expect(handlers.download).toHaveBeenCalledOnce();
   });
 
   it("skips while typing in a field", () => {

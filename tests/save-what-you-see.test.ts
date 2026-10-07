@@ -11,7 +11,7 @@ import { type Bins, ENGINE_VERSION, readBins } from "../web/src/engine/rules";
 import { Figure } from "../web/src/overlay";
 import type { CardContent } from "../web/src/ui/card";
 import type { Shown } from "../web/src/ui/looks";
-import { CARD_FAILED, DRAWING_CARD, type SaveTarget, cardSaver, savedCopy } from "../web/src/ui/save";
+import { CARD_FAILED, DRAWING_CARD, RESET_MS, type SaveTarget, cardSaver, savedCopy } from "../web/src/ui/save";
 import { type FakeCanvas, installFakeBrowser, solid } from "./helpers/fake-canvas";
 
 const BLACK_SHOES: [number, number, number, number] = [20, 20, 20, 255];
@@ -38,6 +38,17 @@ let browser: ReturnType<typeof installFakeBrowser>;
 function figure(): Figure {
   const canvas = new (globalThis as unknown as { OffscreenCanvas: typeof FakeCanvas }).OffscreenCanvas();
   return new Figure(canvas as unknown as HTMLCanvasElement, solid(100, 100, BLACK_SHOES), { width: 100, height: 100 }, measure, { engine: ENGINE_VERSION, bins, lines: readBins(bins) });
+}
+
+/** Runs animation frames 16 ms apart, with the microtasks between them, until no spring is left running. */
+async function settle(): Promise<void> {
+  let now = performance.now();
+  for (let i = 0; i < 1000 && browser.frames.pending > 0; i++) {
+    browser.frames.flush((now += 16));
+    await Promise.resolve();
+  }
+  await Promise.resolve();
+  browser.frames.flush((now += 16)); // the last repaint the settled glide asks for
 }
 
 /** The image the card's photo is drawn from: the first thing drawn into the still. */
@@ -83,7 +94,7 @@ describe("the card's photo is the state on screen (Figure.still)", () => {
     expect(cardPhoto(f)).toBe(AS_WORN);
   });
 
-  it("the stage itself still draws the leaving look during the glide, then lets it go", () => {
+  it("the stage itself still draws the leaving look during the glide, then lets it go", async () => {
     const f = figure();
     f.setLook(solid(100, 100, TERRACOTTA_SHOES));
     browser.frames.flush();
@@ -92,15 +103,67 @@ describe("the card's photo is the state on screen (Figure.still)", () => {
     stage.drawn = [];
     browser.frames.flush(performance.now() + 16);
     expect(stage.drawn).toContain(THE_LOOK); // the wipe sliding home over the original
+    await settle();
+    expect(f.wipeAt).toBe(1);
+    stage.drawn = [];
+    f.restore(); // a plain repaint once home
+    expect(stage.drawn).toEqual([AS_WORN]);
   });
 
-  it("under reduced motion, back to as worn is the original on the card too", () => {
+  it("under reduced motion, back to as worn is the original on the card at once and after the glide's own tick", async () => {
     browser.restore();
     browser = installFakeBrowser({ reducedMotion: true });
     const f = figure();
     f.setLook(solid(100, 100, TERRACOTTA_SHOES));
     f.setLook(null);
+    // No glide under reduced motion, but its completion still lands a
+    // microtask later: the card and hasLook must not wait for it.
+    expect(f.hasLook).toBe(false);
     expect(cardPhoto(f)).toBe(AS_WORN);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.hasLook).toBe(false);
+    expect(cardPhoto(f)).toBe(AS_WORN);
+    const stage = f.element as unknown as FakeCanvas;
+    stage.drawn = [];
+    f.restore();
+    expect(stage.drawn).toEqual([AS_WORN]); // nothing of the look is left on the stage either
+  });
+});
+
+describe("the compare wipe moves only while a look is shown", () => {
+  it("as worn, setWipe and flingWipe do nothing", () => {
+    const f = figure();
+    browser.frames.flush(); // the first paint
+    f.setWipe(0.3);
+    expect(f.wipeAt).toBe(1);
+    f.flingWipe(-2);
+    expect(browser.frames.pending).toBe(0); // no spring started, no repaint asked for
+    expect(f.wipeAt).toBe(1);
+  });
+
+  it("on the way back to as worn, a drag neither moves nor strands the wipe", async () => {
+    const f = figure();
+    f.setLook(solid(100, 100, TERRACOTTA_SHOES));
+    await settle();
+    f.setLook(null);
+    f.setWipe(0.3);
+    f.flingWipe(-2);
+    await settle();
+    expect(f.wipeAt).toBe(1);
+  });
+
+  it("with a look shown, setWipe moves the wipe and flingWipe carries it", async () => {
+    const f = figure();
+    f.setLook(solid(100, 100, TERRACOTTA_SHOES));
+    await settle();
+    expect(f.wipeAt).toBeCloseTo(0.5, 2);
+    f.setWipe(0.3);
+    expect(f.wipeAt).toBe(0.3);
+    f.flingWipe(2);
+    await settle();
+    expect(f.wipeAt).toBeGreaterThan(0.3);
+    expect(cardPhoto(f)).toBe(THE_LOOK);
   });
 });
 
@@ -171,22 +234,73 @@ describe("pressing S: the card is being drawn, said at once", () => {
     expect(save).toHaveBeenCalledOnce();
   });
 
-  it("can save again once the first is saved", async () => {
+  it("pressing the same button (or S) again while Downloaded still shows saves nothing more, then works once it reads as itself", async () => {
+    vi.useFakeTimers();
     const save = vi.fn(async () => {});
     const download = cardSaver({ current: () => target(figure()), save });
+    const button = fakeButton();
     const note = { textContent: "" as string | null };
-    await download(fakeButton(), note);
-    await download(fakeButton(), note);
+    await download(button, note);
+    expect(button.textContent).toBe("Downloaded");
+    for (let i = 0; i < 5; i++) {
+      vi.advanceTimersByTime(40); // held S, or taps 40 ms apart
+      await download(button, note);
+    }
+    vi.advanceTimersByTime(RESET_MS - 250);
+    await download(button, note);
+    expect(save).toHaveBeenCalledOnce();
+    expect(note.textContent).toBe(savedCopy("3abe0000")); // a dropped press repeats the true line
+    vi.advanceTimersByTime(250);
+    expect(button.textContent).toBe("Download this read (free)");
+    await download(button, note);
     expect(save).toHaveBeenCalledTimes(2);
   });
 
-  it("a failure says so, and never leaves Drawing the card. or a saved line behind", async () => {
+  it("a press dropped while another button's card is drawing says Drawing the card. in its own status line (the Card preview)", async () => {
+    let finish = () => {};
+    const save = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    const download = cardSaver({ current: () => target(figure()), save });
+    const first = download(fakeButton(), { textContent: "" });
+    const previewNote = { textContent: "" as string | null };
+    await download(fakeButton(), previewNote);
+    expect(previewNote.textContent).toBe(DRAWING_CARD);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    finish();
+    await first;
+  });
+
+  it("a failure says so with a next step, and never leaves Drawing the card. or a saved line behind", async () => {
     const download = cardSaver({ current: () => target(figure()), save: async () => Promise.reject(new Error("no")) });
     const button = fakeButton();
     const note = { textContent: "Saved to your downloads as ratio-0000.png." as string | null };
     await download(button, note);
     expect(note.textContent).toBe(CARD_FAILED);
+    expect(CARD_FAILED).toBe("The card could not be drawn. Try the download again.");
     expect(button.textContent).toBe("Could not draw the card");
+  });
+
+  it("after a failure a retry starts at once, keeps the button's own label and gives focus back", async () => {
+    vi.useFakeTimers();
+    const button = fakeButton();
+    const f = figure();
+    const realDocument = globalThis.document;
+    vi.stubGlobal("document", { ...realDocument, activeElement: button });
+    let fail = true;
+    const save = vi.fn(async () => {
+      if (fail) throw new Error("no");
+    });
+    const download = cardSaver({ current: () => target(f), save });
+    const note = { textContent: "" as string | null };
+    await download(button, note);
+    expect(button.disabled).toBe(false);
+    vi.stubGlobal("document", { ...realDocument, activeElement: null }); // the disabled button lost focus
+    fail = false;
+    await download(button, note);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(note.textContent).toBe(savedCopy("3abe0000"));
+    vi.advanceTimersByTime(RESET_MS);
+    expect(button.textContent).toBe("Download this read (free)");
+    expect(button.focus).toHaveBeenCalledOnce();
   });
 
   it("does nothing, and says nothing, with no read on screen", async () => {
