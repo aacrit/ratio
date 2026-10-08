@@ -24,6 +24,7 @@ import { Figure, showPhoto } from "./overlay";
 import type { Pixels } from "./engine/resample";
 import type { AdviceLine, Bins } from "./engine/rules";
 import { ENGINE_VERSION, readBins } from "./engine/rules";
+import { readingHash } from "./engine/hash";
 import { type Look, suggestLooks } from "./engine/looks";
 import { lookPhrase, restoredLooksIntroOf } from "./engine/verdict";
 import type { Read } from "./read";
@@ -31,11 +32,12 @@ import { Reader } from "./reader";
 import { setupRulebook } from "./rules";
 import { renderRulebook } from "./rules/render";
 import { chalkFigure } from "./tryon/figure";
-import { drawCard, saveCard } from "./ui/card";
+import { cardContentOf, drawCard, saveCard } from "./ui/card";
 import { cardSaver } from "./ui/save";
 import { setupCompact } from "./ui/compact";
-import { countTo } from "./ui/count";
-import { type Shown, heroEyebrowOf, setupLooks, verdictOf } from "./ui/looks";
+import { flashNumeral } from "./ui/count";
+import { type LooksApi, type Shown, setupLooks, verdictOf, writeHead } from "./ui/looks";
+import { hashLine } from "./ui/hashline";
 import { revealKind } from "./ui/reveal";
 import { paletteStrip, renderRows } from "./ui/rows";
 import { Sheet } from "./ui/sheet";
@@ -72,6 +74,7 @@ interface Current {
   figure: Figure;
   shown: () => Shown;
   settled: () => Promise<void>;
+  view: () => number;
   credit: string | null;
   read: Read;
 }
@@ -256,10 +259,11 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
 
     intro.hidden = true;
     result.hidden = false;
-    heroN.textContent = "";
-    heroN.dataset.state = read.reading.lines[0].borderline ? "borderline" : read.reading.lines[0].state;
-    heroEyebrow.textContent = heroEyebrowOf(read.reading.lines);
-    verdict.textContent = verdictOf(read.reading.lines);
+    // The hero numeral is final the moment the reading shows, in the same
+    // tick as its eyebrow and the verdict, on every read (T10, R-09: it used
+    // to stay empty until the whole reveal had played, then count up from 0
+    // through pairs no reading could produce).
+    writeHead({ heroN, heroEyebrow, verdict }, read.reading.lines, verdictOf(read.reading.lines), "arrive");
     paletteSlot.replaceChildren(paletteStrip(read.reading.bins));
     credit.hidden = sourceCredit === null;
     credit.textContent = sourceCredit ?? "";
@@ -273,23 +277,31 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     }
 
     // The tuck button belongs to the proportion row of the reading as worn.
+    let looksApi: LooksApi | null = null;
     const asWornExtras = () => {
       const first = read.reading.lines[0];
       if (first.state !== "advice" || read.measure.breakRow === null) return {};
       const tuck = document.createElement("button");
       tuck.type = "button";
       tuck.className = "btn ghost small";
-      tuck.textContent = "Show the tuck";
+      // Neutral, whatever the band advises (a tuck, a belt, a shorter upper
+      // piece): every one of them moves the break to the waist, which is
+      // what this shows (T10 review 2).
+      tuck.textContent = "Show the change";
+      tuck.dataset.action = "show-change";
       let on = false;
       tuck.addEventListener("click", () => {
         on = !on;
+        // A change of view like a look (T10 review 1): the saved line clears
+        // and the card marks the tuck, since the break line it draws moved.
+        looksApi?.setTuck(on);
         figure.showTuck(on);
-        tuck.textContent = on ? "Show it as worn" : "Show the tuck";
+        tuck.textContent = on ? "Show it as worn" : "Show the change";
       });
       return { extra: { proportion: tuck } };
     };
     const rendered = renderRows(rows, read.reading.lines, read.reading.bins, { borderlineSlot, ...asWornExtras() });
-    hash.textContent = `Same photo, same reading. ${read.hash.slice(0, 4)} · ${read.reading.engine}`;
+    hash.textContent = hashLine({ photoHash: read.hash, engine: read.reading.engine });
     hash.title = `Reading hash ${read.hash}`;
     // The Rulebook marks this read on its instruments (bins only, this tab only).
     const source = sourceCredit === null ? "photo" : "sample";
@@ -316,8 +328,12 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
       borderlineSlot,
       onTried: () => sendEvent("look_tried"),
       onShown: handOff,
+      // The saved line names the card of the view it was saved from: a look
+      // tried or removed clears it, as a new read does (T10, R-09).
+      onChange: () => (saveNote.textContent = ""),
     });
-    current = { figure, shown: looks.shown, settled: looks.settled, credit: sourceCredit, read };
+    looksApi = looks;
+    current = { figure, shown: looks.shown, settled: looks.settled, view: looks.view, credit: sourceCredit, read };
     sheet.measure();
     sheet.snap("half");
 
@@ -332,18 +348,23 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     const skip = () => figure.skipReveal();
     addEventListener("keydown", skip, { signal: revealAbort.signal });
     addEventListener("pointerdown", skip, { signal: revealAbort.signal });
+    // The session's one signature lands its numeral on the photo: the hero
+    // numeral (already final) flashes in that same frame, from play() itself,
+    // so the 2.5 s cap below can never fire it early (T10 review 2). Only
+    // while this read, as worn, is still the one on screen. Later reads
+    // appear settled and do not flash.
+    const viewAtReveal = looks.view();
+    const onLanded = () => {
+      if (!opts.quick && gen === showGen && looks.view() === viewAtReveal) flashNumeral(heroN);
+    };
     try {
-      await Promise.race([figure.play({ quick: opts.quick }), new Promise((r) => setTimeout(r, 2500))]);
+      await Promise.race([figure.play({ quick: opts.quick, onLanded }), new Promise((r) => setTimeout(r, 2500))]);
     } finally {
       revealAbort.abort();
       if (gen === showGen) delete document.body.dataset.revealing;
     }
     if (gen !== showGen) return; // a newer read started while this one was revealing: let it finish its own work
     for (const b of lookButtons) b.disabled = false;
-    // The hero numeral counts only on the session's one signature; every
-    // other arrival (a restore, the strip, [ ], back/forward) sets it directly.
-    if (opts.quick) heroN.textContent = read.reading.lines[0].measured;
-    else countTo(heroN, read.reading.lines[0].measured);
     rendered.land();
     renderStrip(sessionStrip, sessionReads(), read.hash, (index) => void selectAndShow(index));
     // Skip only the URL write when a route change happened mid-reveal: the
@@ -403,17 +424,26 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     const asWornLines = readBins(bins);
     const looks = suggestLooks(bins, asWornLines);
 
-    const paint = (b: Bins, lines: AdviceLine[], tried: Look | null) => {
-      heroN.dataset.state = lines[0].borderline ? "borderline" : lines[0].state;
-      heroN.textContent = lines[0].measured;
-      heroEyebrow.textContent = heroEyebrowOf(lines);
-      verdict.textContent = (tried ? `Trying ${lookPhrase(tried.moves)}: ` : "") + verdictOf(lines, tried ? [] : looks, b);
+    // The same head and hash line a real read writes (T10 review 1): the
+    // numeral final at once, flashed only when a look changes it, and the
+    // look's own hash labelled beside the photo's.
+    const paint = (b: Bins, lines: AdviceLine[], tried: { look: Look; hash: string } | null, mode: "arrive" | "replace") => {
+      writeHead({ heroN, heroEyebrow, verdict }, lines, (tried ? `Trying ${lookPhrase(tried.look.moves)}: ` : "") + verdictOf(lines, tried ? [] : looks, b), mode);
+      hash.textContent = hashLine({ photoHash: worn.hash, engine: last.engine, look: tried ? { hash: tried.hash, name: tried.look.title } : null });
+      hash.title = tried ? `Photo reading hash ${worn.hash}; look reading hash ${tried.hash}` : `Reading hash ${worn.hash}`;
       paletteSlot.replaceChildren(paletteStrip(b));
       chalkRestoreFigure.replaceChildren(chalkFigure(b, { label: "The chalk figure in the outfit's measured colours; the photo is gone until you read it again" }));
       renderRows(rows, lines, b, { borderlineSlot }).land();
-      announce.textContent = tried ? `Trying: ${lookPhrase(tried.moves)}` : looksSection.hidden ? "" : "Showing the outfit as worn.";
+      announce.textContent = tried ? `Trying: ${lookPhrase(tried.look.moves)}` : looksSection.hidden ? "" : "Showing the outfit as worn.";
     };
-    paint(bins, asWornLines, null);
+    paint(bins, asWornLines, null, "arrive");
+    const lookHashes = new Map<string, Promise<string>>();
+    const lookHashOf = (look: Look) => {
+      let h = lookHashes.get(look.id);
+      if (!h) lookHashes.set(look.id, (h = readingHash({ engine: last.engine, bins: look.bins })));
+      return h;
+    };
+    let clicks = 0;
 
     looksSection.hidden = false;
     const introEl = looksSection.querySelector<HTMLElement>(".looks-intro");
@@ -437,14 +467,18 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
         button.textContent = "Try it";
         button.setAttribute("aria-pressed", "false");
         button.setAttribute("aria-label", `Try ${lookPhrase(look.moves)}`);
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           const on = activeId !== look.id;
           activeId = on ? look.id : null;
           buttons.forEach((b, id) => {
             b.setAttribute("aria-pressed", String(id === look.id && on));
             b.textContent = id === look.id && on ? "Show original" : "Try it";
           });
-          paint(on ? look.bins : bins, on ? look.lines : asWornLines, on ? look : null);
+          // The look's hash first, so the head and the hash line change in one tick.
+          const mine = ++clicks;
+          const lookHash = on ? await lookHashOf(look) : null;
+          if (mine !== clicks || current !== null || chalkRestore.hidden) return; // a newer click, or a read replaced the restore
+          paint(on ? look.bins : bins, on ? look.lines : asWornLines, on && lookHash ? { look, hash: lookHash } : null, "replace");
         });
         buttons.set(look.id, button);
         const foot = document.createElement("div");
@@ -454,8 +488,6 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
         return li;
       }),
     );
-    hash.textContent = `Same photo, same reading. ${worn.hash.slice(0, 4)} · ${last.engine}`;
-    hash.title = `Reading hash ${worn.hash}`;
     sheet.measure();
     sheet.snap("half");
   };
@@ -938,7 +970,7 @@ function setupRead(tabsApi: TabsApi | undefined): { cardPreview: () => Promise<H
     wrap.append(heading);
     const shown = c.shown();
     try {
-      const drawn = await drawCard({ still: c.figure.still(), title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: shown.hash, engine: shown.engine, credit: c.credit ?? undefined });
+      const drawn = await drawCard(cardContentOf(shown, c.figure.still(), c.credit));
       const blob = await drawn.convertToBlob({ type: "image/png" });
       // A data: URL, not an object URL: the CSP's img-src allows this
       // origin and data: only, never blob:, and a data: URL needs no

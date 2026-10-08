@@ -402,11 +402,22 @@ export class Figure {
    * signature; later reads appear settled). The tape label and the hero
    * numeral never show a value that was not measured, so the label is held
    * back (labelAtRest) until the sequence has actually arrived.
+   *
+   * `onLanded` is the signature's own moment of arrival (T10 review 2): it
+   * runs in the frame the label lands on the photo (or, for one column with
+   * no break, once the tape is drawn), or when a key or tap skips to the
+   * end. It never runs for a quick settle, nor before the label is there,
+   * however long the sequence takes.
    */
-  async play(opts: { quick?: boolean } = {}): Promise<void> {
+  async play(opts: { quick?: boolean; onLanded?: () => void } = {}): Promise<void> {
     const s = this.scene;
     const target = this.reading.bins.proportion;
     this.revealSkip = false;
+    const landed = () => opts.onLanded?.();
+    const skipped = () => {
+      this.settleNow(false);
+      landed();
+    };
     if (opts.quick || reducedMotion()) {
       this.settleNow(!reducedMotion());
       if (!reducedMotion())
@@ -424,28 +435,29 @@ export class Figure {
       this.draw();
     });
     await Promise.race([plumb.done, new Promise((r) => setTimeout(r, 700))]);
-    if (this.revealSkip) return this.settleNow(false);
+    if (this.revealSkip) return skipped();
     await tween(chalkMs(this.h), (t) => {
       s.tape = t;
       this.draw();
     });
-    if (this.revealSkip) return this.settleNow(false);
+    if (this.revealSkip) return skipped();
     if (s.breakRow !== null && target !== null) {
       await tween(chalkMs(this.m.right - this.tapeX), (t) => {
         s.across = t;
         this.draw();
       });
-      if (this.revealSkip) return this.settleNow(false);
+      if (this.revealSkip) return skipped();
       s.glow = 1;
       await spring(springToken("lands"), 0, target, () => this.draw()).done;
-      if (this.revealSkip) return this.settleNow(false);
+      if (this.revealSkip) return skipped();
       s.label = labelAtRest(true, target);
       this.draw();
+      landed();
       void tween(600, (t) => {
         s.glow = 1 - t;
         this.draw();
       });
-    }
+    } else landed();
     // The plumb finishes settling on its own; the reading does not wait for it.
     void plumb.done.then(() =>
       tween(400, (t) => {

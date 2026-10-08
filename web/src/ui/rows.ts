@@ -5,8 +5,8 @@
 // on Enter or tap. A row can also say how a tried look changed it ("was
 // advice, now on the mark"). Rows arrive in order (the `argument` stagger).
 // The numeral is set once, in full (T3: it never counts, so it can never
-// show a value that was not measured; only the hero numeral counts, in
-// ui/looks.ts and ui/count.ts).
+// show a value that was not measured). No numeral counts any more, the hero
+// included (T10, ui/count.ts).
 
 import type { Bins, AdviceLine, LineState } from "../engine/rules";
 import { shownColour } from "../engine/constants";

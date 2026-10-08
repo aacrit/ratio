@@ -7,6 +7,8 @@
 import { shownColour } from "../engine/constants";
 import { byName, colourLabel } from "../engine/names";
 import type { AdviceLine, Bins, LineState } from "../engine/rules";
+import { hashesOfShown, hashSegments } from "./hashline";
+import type { Shown } from "./looks";
 import { STATE_WORDS } from "./rows";
 
 const W = 1080;
@@ -57,10 +59,61 @@ export interface CardContent {
   note?: string;
   lines: AdviceLine[];
   bins: Bins;
+  /** The photo's own reading hash, on every card of that photo, look or not (T10). */
   hash: string;
   engine: string;
+  /** The tried look, when the card is a look's: its own reading hash and its title. */
+  look?: { hash: string; name: string } | null;
   /** Credit for a sample painting, when the photo is one. */
   credit?: string;
+}
+
+/**
+ * The card's footer: the same hash line the screen shows for the same view
+ * (ui/hashline.ts), never a string of its own (T10 review 1: the screen said
+ * the look's hash, the card the photo's).
+ */
+export const cardHashSegments = (c: Pick<CardContent, "hash" | "engine" | "look">): string[] => hashSegments({ photoHash: c.hash, engine: c.engine, look: c.look });
+export const cardHashLine = (c: Pick<CardContent, "hash" | "engine" | "look">): string => cardHashSegments(c).join(" · ");
+
+/** The file the card is saved as: the photo's hash, plus the look as a filename-safe slug when the card is a look's. */
+export function cardFileName(c: Pick<CardContent, "hash" | "look">): string {
+  const hash4 = c.hash.slice(0, 4).replace(/[^0-9a-f]/gi, "");
+  const slug = (c.look?.name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 48)
+    .replace(/^-+|-+$/g, "");
+  return `ratio-${hash4}${slug ? `-${slug}` : ""}.png`;
+}
+
+/** What the card of what is on screen holds: the same hashes and look the screen's hash line names. */
+export function cardContentOf(shown: Shown, still: OffscreenCanvas, credit: string | null): CardContent {
+  const h = hashesOfShown(shown);
+  return { still, title: shown.title, note: shown.note, lines: shown.lines, bins: shown.bins, hash: h.photoHash, engine: h.engine, look: h.look, credit: credit ?? undefined };
+}
+
+/**
+ * Joins segments with " · " into lines no wider than maxWidth, breaking
+ * between segments; a segment too wide alone is broken at its spaces, so
+ * nothing is ever dropped.
+ */
+export function joinToWidth(segments: string[], measure: (s: string) => number, maxWidth: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  const push = (piece: string, sep: string) => {
+    const next = line ? `${line}${sep}${piece}` : piece;
+    if (line && measure(next) > maxWidth) {
+      lines.push(line);
+      line = piece;
+    } else line = next;
+  };
+  for (const seg of segments) {
+    if (measure(seg) <= maxWidth) push(seg, " · ");
+    else seg.split(" ").forEach((word, i) => push(word, i === 0 ? " · " : " "));
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
@@ -160,20 +213,49 @@ export async function drawCard(c: CardContent): Promise<OffscreenCanvas> {
   const names = named.map((s) => `${colourLabel(s)} ${s.share.toFixed(2)}`).join(", ");
   wrap(ctx, names, rw).slice(0, 2).forEach((l, i) => ctx.fillText(l, x, y + 46 + i * 20));
 
-  // Footer: the hash, the site, the credit.
+  // Footer: the hash line (every part of it, always), the site, the credit.
+  const foot = footerLayout(cardHashSegments(c), (t, size) => {
+    ctx.font = `500 ${size}px ${DATA}`;
+    return ctx.measureText(t).width;
+  }, W - 2 * M);
   ctx.fillStyle = k.rule;
-  ctx.fillRect(M, H - 104, W - 2 * M, 1);
+  ctx.fillRect(M, foot.ruleY, W - 2 * M, 1);
   ctx.fillStyle = k.muted;
-  ctx.font = `500 16px ${DATA}`;
-  ctx.fillText(`Same photo, same reading. ${c.hash.slice(0, 4)} · ${c.engine}`, M, H - 68);
+  ctx.font = `500 ${foot.size}px ${DATA}`;
+  foot.lines.forEach((l, i) => ctx.fillText(l, M, foot.firstY + i * foot.lineHeight));
   ctx.textAlign = "right";
-  ctx.fillText("ratio.voidvision.org · made in the tab", W - M, H - 68);
+  ctx.fillText(FOOT_SITE, W - M, foot.firstY);
   ctx.textAlign = "left";
   if (c.credit) {
     ctx.font = `400 13px ${BODY}`;
-    ctx.fillText(c.credit, M, H - 40);
+    ctx.fillText(c.credit, M, FOOT_CREDIT_Y);
   }
   return card;
+}
+
+/** The credit's baseline; the hash line's last baseline sits FOOT_CREDIT_GAP above it. */
+const FOOT_CREDIT_Y = H - 40;
+const FOOT_CREDIT_GAP = 30;
+const FOOT_SITE = "ratio.voidvision.org · made in the tab";
+
+/**
+ * Where the footer's hash line goes. It is never cut: at 16 px it may wrap
+ * to two lines; past that it is set at 14 px on as many lines as it needs,
+ * and the footer rule moves up to make room. The last line always sits
+ * FOOT_CREDIT_GAP above the credit. Pure, for the tests.
+ */
+export function footerLayout(segments: string[], measure: (text: string, size: number) => number, width: number): { size: number; lineHeight: number; lines: string[]; firstY: number; ruleY: number } {
+  const at = (size: number) => joinToWidth(segments, (t) => measure(t, size), width - measure(FOOT_SITE, size) - 32);
+  let size = 16;
+  let lines = at(size);
+  if (lines.length > 2) {
+    size = 14;
+    lines = at(size);
+  }
+  const lineHeight = size + 4;
+  const lastY = FOOT_CREDIT_Y - FOOT_CREDIT_GAP + 2;
+  const firstY = lastY - (lines.length - 1) * lineHeight;
+  return { size, lineHeight, lines, firstY, ruleY: firstY - 36 };
 }
 
 /** Draws the card and hands it to the browser as a PNG download. */
@@ -183,7 +265,7 @@ export async function saveCard(c: CardContent): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `ratio-${c.hash.slice(0, 4)}.png`;
+  a.download = cardFileName(c);
   document.body.append(a);
   a.click();
   a.remove();

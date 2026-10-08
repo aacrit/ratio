@@ -1110,6 +1110,23 @@ body[data-compare="on"] .figure {
   color: var(--color-borderline);
 }
 
+/* `lands`, without a count (T10): the numeral is already final; only the
+   tape glow behind it flashes and settles, when the first read's signature
+   arrives on the photo or a look changes the value. */
+.hero-n[data-lands] {
+  border-radius: 3px;
+  animation: numeral-lands var(--dur-lands) var(--ease-out);
+}
+
+@keyframes numeral-lands {
+  from {
+    background-color: var(--color-tape-glow);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
 .hero-n:empty::before {
   content: "\2009";
 }

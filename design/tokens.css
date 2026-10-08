@@ -193,9 +193,9 @@
                   vertical). Once per read, from the crown of the figure.
        chalk      a measurement line draws at the speed of a hand: duration is
                   length / --speed-chalk, clamped to the min and max below.
-       lands      a numeral arrives: it counts up to its value, heavy and
-                  without overshoot (a measurement never shows a value it did
-                  not read), and flashes --color-tape-glow behind it.
+       lands      a numeral arrives: it shows its final value, never a count
+                  (a measurement never shows a value it did not read), and
+                  flashes --color-tape-glow behind it.
        glide      the break mark slides to the what-if position (0.49 to 0.38
                   when the advice shows the tuck): critically damped, no
                   overshoot, because a chalk mark never bounces.
