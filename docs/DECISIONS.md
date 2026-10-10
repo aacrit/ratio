@@ -83,3 +83,6 @@ From UX pass 4 (R-09). **Founder decision (2026-10-07, chat):** Volume's referen
 
 ## 2026-10-07: T10, numerals never count, and one hash line per view
 The hero numeral no longer counts up (R-09, UX pass 4, Noor). A count interpolates every number in the string on its own, so "0.64 : 0.36" passed through pairs no reading can produce ("0.25 : 0.25"; from a look, "0.42 : 0.24"), which breaks "a measurement never shows a value it did not read"; and the numeral was held empty for the whole reveal, so a screenshot after the reading appeared could show no number at all. It is now written final in the same tick as the reading, and the `lands` moment is the tape-glow flash alone (design/BRAND.md). The hash line is built by one function (`web/src/ui/hashline.ts`) for the screen, the saved card and the Rulebook chip, labelling the photo's hash and, on a look, the look's own, so what is saved says what was seen (T7).
+
+## 2026-10-10: On hold (founder, in chat)
+void document overtook the build slot. Ratio is on hold in Blueprint; nothing is torn down. Production still serves release/2026.10.03-1, and main holds T1 to T10 unreleased. Resume from docs/handoffs/2026-10-07-ux3-t6-t10.md when the founder gives Ratio the slot back.
